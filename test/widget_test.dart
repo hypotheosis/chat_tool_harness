@@ -42,6 +42,24 @@ void main() {
     await t.pumpAndSettle();
     expect(b.closed, isFalse);
   });
+  testWidgets('home_and_settings_show_no_snapshot_wording', (t) async {
+    final b = UiBackend();
+    await t.pumpWidget(AgentApp(backend: b));
+    await t.pumpAndSettle();
+    expect(find.textContaining('Old profile'), findsOneWidget);
+    expect(find.textContaining('revision'), findsNothing);
+    expect(find.textContaining('Snapshot'), findsNothing);
+    await t.tap(find.byTooltip('Settings'));
+    await t.pumpAndSettle();
+    expect(
+      find.text(
+        'Reusable configurations. Conversations pick up saved settings on their next turn.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('snapshot'), findsNothing);
+    expect(find.textContaining('Apply current profile'), findsNothing);
+  });
   testWidgets('empty_home_routes_to_configuration', (t) async {
     final b = UiBackend()..current = const AppSnapshot();
     await t.pumpWidget(AgentApp(backend: b));

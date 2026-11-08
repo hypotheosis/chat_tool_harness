@@ -156,9 +156,7 @@ class _HomeState extends State<_Home> {
           for (final c in state.snapshot?.conversations ?? <Conversation>[])
             ListTile(
               title: Text(c.profile.name),
-              subtitle: Text(
-                '${c.id}\nSnapshot revision ${c.profile.revision} • ${c.profile.mode.name}',
-              ),
+              subtitle: Text('${c.id}\n${c.profile.mode.name}'),
               isThreeLine: true,
               onTap: () => open(
                 ChatScreen(
@@ -213,7 +211,7 @@ class _SettingsState extends State<_Settings> {
         children: [
           ScreenStatus(state),
           const Text(
-            'Reusable configurations. Existing conversation snapshots change only by explicit Apply current profile.',
+            'Reusable configurations. Conversations pick up saved settings on their next turn.',
           ),
           TextButton(
             onPressed: () => open(EndpointScreen(backend: widget.backend)),
