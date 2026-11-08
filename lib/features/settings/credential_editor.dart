@@ -9,9 +9,14 @@ class CredentialEditor extends StatefulWidget {
     super.key,
     required this.backend,
     required this.reference,
+    this.headerName,
   });
   final Backend backend;
   final TextEditingController reference;
+
+  /// The MCP header this credential is sent in; null for the inference
+  /// credential, which always goes in `Authorization`.
+  final TextEditingController? headerName;
   @override
   State<CredentialEditor> createState() => _CredentialEditorState();
 }
@@ -21,6 +26,11 @@ class _CredentialEditorState extends State<CredentialEditor> {
   bool busy = false;
   int operationRevision = 0;
   String? status;
+
+  /// Bumped after a store or delete so the summary is described again.
+  int summaryRevision = 0;
+  ({String reference, int revision})? summaryKey;
+  Future<_Summary>? summary;
   @override
   void dispose() {
     secret.clear();
@@ -101,6 +111,7 @@ class _CredentialEditorState extends State<CredentialEditor> {
           status = delete
               ? 'Credential deleted. Future requests require re-entry; history remains available.'
               : 'Credential stored. Save configuration to attach a new reference. Replacement affects future requests.';
+          summaryRevision++;
         });
       }
     } catch (_) {
@@ -119,9 +130,59 @@ class _CredentialEditorState extends State<CredentialEditor> {
     }
   }
 
+  Future<_Summary> describe(String reference) async {
+    if (reference.isEmpty) return const _Absent();
+    try {
+      final found = await PlatformServices.describeCredential(reference);
+      return found == null ? const _Absent() : _Found(found);
+    } on BackendFailure {
+      return const _Unreadable();
+    } catch (_) {
+      // No credential channel (widget tests, desktop): show nothing.
+      return const _Unknown();
+    }
+  }
+
+  /// The future for the current reference, created again only when the
+  /// reference or [summaryRevision] changes.
+  Future<_Summary> currentSummary() {
+    final key = (reference: widget.reference.text, revision: summaryRevision);
+    if (summaryKey != key || summary == null) {
+      summaryKey = key;
+      summary = describe(key.reference);
+    }
+    return summary!;
+  }
+
+  String summaryText(_Summary summary) => switch (summary) {
+    _Absent() => 'No credential stored',
+    _Unreadable() => 'Stored credential cannot be read; re-enter it.',
+    _Unknown() => '',
+    // Only an `Authorization` header gets the scheme rule; other headers
+    // send the stored value verbatim.
+    _Found(:final value) => switch (widget.headerName?.text.trim()) {
+      final header? when header.toLowerCase() != 'authorization' =>
+        '${header.isEmpty ? 'Header' : header}: ••• (${value.length} chars)'
+            '${value.sendable ? '' : '. Has leading/trailing whitespace or characters that cannot be sent'}',
+      _ => value.authorizationPreview,
+    },
+  };
+
   @override
   Widget build(BuildContext context) => Column(
     children: [
+      ListenableBuilder(
+        listenable: Listenable.merge([widget.reference, widget.headerName]),
+        builder: (context, _) => FutureBuilder<_Summary>(
+          future: currentSummary(),
+          builder: (context, snapshot) => switch (snapshot.data) {
+            final data? when summaryText(data).isNotEmpty => Text(
+              summaryText(data),
+            ),
+            _ => const SizedBox.shrink(),
+          },
+        ),
+      ),
       const Text(
         'Replacement changes future requests for every configuration using this reference. Tokens are never loaded back into this form.',
       ),
@@ -151,4 +212,25 @@ class _CredentialEditorState extends State<CredentialEditor> {
       if (status != null) Text(status!),
     ],
   );
+}
+
+sealed class _Summary {
+  const _Summary();
+}
+
+class _Found extends _Summary {
+  const _Found(this.value);
+  final CredentialSummary value;
+}
+
+class _Absent extends _Summary {
+  const _Absent();
+}
+
+class _Unreadable extends _Summary {
+  const _Unreadable();
+}
+
+class _Unknown extends _Summary {
+  const _Unknown();
 }

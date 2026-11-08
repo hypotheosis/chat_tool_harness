@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../backend/backend.dart';
 import '../../backend/models.dart';
+import '../result_banner.dart';
 import '../screen_controller.dart';
 
 class ToolRulesScreen extends StatefulWidget {
@@ -113,6 +114,8 @@ class _ToolRulesScreenState extends State<ToolRulesScreen> {
         );
         remember(reply.discoveredRules, configuration);
       });
+      final n = reply.discoveredRules.length;
+      state.succeed(n == 1 ? '1 tool available' : '$n tools available');
     }
   }
 
@@ -147,72 +150,76 @@ class _ToolRulesScreenState extends State<ToolRulesScreen> {
     animation: state,
     builder: (context, _) => Scaffold(
       appBar: AppBar(title: const Text('Tool permissions')),
-      bottomNavigationBar: ScreenStatus(state),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const Text(
-            'New or changed tools default to Ask. Allow permits automatic writes as well as reads. Rules are scoped to exact profile / server / tool; schema or destination changes revoke trust.',
-          ),
-          const Text(
-            'MCP rule changes perform safe re-discovery and reject changed schemas/destinations. No business tool is called. Diagnostic observations are not permanent availability guarantees.',
-          ),
-          for (final p in state.snapshot?.profiles ?? <Profile>[])
-            for (final s in p.serverIds)
-              OutlinedButton(
-                onPressed: state.loading ? null : () => discover(p.id, s),
-                child: Text('Discover rules ${p.name} • ${p.id} / $s'),
-              ),
-          if (rules.isEmpty && !state.loading)
+      bottomNavigationBar: ScreenStatus(state, showError: false),
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: settingsListPadding(context),
+          children: [
             const Text(
-              'No observed tools. Discover tools from a linked server or start an Agent conversation first.',
+              'New or changed tools default to Ask. Allow permits automatic writes as well as reads. Rules are scoped to exact profile / server / tool; schema or destination changes revoke trust.',
             ),
-          for (final rule in rules)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      '${rule.key.profileId} / ${rule.key.serverId ?? 'Local files'} / ${rule.key.name}',
-                    ),
-                    Text(
-                      hasLive(rule)
-                          ? 'Current core observation / effective policy'
-                          : 'Cached diagnostic observation — not live permission. Applying a change requires fresh core validation/discovery.',
-                    ),
-                    ExpansionTile(
-                      title: const Text('Observed schema'),
-                      children: [SelectableText(rule.schemaJson)],
-                    ),
-                    DropdownButton<PermissionRule>(
-                      value: rule.rule,
-                      isExpanded: true,
-                      items: [
-                        for (final r in PermissionRule.values)
-                          DropdownMenuItem(
-                            value: r,
-                            child: Text(switch (r) {
-                              PermissionRule.ask => 'Ask',
-                              PermissionRule.allow => 'Allow',
-                              PermissionRule.block => 'Block',
-                            }),
-                          ),
-                      ],
-                      onChanged: state.loading
-                          ? null
-                          : (value) {
-                              if (value != null) {
-                                change(rule, value);
-                              }
-                            },
-                    ),
-                  ],
+            const Text(
+              'MCP rule changes perform safe re-discovery and reject changed schemas/destinations. No business tool is called. Diagnostic observations are not permanent availability guarantees.',
+            ),
+            for (final p in state.snapshot?.profiles ?? <Profile>[])
+              for (final s in p.serverIds)
+                OutlinedButton(
+                  onPressed: state.loading ? null : () => discover(p.id, s),
+                  child: Text('Discover rules ${p.name} • ${p.id} / $s'),
+                ),
+            ResultBanner(state: state),
+            if (rules.isEmpty && !state.loading)
+              const Text(
+                'No observed tools. Discover tools from a linked server or start an Agent conversation first.',
+              ),
+            for (final rule in rules)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        '${rule.key.profileId} / ${rule.key.serverId ?? 'Local files'} / ${rule.key.name}',
+                      ),
+                      Text(
+                        hasLive(rule)
+                            ? 'Current core observation / effective policy'
+                            : 'Cached diagnostic observation — not live permission. Applying a change requires fresh core validation/discovery.',
+                      ),
+                      ExpansionTile(
+                        title: const Text('Observed schema'),
+                        children: [SelectableText(rule.schemaJson)],
+                      ),
+                      DropdownButton<PermissionRule>(
+                        value: rule.rule,
+                        isExpanded: true,
+                        items: [
+                          for (final r in PermissionRule.values)
+                            DropdownMenuItem(
+                              value: r,
+                              child: Text(switch (r) {
+                                PermissionRule.ask => 'Ask',
+                                PermissionRule.allow => 'Allow',
+                                PermissionRule.block => 'Block',
+                              }),
+                            ),
+                        ],
+                        onChanged: state.loading
+                            ? null
+                            : (value) {
+                                if (value != null) {
+                                  change(rule, value);
+                                }
+                              },
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     ),
   );

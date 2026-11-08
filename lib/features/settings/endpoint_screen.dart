@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'credential_editor.dart';
 import '../../backend/backend.dart';
 import '../../backend/models.dart';
+import '../result_banner.dart';
 import '../screen_controller.dart';
 
 class EndpointScreen extends StatefulWidget {
@@ -20,12 +21,11 @@ class _EndpointScreenState extends State<EndpointScreen> {
     TextEditingController(text: widget.endpoint?.baseUrl ?? ''),
     TextEditingController(text: widget.endpoint?.model ?? ''),
     TextEditingController(text: widget.endpoint?.credential ?? ''),
-    TextEditingController(text: '${widget.endpoint?.contextTokens ?? 4096}'),
-    TextEditingController(text: '${widget.endpoint?.maxOutputTokens ?? 512}'),
+    TextEditingController(text: '${widget.endpoint?.contextTokens ?? 32768}'),
+    TextEditingController(text: '${widget.endpoint?.maxOutputTokens ?? 2048}'),
     TextEditingController(text: '${widget.endpoint?.temperature ?? 0.2}'),
   ];
   late bool http = widget.endpoint?.allowHttp ?? false;
-  String? result;
   List<String> models = [];
   @override
   void initState() {
@@ -47,10 +47,9 @@ class _EndpointScreenState extends State<EndpointScreen> {
     final output = int.tryParse(fields[5].text);
     final temp = double.tryParse(fields[6].text);
     if (contextTokens == null || output == null || temp == null) {
-      state.error = failureMessage(
-        const BackendFailure(FailureCode.invalidInput),
+      state.reject(
+        failureMessage(const BackendFailure(FailureCode.invalidInput)),
       );
-      state.changed();
       return;
     }
     id ??= (await state.perform(const NewId()))?.id;
@@ -73,21 +72,16 @@ class _EndpointScreenState extends State<EndpointScreen> {
       ),
     );
     if (mounted && reply != null) {
-      setState(() {
-        result = 'Endpoint saved. Existing conversations keep their snapshots.';
-      });
+      state.succeed('Endpoint saved.');
     }
   }
 
   Future<void> diagnose(bool probe) async {
     if (id == null) {
-      setState(() {
-        result = 'Save the endpoint first.';
-      });
+      state.reject('Save the endpoint first.');
       return;
     }
     setState(() {
-      result = null;
       models = [];
     });
     final reply = await state.perform(
@@ -96,7 +90,9 @@ class _EndpointScreenState extends State<EndpointScreen> {
     if (!mounted || reply == null) return;
     setState(() {
       models = reply.models.toSet().toList();
-      result = probe
+    });
+    state.succeed(
+      probe
           ? switch (reply.toolSupport) {
               ToolSupport.supported =>
                 'Supported: structured tool calling verified.',
@@ -105,10 +101,12 @@ class _EndpointScreenState extends State<EndpointScreen> {
               _ =>
                 'Inconclusive: no verified structured tool call. Profiles were not changed.',
             }
-          : models.isEmpty
-          ? 'No models discovered; manual model ID remains available.'
-          : 'Choose a discovered model or enter one manually.';
-    });
+          : switch (models.length) {
+              0 => 'No models available; enter the model ID manually.',
+              1 => '1 model available',
+              final n => '$n models available',
+            },
+    );
   }
 
   @override
@@ -116,62 +114,69 @@ class _EndpointScreenState extends State<EndpointScreen> {
     animation: state,
     builder: (context, _) => Scaffold(
       appBar: AppBar(title: const Text('Inference endpoint')),
-      bottomNavigationBar: ScreenStatus(state),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const Text(
-            'Paste tokens only into the secure credential editor below. Diagnostics use the saved endpoint and transmit only a fixed diagnostic prompt, never conversation content.',
-          ),
-          for (final entry in [
-            'Name',
-            'Base URL',
-            'Model ID',
-            'Credential reference (UUID, not a token)',
-            'Context window tokens',
-            'Maximum output tokens',
-            'Temperature',
-          ].asMap().entries)
-            inputField(entry.value, fields[entry.key], number: entry.key >= 4),
-          CredentialEditor(backend: widget.backend, reference: fields[3]),
-          SwitchListTile(
-            title: const Text('Allow insecure HTTP for this endpoint'),
-            subtitle: const Text(
-              'Warning: credentials and payloads travel unencrypted over HTTP.',
+      bottomNavigationBar: ScreenStatus(state, showError: false),
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: settingsListPadding(context),
+          children: [
+            const Text(
+              'Paste tokens only into the secure credential editor below. Diagnostics use the saved endpoint and transmit only a fixed diagnostic prompt, never conversation content.',
             ),
-            value: http,
-            onChanged: state.loading
-                ? null
-                : (v) => setState(() {
-                    http = v;
-                  }),
-          ),
-          FilledButton(
-            onPressed: state.loading ? null : save,
-            child: const Text('Save endpoint'),
-          ),
-          Wrap(
-            spacing: 8,
-            children: [
-              OutlinedButton(
-                onPressed: state.loading ? null : () => diagnose(false),
-                child: const Text('Discover models'),
+            for (final entry in [
+              'Name',
+              'Base URL',
+              'Model ID',
+              'Credential reference (UUID, not a token)',
+              'Context window tokens',
+              'Maximum output tokens',
+              'Temperature',
+            ].asMap().entries)
+              inputField(
+                entry.value,
+                fields[entry.key],
+                number: entry.key >= 4,
               ),
-              OutlinedButton(
-                onPressed: state.loading ? null : () => diagnose(true),
-                child: const Text('Probe tool support'),
+            CredentialEditor(backend: widget.backend, reference: fields[3]),
+            SwitchListTile(
+              title: const Text('Allow insecure HTTP for this endpoint'),
+              subtitle: const Text(
+                'Warning: credentials and payloads travel unencrypted over HTTP.',
               ),
-            ],
-          ),
-          if (result != null) Text(result!),
-          for (final model in models)
-            ListTile(
-              title: Text(model),
-              onTap: () {
-                fields[2].text = model;
-              },
+              value: http,
+              onChanged: state.loading
+                  ? null
+                  : (v) => setState(() {
+                      http = v;
+                    }),
             ),
-        ],
+            FilledButton(
+              onPressed: state.loading ? null : save,
+              child: const Text('Save endpoint'),
+            ),
+            Wrap(
+              spacing: 8,
+              children: [
+                OutlinedButton(
+                  onPressed: state.loading ? null : () => diagnose(false),
+                  child: const Text('Discover models'),
+                ),
+                OutlinedButton(
+                  onPressed: state.loading ? null : () => diagnose(true),
+                  child: const Text('Probe tool support'),
+                ),
+              ],
+            ),
+            ResultBanner(state: state),
+            for (final model in models)
+              ListTile(
+                title: Text(model),
+                onTap: () {
+                  fields[2].text = model;
+                },
+              ),
+          ],
+        ),
       ),
     ),
   );

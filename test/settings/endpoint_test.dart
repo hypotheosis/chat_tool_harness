@@ -67,6 +67,69 @@ void main() {
     expect(find.textContaining('Unsupported'), findsOneWidget);
     expect(b.commands.whereType<SaveProfile>(), isEmpty);
   });
+  testWidgets('failed model discovery shows endpoint, status and reason', (
+    t,
+  ) async {
+    final b = UiBackend()
+      ..failure = const BackendFailure(
+        FailureCode.authentication,
+        detail: FailureDetail(
+          targetKind: 'inference',
+          targetName: 'Endpoint',
+          step: 'discoverModels',
+          status: 403,
+          reason: 'key revoked',
+        ),
+      );
+    await t.pumpWidget(
+      MaterialApp(
+        home: EndpointScreen(backend: b, endpoint: endpoint),
+      ),
+    );
+    await t.pumpAndSettle();
+    await t.scrollUntilVisible(
+      find.text('Discover models'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await t.tap(find.text('Discover models'));
+    await t.pumpAndSettle();
+    expect(
+      find.textContaining('Inference endpoint "Endpoint"'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('HTTP 403 during model discovery'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('key revoked'), findsOneWidget);
+    expect(find.text('Details'), findsOneWidget);
+  });
+  testWidgets('successful model discovery shows model count', (t) async {
+    final b = UiBackend()..reply = const CommandReply(models: ['a', 'b', 'c']);
+    await t.pumpWidget(
+      MaterialApp(
+        home: EndpointScreen(backend: b, endpoint: endpoint),
+      ),
+    );
+    await t.pumpAndSettle();
+    await t.scrollUntilVisible(
+      find.text('Discover models'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await t.tap(find.text('Discover models'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('3 models available'), findsOneWidget);
+  });
+  testWidgets('new endpoints default to 32768 context and 2048 output', (
+    t,
+  ) async {
+    await t.pumpWidget(MaterialApp(home: EndpointScreen(backend: UiBackend())));
+    await t.pumpAndSettle();
+    expect(find.widgetWithText(TextFormField, '32768'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, '2048'), findsOneWidget);
+  });
   testWidgets('discovery_loading_and_error_are_safe', (t) async {
     final pending = Completer<CommandReply>();
     final b = DelayedBackend(pending);

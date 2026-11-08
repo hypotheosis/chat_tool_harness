@@ -49,6 +49,8 @@ void main() {
       final puts = <(String, String)>[];
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(PlatformServices.credentials, (call) async {
+            // The editor's credential summary is not under test here.
+            if (call.method == 'describe') return null;
             puts.add((
               call.arguments['reference'] as String,
               utf8.decode(call.arguments['value'] as List<int>),
@@ -102,6 +104,8 @@ void main() {
       final puts = <String>[];
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(PlatformServices.credentials, (call) async {
+            // The editor's credential summary is not under test here.
+            if (call.method == 'describe') return null;
             puts.add(call.arguments['reference'] as String);
             return null;
           });
@@ -152,6 +156,8 @@ void main() {
                 .setMockMethodCallHandler(PlatformServices.credentials, (
                   call,
                 ) async {
+                  // The editor's credential summary is not under test here.
+                  if (call.method == 'describe') return null;
                   calls.add((
                     call.method,
                     call.arguments['reference'] as String,

@@ -153,4 +153,57 @@ void main() {
       containsAll(['s', 'other-server']),
     );
   });
+  testWidgets('failed profile save shows the failure under the button', (
+    t,
+  ) async {
+    final b = UiBackend();
+    await t.pumpWidget(
+      MaterialApp(
+        home: ProfileScreen(backend: b, profile: profile),
+      ),
+    );
+    await t.pumpAndSettle();
+    b.failure = const BackendFailure(
+      FailureCode.configuration,
+      detail: FailureDetail(
+        targetKind: 'profile',
+        targetName: 'Profile',
+        step: 'request',
+        reason: 'endpoint missing',
+      ),
+    );
+    await t.scrollUntilVisible(
+      find.text('Save profile'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await t.pumpAndSettle();
+    await t.tap(find.text('Save profile'));
+    await t.pumpAndSettle();
+    expect(find.text('Failed'), findsOneWidget);
+    expect(find.textContaining('Profile "Profile"'), findsOneWidget);
+    expect(find.textContaining('endpoint missing'), findsOneWidget);
+    expect(find.byType(ProfileScreen), findsOneWidget);
+  });
+  testWidgets('failed rule discovery shows the server failure', (t) async {
+    final b = UiBackend()
+      ..failure = const BackendFailure(
+        FailureCode.unavailableTransport,
+        detail: FailureDetail(
+          targetKind: 'mcpServer',
+          targetName: 'Server',
+          step: 'listTools',
+          reason: 'connection refused',
+        ),
+      );
+    await t.pumpWidget(MaterialApp(home: ToolRulesScreen(backend: b)));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Discover rules Profile • p / s'));
+    await t.pumpAndSettle();
+    expect(find.text('Failed'), findsOneWidget);
+    expect(
+      find.textContaining('MCP server "Server": failed during tool listing'),
+      findsOneWidget,
+    );
+  });
 }

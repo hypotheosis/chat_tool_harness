@@ -17,6 +17,8 @@ void main() {
       final values = <String>[];
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(PlatformServices.credentials, (call) async {
+            // The editor's credential summary is not under test here.
+            if (call.method == 'describe') return null;
             calls.add(call.method);
             if (call.method == 'put') {
               values.add(utf8.decode(call.arguments['value'] as List<int>));
