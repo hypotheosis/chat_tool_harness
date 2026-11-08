@@ -58,7 +58,8 @@ String _reasonText(ContextChoiceReason reason) => switch (reason) {
 /// [originAcknowledged] says whether the run's inference origin is already
 /// acknowledged, so a disclosure pause can simply resume. [fixed] says the
 /// user has since acted on the card (returned from the settings it opened,
-/// or applied a context selection), so a resumable run now offers Resume.
+/// or applied a context selection), so a resumable run now offers Resume and
+/// a failed turn offers Retry.
 RunIssue? runIssue(
   Run run, {
   required bool originAcknowledged,
@@ -116,7 +117,7 @@ RunIssue? runIssue(
     action = RunAction.chooseContext;
   }
   if (cause != null && action != null) {
-    return RunIssue(title, cause, !ended && fixed ? RunAction.resume : action);
+    return RunIssue(title, cause, fixed ? _afterFix(run, action) : action);
   }
   return RunIssue(
     title,
@@ -125,6 +126,16 @@ RunIssue? runIssue(
         : 'The run stopped before it finished. Resume continues it with the current settings.',
     RunAction.resume,
   );
+}
+
+/// The action once the user has acted on [action]: an unfinished run
+/// resumes; a failed turn whose settings were opened retries its message.
+/// Callers have already ruled out runs with an unresolved attempt.
+RunAction _afterFix(Run run, RunAction action) {
+  if (run.state != RunState.failed) return RunAction.resume;
+  final settings =
+      action == RunAction.openSettings || action == RunAction.reenterCredential;
+  return settings && run.inputMessageId != null ? RunAction.retry : action;
 }
 
 /// The inline card for a failed, paused or interrupted run: a title, the

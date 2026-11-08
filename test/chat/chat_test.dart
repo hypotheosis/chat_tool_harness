@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chat_tool_harness/backend/models.dart';
 import 'package:chat_tool_harness/features/chat/chat_screen.dart';
+import 'package:chat_tool_harness/features/chat/run_card.dart';
 import 'package:chat_tool_harness/features/profiles/profile_screen.dart';
 import 'package:chat_tool_harness/features/screen_controller.dart';
 import 'package:chat_tool_harness/features/settings/endpoint_screen.dart';
@@ -220,6 +221,59 @@ void main() {
       expect(find.byType(screen), findsOneWidget);
     });
   }
+  testWidgets('a failed run offers Retry after returning from settings', (
+    t,
+  ) async {
+    final b = UiBackend()
+      ..runs = [failedRun(code: FailureCode.authentication, detail: toolsAuth)];
+    await pumpChat(t, b);
+    await t.tap(inCard('r', find.text('Open Server settings')));
+    await t.pumpAndSettle();
+    expect(find.byType(ServerScreen), findsOneWidget);
+    await t.pageBack();
+    // Lets the refresh's stream cancel complete; see the paused-run test.
+    await t.runAsync(() => Future<void>.delayed(Duration.zero));
+    await t.pumpAndSettle();
+    expect(inCard('r', find.text('Open Server settings')), findsNothing);
+    await t.tap(inCard('r', find.text('Retry')));
+    await t.pumpAndSettle();
+    final turn = b.commands.whereType<StartTurn>().single;
+    expect((turn.conversationId, turn.text), ('c', 'hello'));
+  });
+  testWidgets('a failed run without detail offers Retry after settings', (
+    t,
+  ) async {
+    final b = UiBackend()..runs = [failedRun(code: FailureCode.protocol)];
+    await pumpChat(t, b);
+    await t.tap(inCard('r', find.text('Open profile settings')));
+    await t.pumpAndSettle();
+    expect(find.byType(ProfileScreen), findsOneWidget);
+    await t.pageBack();
+    await t.runAsync(() => Future<void>.delayed(Duration.zero));
+    await t.pumpAndSettle();
+    expect(inCard('r', find.text('Retry')), findsOneWidget);
+  });
+  test('an unresolved failed run never switches to Retry once fixed', () {
+    final unresolved = turnRun(
+      code: FailureCode.authentication,
+      detail: toolsAuth,
+      attempts: run(state: AttemptState.outcomeUnknown).attempts,
+    );
+    final issue = runIssue(unresolved, originAcknowledged: true, fixed: true)!;
+    expect(issue.action, isNot(RunAction.retry));
+    expect(issue.action, isNot(RunAction.resume));
+  });
+  test('a fixed failed summary run keeps its settings action', () {
+    final summary = turnRun(
+      code: FailureCode.authentication,
+      detail: toolsAuth,
+      inputMessageId: null,
+    );
+    expect(
+      runIssue(summary, originAcknowledged: true, fixed: true)!.action,
+      RunAction.openSettings,
+    );
+  });
   testWidgets('failed run shows one card with cause and settings action', (
     t,
   ) async {

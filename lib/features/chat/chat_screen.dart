@@ -30,7 +30,8 @@ class _ChatScreenState extends State<ChatScreen> {
   final message = TextEditingController();
 
   /// Runs whose card the user has acted on (returned from the settings it
-  /// opened, or applied a context selection), which now offer Resume.
+  /// opened, or applied a context selection), which now offer Resume, or
+  /// Retry for a failed turn.
   final fixedRuns = <String>{};
   @override
   void initState() {
@@ -143,9 +144,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void markFixed(Run run) {
-    if (mounted && run.state != RunState.failed) {
-      setState(() => fixedRuns.add(run.id));
-    }
+    if (mounted) setState(() => fixedRuns.add(run.id));
   }
 
   /// Asks before stopping: Stop is local and cannot undo remote work.
