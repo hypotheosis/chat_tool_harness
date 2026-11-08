@@ -113,12 +113,14 @@ class _EndpointScreenState extends State<EndpointScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: state,
     builder: (context, _) => Scaffold(
-      appBar: AppBar(title: const Text('Inference endpoint')),
-      bottomNavigationBar: ScreenStatus(state, showError: false),
+      appBar: AppBar(
+        title: const Text('Inference endpoint'),
+        bottom: settingsProgress(state),
+      ),
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: settingsListPadding(context),
+          padding: const EdgeInsets.all(16),
           children: [
             const Text(
               'Paste tokens only into the secure credential editor below. Diagnostics use the saved endpoint and transmit only a fixed diagnostic prompt, never conversation content.',

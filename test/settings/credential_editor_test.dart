@@ -116,8 +116,24 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Authorization: Basic ••• (4 chars)'), findsOneWidget);
     reference.text = 'ref-2';
-    await t.pumpAndSettle();
+    await t.pump(const Duration(seconds: 1));
     expect(described.last, 'ref-2');
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('typing a reference describes it once, after a pause', (t) async {
+    channel((_) => null);
+    final reference = await pump(t, '');
+    for (final text in ['r', 're', 'ref', 'ref-', 'ref-9']) {
+      reference.text = text;
+      await t.pump(const Duration(milliseconds: 100));
+    }
+    expect(described, isEmpty);
+    await t.pump(const Duration(seconds: 1));
+    expect(described, ['ref-9']);
+    reference.selection = const TextSelection.collapsed(offset: 2);
+    await t.pump(const Duration(seconds: 1));
+    expect(described, ['ref-9']);
     await t.pumpWidget(const SizedBox());
   });
 

@@ -58,8 +58,45 @@ void main() {
     await t.tap(find.text('Details'));
     await t.pumpAndSettle();
     expect(find.textContaining('URL: https://example.com/mcp'), findsOneWidget);
-    expect(find.textContaining('Step: initialize'), findsOneWidget);
+    expect(find.textContaining('Step: initialization'), findsOneWidget);
+    expect(find.textContaining('Target: MCP server "tools"'), findsOneWidget);
+    expect(find.textContaining('mcpServer'), findsNothing);
+    expect(find.text('Reload'), findsNothing);
     expect(find.text('Hide details'), findsOneWidget);
+  });
+
+  testWidgets('only a failed load offers Reload', (t) async {
+    final b = UiBackend()
+      ..snapshotResponses.add(
+        // Fails only once awaited, so the error is never unhandled.
+        Future(() => throw const BackendFailure(FailureCode.storage)),
+      );
+    await t.pumpWidget(
+      MaterialApp(
+        home: ServerScreen(backend: b, server: b.current.servers.single),
+      ),
+    );
+    await t.pumpAndSettle();
+    await t.scrollUntilVisible(
+      find.text('Reload'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await t.pumpAndSettle();
+    await t.tap(find.text('Reload'));
+    await t.pumpAndSettle();
+    expect(find.text('Failed'), findsNothing);
+    expect(b.snapshotCalls, 2);
+    await t.scrollUntilVisible(
+      testButton,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await t.pumpAndSettle();
+    await t.tap(testButton);
+    await t.pumpAndSettle();
+    expect(find.text('Failed'), findsOneWidget);
+    expect(find.text('Reload'), findsNothing);
   });
 
   testWidgets('successful connection test shows tool count', (t) async {

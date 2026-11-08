@@ -149,12 +149,14 @@ class _ToolRulesScreenState extends State<ToolRulesScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: state,
     builder: (context, _) => Scaffold(
-      appBar: AppBar(title: const Text('Tool permissions')),
-      bottomNavigationBar: ScreenStatus(state, showError: false),
+      appBar: AppBar(
+        title: const Text('Tool permissions'),
+        bottom: settingsProgress(state),
+      ),
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: settingsListPadding(context),
+          padding: const EdgeInsets.all(16),
           children: [
             const Text(
               'New or changed tools default to Ask. Allow permits automatic writes as well as reads. Rules are scoped to exact profile / server / tool; schema or destination changes revoke trust.',

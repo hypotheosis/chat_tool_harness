@@ -18,7 +18,8 @@ FailureAction failureAction(FailureCode code) => switch (code) {
   _ => FailureAction.retry,
 };
 
-String _targetLabel(FailureDetail detail) {
+/// A readable name for the failed target, such as `MCP server "tools"`.
+String failureTargetLabel(FailureDetail detail) {
   final kind = switch (detail.targetKind) {
     'inference' => 'Inference endpoint',
     'mcpServer' => 'MCP server',
@@ -29,17 +30,19 @@ String _targetLabel(FailureDetail detail) {
   return name == null || name.isEmpty ? kind : '$kind "$name"';
 }
 
-String _stepLabel(String step) => switch (step) {
+/// A readable name for the failed step, such as `initialization`.
+String failureStepLabel(String step) => switch (step) {
   'discoverModels' => 'model discovery',
-  'chatRequest' => 'chat request',
-  'initialize' => 'initialize',
+  'chatRequest' => 'the chat request',
+  'initialize' => 'initialization',
   'listTools' => 'tool listing',
-  'callTool' => 'tool call',
+  'callTool' => 'the tool call',
   'resolveCredential' => 'credential lookup',
   'refreshProfile' => 'profile refresh',
-  _ => 'request',
+  _ => 'the request',
 };
 
+/// Plain text for a failure without detail.
 String _codeText(FailureCode code) => switch (code) {
   FailureCode.authentication =>
     'Authentication failed: the server rejected the credential. Check or re-enter it in settings.',
@@ -67,8 +70,26 @@ String _codeText(FailureCode code) => switch (code) {
     'Something changed or is busy. No work was queued. Refresh and try again.',
 };
 
+/// The next step to append after a detailed failure sentence, which already
+/// says what went wrong.
+String _actionHint(FailureCode code) => switch (code) {
+  FailureCode.authentication => 'Check or re-enter the credential in settings.',
+  FailureCode.credentialMissing => 'Re-enter the credential in settings.',
+  FailureCode.invalidInput => 'Check required fields and numbers.',
+  FailureCode.configuration => 'Check the endpoint, profile and servers.',
+  FailureCode.toolUnsupported => 'Use Chat only mode in the profile.',
+  FailureCode.discoveryUnavailable => 'Enter the model ID manually.',
+  FailureCode.contextLength => 'Choose context or summarize.',
+  FailureCode.rateLimited => 'Nothing was retried; try again shortly.',
+  FailureCode.cancelled => 'Remote effects are not rolled back.',
+  FailureCode.limit => 'A configured safety limit was reached.',
+  FailureCode.protocol => 'Check the URL and server type.',
+  FailureCode.unavailableTransport => 'Check connectivity and the URL.',
+  FailureCode.storage || FailureCode.conflict => 'Refresh and try again.',
+};
+
 /// One sentence naming what failed, from the detail when present, followed
-/// by the per-code guidance. Non-[BackendFailure] errors never leak their
+/// by the next step; without detail, the plain per-code text. Non-[BackendFailure] errors never leak their
 /// text; they read as an unavailable service.
 String failureMessage(Object error, {bool approval = false}) {
   final failure = error is BackendFailure
@@ -81,14 +102,15 @@ String failureMessage(Object error, {bool approval = false}) {
   if (detail == null) return _codeText(failure.code);
   final status = detail.status;
   final what = status == null
-      ? 'failed during ${_stepLabel(detail.step)}'
-      : 'HTTP $status during ${_stepLabel(detail.step)}';
+      ? 'failed during ${failureStepLabel(detail.step)}'
+      : 'HTTP $status during ${failureStepLabel(detail.step)}';
   var reason = detail.reason?.trim() ?? '';
   while (reason.endsWith('.')) {
     reason = reason.substring(0, reason.length - 1);
   }
   final because = reason.isEmpty ? '' : ': $reason';
-  return '${_targetLabel(detail)}: $what$because. ${_codeText(failure.code)}';
+  return '${failureTargetLabel(detail)}: $what$because. '
+      '${_actionHint(failure.code)}';
 }
 
 class ScreenController extends ChangeNotifier {
@@ -103,22 +125,27 @@ class ScreenController extends ChangeNotifier {
 
   /// The outcome of the last successful action, shown by `ResultBanner`.
   String? success;
+
+  /// Whether [error] came from loading the snapshot, which Reload retries.
+  bool loadFailed = false;
   bool _disposed = false;
   StreamSubscription<AppSnapshot>? _subscription;
   void changed() {
     if (!_disposed) notifyListeners();
   }
 
-  void _fail(Object e, {bool approval = false}) {
+  void _fail(Object e, {bool approval = false, bool load = false}) {
     error = failureMessage(e, approval: approval);
     lastFailure = e is BackendFailure ? e : null;
     success = null;
+    loadFailed = load;
   }
 
   void _clearResult() {
     error = null;
     lastFailure = null;
     success = null;
+    loadFailed = false;
   }
 
   /// Shows [message] as the outcome of the last action.
@@ -140,7 +167,7 @@ class ScreenController extends ChangeNotifier {
     _subscription = session.changes.listen(
       (_) => changed(),
       onError: (Object e) {
-        _fail(e);
+        _fail(e, load: true);
         changed();
       },
     );
@@ -149,7 +176,7 @@ class ScreenController extends ChangeNotifier {
     try {
       await session.connect();
     } catch (e) {
-      _fail(e);
+      _fail(e, load: true);
     } finally {
       loading = false;
       changed();
@@ -164,7 +191,7 @@ class ScreenController extends ChangeNotifier {
     try {
       await session.connect();
     } catch (e) {
-      _fail(e);
+      _fail(e, load: true);
     } finally {
       loading = false;
       changed();
@@ -200,46 +227,42 @@ class ScreenController extends ChangeNotifier {
 }
 
 class ScreenStatus extends StatelessWidget {
-  const ScreenStatus(this.controller, {super.key, this.showError = true});
+  const ScreenStatus(this.controller, {super.key});
   final ScreenController controller;
-
-  /// False on screens whose `ResultBanner` already shows the error.
-  final bool showError;
   @override
   Widget build(BuildContext context) => Column(
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       if (controller.loading) const LinearProgressIndicator(),
-      if (showError)
-        if (controller.error case final error?)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  error,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-                TextButton(
-                  onPressed: controller.refresh,
-                  child: const Text('Refresh'),
-                ),
-              ],
-            ),
+      if (controller.error case final error?)
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                error,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+              TextButton(
+                onPressed: controller.refresh,
+                child: const Text('Refresh'),
+              ),
+            ],
           ),
+        ),
     ],
   );
 }
 
-/// Settings list padding that keeps the last control above the system
-/// navigation bar in edge-to-edge mode.
-EdgeInsets settingsListPadding(BuildContext context) => EdgeInsets.fromLTRB(
-  16,
-  16,
-  16,
-  16 + MediaQuery.viewPaddingOf(context).bottom,
+/// A settings screen's progress bar, shown under the app bar so it stays
+/// clear of the system navigation bar.
+PreferredSizeWidget settingsProgress(ScreenController state) => PreferredSize(
+  preferredSize: const Size.fromHeight(4),
+  child: state.loading
+      ? const LinearProgressIndicator()
+      : const SizedBox(height: 4),
 );
 
 Widget inputField(

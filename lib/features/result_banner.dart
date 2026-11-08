@@ -13,17 +13,50 @@ class ResultBanner extends StatefulWidget {
 
 class _ResultBannerState extends State<ResultBanner> {
   bool details = false;
-  BackendFailure? shownFailure;
+
+  /// The result last shown, to notice when a new one arrives.
+  (String?, String?, BackendFailure?) shown = (null, null, null);
+
+  @override
+  void initState() {
+    super.initState();
+    noticeResult();
+  }
+
+  @override
+  void didUpdateWidget(ResultBanner oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    noticeResult();
+  }
+
+  /// A new result starts with details collapsed and is scrolled into view,
+  /// centred so it stays clear of the screen edges, even when the action
+  /// button that produced it sits at the bottom of the list.
+  void noticeResult() {
+    final s = widget.state;
+    final current = (s.error, s.success, s.lastFailure);
+    if (current.$1 == shown.$1 &&
+        current.$2 == shown.$2 &&
+        identical(current.$3, shown.$3)) {
+      return;
+    }
+    shown = current;
+    details = false;
+    if (s.error == null && s.success == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Scrollable.ensureVisible(
+        context,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 200),
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final s = widget.state;
     final scheme = Theme.of(context).colorScheme;
-    // A new failure starts with its details collapsed.
-    if (!identical(shownFailure, s.lastFailure)) {
-      shownFailure = s.lastFailure;
-      details = false;
-    }
     if (s.error case final error?) {
       final detail = s.lastFailure?.detail;
       return Card(
@@ -55,18 +88,18 @@ class _ResultBannerState extends State<ResultBanner> {
                       onPressed: () => setState(() => details = !details),
                       child: Text(details ? 'Hide details' : 'Details'),
                     ),
-                  TextButton(
-                    onPressed: s.loading ? null : s.refresh,
-                    child: const Text('Refresh'),
-                  ),
+                  if (s.loadFailed)
+                    TextButton(
+                      onPressed: s.loading ? null : s.refresh,
+                      child: const Text('Reload'),
+                    ),
                 ],
               ),
               if (detail != null && details)
                 SelectableText(
                   [
-                    'Target: ${detail.targetKind}'
-                        '${detail.targetName == null ? '' : ' "${detail.targetName}"'}',
-                    'Step: ${detail.step}',
+                    'Target: ${failureTargetLabel(detail)}',
+                    'Step: ${failureStepLabel(detail.step)}',
                     if (detail.url case final url?) 'URL: $url',
                     if (detail.status case final status?)
                       'HTTP status: $status',

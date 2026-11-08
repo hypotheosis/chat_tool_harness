@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../backend/backend.dart';
 import '../../backend/models.dart';
@@ -27,12 +28,29 @@ class _CredentialEditorState extends State<CredentialEditor> {
   int operationRevision = 0;
   String? status;
 
-  /// Bumped after a store or delete so the summary is described again.
-  int summaryRevision = 0;
-  ({String reference, int revision})? summaryKey;
+  /// What the device reports for [describedReference]; null while the
+  /// reference is being edited.
   Future<_Summary>? summary;
+  String? describedReference;
+
+  /// Waits for a pause in typing before asking the platform, so editing the
+  /// reference does not cost a channel call per keystroke.
+  Timer? debounce;
+  static const describeDelay = Duration(milliseconds: 500);
+
+  @override
+  void initState() {
+    super.initState();
+    widget.reference.addListener(referenceChanged);
+    widget.headerName?.addListener(headerChanged);
+    describeNow();
+  }
+
   @override
   void dispose() {
+    debounce?.cancel();
+    widget.reference.removeListener(referenceChanged);
+    widget.headerName?.removeListener(headerChanged);
     secret.clear();
     secret.dispose();
     super.dispose();
@@ -41,7 +59,14 @@ class _CredentialEditorState extends State<CredentialEditor> {
   @override
   void didUpdateWidget(CredentialEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.headerName, widget.headerName)) {
+      oldWidget.headerName?.removeListener(headerChanged);
+      widget.headerName?.addListener(headerChanged);
+    }
     if (!identical(oldWidget.reference, widget.reference)) {
+      oldWidget.reference.removeListener(referenceChanged);
+      widget.reference.addListener(referenceChanged);
+      describeNow();
       // A retired operation must not regain ownership if its controller is reused.
       operationRevision++;
       secret.clear();
@@ -49,6 +74,29 @@ class _CredentialEditorState extends State<CredentialEditor> {
       status = null;
     }
   }
+
+  /// Describes the current reference immediately, without a rebuild; callers
+  /// in a frame's build phase or a setState get one anyway.
+  void describeNow() {
+    debounce?.cancel();
+    describedReference = widget.reference.text;
+    summary = describe(widget.reference.text);
+  }
+
+  void referenceChanged() {
+    // Selection and focus changes notify too; only new text needs a lookup.
+    if (widget.reference.text == describedReference) return;
+    debounce?.cancel();
+    setState(() {
+      describedReference = null;
+      summary = null;
+    });
+    debounce = Timer(describeDelay, () {
+      if (mounted) setState(describeNow);
+    });
+  }
+
+  void headerChanged() => setState(() {});
 
   Future<void> change(bool delete) async {
     final revision = ++operationRevision;
@@ -111,7 +159,7 @@ class _CredentialEditorState extends State<CredentialEditor> {
           status = delete
               ? 'Credential deleted. Future requests require re-entry; history remains available.'
               : 'Credential stored. Save configuration to attach a new reference. Replacement affects future requests.';
-          summaryRevision++;
+          describeNow();
         });
       }
     } catch (_) {
@@ -143,17 +191,6 @@ class _CredentialEditorState extends State<CredentialEditor> {
     }
   }
 
-  /// The future for the current reference, created again only when the
-  /// reference or [summaryRevision] changes.
-  Future<_Summary> currentSummary() {
-    final key = (reference: widget.reference.text, revision: summaryRevision);
-    if (summaryKey != key || summary == null) {
-      summaryKey = key;
-      summary = describe(key.reference);
-    }
-    return summary!;
-  }
-
   String summaryText(_Summary summary) => switch (summary) {
     _Absent() => 'No credential stored',
     _Unreadable() => 'Stored credential cannot be read; re-enter it.',
@@ -171,17 +208,17 @@ class _CredentialEditorState extends State<CredentialEditor> {
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      ListenableBuilder(
-        listenable: Listenable.merge([widget.reference, widget.headerName]),
-        builder: (context, _) => FutureBuilder<_Summary>(
-          future: currentSummary(),
-          builder: (context, snapshot) => switch (snapshot.data) {
-            final data? when summaryText(data).isNotEmpty => Text(
-              summaryText(data),
-            ),
-            _ => const SizedBox.shrink(),
-          },
-        ),
+      FutureBuilder<_Summary>(
+        // A fresh builder per lookup, so an earlier reference's answer is
+        // never shown while the next one is pending.
+        key: ObjectKey(summary),
+        future: summary,
+        builder: (context, snapshot) => switch (snapshot.data) {
+          final data? when summaryText(data).isNotEmpty => Text(
+            summaryText(data),
+          ),
+          _ => const SizedBox.shrink(),
+        },
       ),
       const Text(
         'Replacement changes future requests for every configuration using this reference. Tokens are never loaded back into this form.',

@@ -27,9 +27,8 @@ void main() {
     );
     expect(
       failureMessage(failure),
-      startsWith(
-        'MCP server "tools": HTTP 401 during initialize: unknown API key.',
-      ),
+      'MCP server "tools": HTTP 401 during initialization: unknown API key. '
+      'Check or re-enter the credential in settings.',
     );
     expect(failureMessage(failure), isNot(contains('Task 12')));
   });
@@ -54,7 +53,7 @@ void main() {
     expect(
       failureMessage(trailing),
       startsWith(
-        'Inference endpoint "local": failed during chat request: bad body. ',
+        'Inference endpoint "local": failed during the chat request: bad body. ',
       ),
     );
   });

@@ -91,12 +91,14 @@ class _ServerScreenState extends State<ServerScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: state,
     builder: (context, _) => Scaffold(
-      appBar: AppBar(title: const Text('MCP server')),
-      bottomNavigationBar: ScreenStatus(state, showError: false),
+      appBar: AppBar(
+        title: const Text('MCP server'),
+        bottom: settingsProgress(state),
+      ),
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: settingsListPadding(context),
+          padding: const EdgeInsets.all(16),
           children: [
             inputField('Name', name),
             inputField('Streamable HTTP URL', url),
