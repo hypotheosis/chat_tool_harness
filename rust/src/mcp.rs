@@ -337,14 +337,12 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
                         return Err(McpError::Protocol);
                     }
                     let schema = tool.get("inputSchema").ok_or(McpError::Protocol)?;
-                    if !schema.is_object()
-                        || permissions::validate_discovery_schema(&schema.to_string()).is_err()
+                    if let Err(rejection) =
+                        permissions::validate_discovery_schema(&schema.to_string())
                     {
                         diagnostics.push(ToolDiagnostic {
                             name: name.into(),
-                            reason:
-                                "unsupported input schema: restricted JSON Schema subset required"
-                                    .into(),
+                            reason: rejection.reason().into(),
                         });
                         continue;
                     }

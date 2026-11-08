@@ -112,6 +112,31 @@ void main() {
     expect(find.text('Failed'), findsNothing);
   });
 
+  testWidgets('skipped tools are counted and listed with their reason', (
+    t,
+  ) async {
+    final b = UiBackend()
+      ..reply = const CommandReply(
+        discoveredTools: ['a'],
+        skippedTools: [SkippedTool('remote', 'refers to another document')],
+      );
+    await pumpServerScreen(t, b);
+    await t.tap(testButton);
+    await t.pumpAndSettle();
+    expect(
+      find.textContaining(
+        'Connected to Server: 1 tool available; 1 skipped (see below)',
+      ),
+      findsOneWidget,
+    );
+    await t.scrollUntilVisible(
+      find.text('refers to another document'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('remote'), findsOneWidget);
+  });
+
   testWidgets('a new test clears the previous failure', (t) async {
     final b = UiBackend()
       ..failure = const BackendFailure(FailureCode.unavailableTransport);

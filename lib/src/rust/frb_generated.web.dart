@@ -156,6 +156,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AgentServerConfig dco_decode_agent_server_config(dynamic raw);
 
   @protected
+  AgentSkippedTool dco_decode_agent_skipped_tool(dynamic raw);
+
+  @protected
   AgentToolCall dco_decode_agent_tool_call(dynamic raw);
 
   @protected
@@ -309,6 +312,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AgentServerConfig> dco_decode_list_agent_server_config(dynamic raw);
+
+  @protected
+  List<AgentSkippedTool> dco_decode_list_agent_skipped_tool(dynamic raw);
 
   @protected
   List<AgentToolCall> dco_decode_list_agent_tool_call(dynamic raw);
@@ -586,6 +592,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  AgentSkippedTool sse_decode_agent_skipped_tool(SseDeserializer deserializer);
+
+  @protected
   AgentToolCall sse_decode_agent_tool_call(SseDeserializer deserializer);
 
   @protected
@@ -783,6 +792,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AgentServerConfig> sse_decode_list_agent_server_config(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<AgentSkippedTool> sse_decode_list_agent_skipped_tool(
     SseDeserializer deserializer,
   );
 
@@ -1119,6 +1133,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_agent_skipped_tool(
+    AgentSkippedTool self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_agent_tool_call(AgentToolCall self, SseSerializer serializer);
 
   @protected
@@ -1364,6 +1384,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_agent_server_config(
     List<AgentServerConfig> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_agent_skipped_tool(
+    List<AgentSkippedTool> self,
     SseSerializer serializer,
   );
 

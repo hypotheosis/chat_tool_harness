@@ -568,6 +568,7 @@ CommandReply _fromCommandReply(g.AgentCommandReply v) => CommandReply(
   models: v.models,
   toolSupport: v.toolSupport == null ? null : _fromSupport(v.toolSupport!),
   discoveredTools: v.discoveredTools,
+  skippedTools: [for (final t in v.skippedTools) SkippedTool(t.name, t.reason)],
   discoveredRules: v.discoveredRules.map(_fromToolRule).toList(),
   id: v.id,
   artifact: v.artifact == null ? null : _fromArtifactContent(v.artifact!),

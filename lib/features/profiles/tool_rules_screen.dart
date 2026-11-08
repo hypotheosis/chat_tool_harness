@@ -15,6 +15,9 @@ class ToolRulesScreen extends StatefulWidget {
 class _ToolRulesScreenState extends State<ToolRulesScreen> {
   late final state = ScreenController(widget.backend);
   final discovered = <String, ({ToolRule rule, String configuration})>{};
+
+  /// Tools the last discovery could not use.
+  List<SkippedTool> skipped = [];
   String identity(ToolRule rule) =>
       '${rule.key.profileId}/${rule.key.serverId}/${rule.key.name}';
   List<ToolRule> get rules => {
@@ -114,8 +117,15 @@ class _ToolRulesScreenState extends State<ToolRulesScreen> {
         );
         remember(reply.discoveredRules, configuration);
       });
-      final n = reply.discoveredRules.length;
-      state.succeed(n == 1 ? '1 tool available' : '$n tools available');
+      setState(() {
+        skipped = reply.skippedTools;
+      });
+      state.succeed(
+        discoverySummary(
+          reply.discoveredRules.length,
+          reply.skippedTools.length,
+        ),
+      );
     }
   }
 
@@ -171,6 +181,7 @@ class _ToolRulesScreenState extends State<ToolRulesScreen> {
                   child: Text('Discover rules ${p.name} • ${p.id} / $s'),
                 ),
             ResultBanner(state: state),
+            SkippedToolList(skipped),
             if (rules.isEmpty && !state.loading)
               const Text(
                 'No observed tools. Discover tools from a linked server or start an Agent conversation first.',

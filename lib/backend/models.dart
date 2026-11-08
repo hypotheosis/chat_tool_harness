@@ -432,6 +432,21 @@ class AppEvent {
   final String conversationId;
 }
 
+class SkippedTool {
+  const SkippedTool(this.name, this.reason);
+  final String name;
+  final String reason;
+}
+
+/// The result line of a server tool discovery, e.g. "3 tools available;
+/// 1 skipped (see below)".
+String discoverySummary(int available, int skipped) {
+  final tools = available == 1 ? '1 tool' : '$available tools';
+  return skipped == 0
+      ? '$tools available'
+      : '$tools available; $skipped skipped (see below)';
+}
+
 class CommandReply {
   const CommandReply({
     this.history = const [],
@@ -441,6 +456,7 @@ class CommandReply {
     this.models = const [],
     this.toolSupport,
     this.discoveredTools = const [],
+    this.skippedTools = const [],
     this.discoveredRules = const [],
   });
   final List<ConversationSummary> history;
@@ -448,6 +464,9 @@ class CommandReply {
   final List<String> models;
   final ToolSupport? toolSupport;
   final List<String> discoveredTools;
+
+  /// Tools the server offered that cannot be used, each with the reason.
+  final List<SkippedTool> skippedTools;
   final List<ToolRule> discoveredRules;
   final String? id;
   final ArtifactContent? artifact;

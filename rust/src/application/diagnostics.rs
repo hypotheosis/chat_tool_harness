@@ -77,6 +77,7 @@ impl Operation {
             models: Vec::new(),
             tool_support: None,
             discovered_tools: Vec::new(),
+            skipped_tools: Vec::new(),
             discovered_rules: Vec::new(),
         };
         match command {
@@ -99,8 +100,16 @@ impl Operation {
                 reply.tool_support = Some(result?);
             }
             Diagnostic::Server(profile, server) => {
-                let (mut session, tools) = self.discover(profile, server).await?;
-                reply.discovered_tools = tools.into_iter().map(|t| t.key.name).collect();
+                let (mut session, discovery) = self.discover(profile, server).await?;
+                reply.discovered_tools = discovery.tools.into_iter().map(|t| t.key.name).collect();
+                reply.skipped_tools = discovery
+                    .diagnostics
+                    .into_iter()
+                    .map(|d| AgentSkippedTool {
+                        name: d.name,
+                        reason: d.reason,
+                    })
+                    .collect();
                 let repo = self.repo.clone();
                 let rules = if self.cancel.is_cancelled() {
                     Err(CoreError::Cancelled)
@@ -168,7 +177,7 @@ impl Operation {
         server: core::ServerId,
     ) -> CoreResult<(
         crate::mcp::McpSession<Credentials>,
-        Vec<core::ToolDefinition>,
+        crate::mcp::DiscoveryResult,
     )> {
         let repo = self.repo.clone();
         let (config, repo) = blocking(move || {
@@ -191,7 +200,7 @@ impl Operation {
         }
         // Never race/drop these awaits on cancellation: they join spawned registry work.
         match session.list_tools(self.deadline, self.cancel.clone()).await {
-            Ok(result) => Ok((session, result.tools)),
+            Ok(result) => Ok((session, result)),
             Err(error) => {
                 let _ = self.close(&mut session).await;
                 Err(diagnostic_mcp_error(error))

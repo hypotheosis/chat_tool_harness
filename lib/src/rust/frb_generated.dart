@@ -698,17 +698,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AgentCommandReply dco_decode_agent_command_reply(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return AgentCommandReply(
       history: dco_decode_list_agent_conversation_summary(arr[0]),
       exportBundle: dco_decode_opt_box_autoadd_agent_export_bundle(arr[1]),
       models: dco_decode_list_String(arr[2]),
       toolSupport: dco_decode_opt_box_autoadd_tool_support(arr[3]),
       discoveredTools: dco_decode_list_String(arr[4]),
-      discoveredRules: dco_decode_list_agent_tool_rule(arr[5]),
-      id: dco_decode_opt_String(arr[6]),
-      artifact: dco_decode_opt_box_autoadd_agent_artifact_content(arr[7]),
+      skippedTools: dco_decode_list_agent_skipped_tool(arr[5]),
+      discoveredRules: dco_decode_list_agent_tool_rule(arr[6]),
+      id: dco_decode_opt_String(arr[7]),
+      artifact: dco_decode_opt_box_autoadd_agent_artifact_content(arr[8]),
     );
   }
 
@@ -996,6 +997,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       url: dco_decode_String(arr[2]),
       allowHttp: dco_decode_bool(arr[3]),
       secretHeaders: dco_decode_list_agent_secret_header(arr[4]),
+    );
+  }
+
+  @protected
+  AgentSkippedTool dco_decode_agent_skipped_tool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return AgentSkippedTool(
+      name: dco_decode_String(arr[0]),
+      reason: dco_decode_String(arr[1]),
     );
   }
 
@@ -1466,6 +1479,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<AgentServerConfig> dco_decode_list_agent_server_config(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_agent_server_config).toList();
+  }
+
+  @protected
+  List<AgentSkippedTool> dco_decode_list_agent_skipped_tool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_agent_skipped_tool).toList();
   }
 
   @protected
@@ -1971,6 +1990,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_models = sse_decode_list_String(deserializer);
     var var_toolSupport = sse_decode_opt_box_autoadd_tool_support(deserializer);
     var var_discoveredTools = sse_decode_list_String(deserializer);
+    var var_skippedTools = sse_decode_list_agent_skipped_tool(deserializer);
     var var_discoveredRules = sse_decode_list_agent_tool_rule(deserializer);
     var var_id = sse_decode_opt_String(deserializer);
     var var_artifact = sse_decode_opt_box_autoadd_agent_artifact_content(
@@ -1982,6 +2002,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       models: var_models,
       toolSupport: var_toolSupport,
       discoveredTools: var_discoveredTools,
+      skippedTools: var_skippedTools,
       discoveredRules: var_discoveredRules,
       id: var_id,
       artifact: var_artifact,
@@ -2349,6 +2370,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       allowHttp: var_allowHttp,
       secretHeaders: var_secretHeaders,
     );
+  }
+
+  @protected
+  AgentSkippedTool sse_decode_agent_skipped_tool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_name = sse_decode_String(deserializer);
+    var var_reason = sse_decode_String(deserializer);
+    return AgentSkippedTool(name: var_name, reason: var_reason);
   }
 
   @protected
@@ -2992,6 +3021,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<AgentSkippedTool> sse_decode_list_agent_skipped_tool(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentSkippedTool>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_skipped_tool(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<AgentToolCall> sse_decode_list_agent_tool_call(
     SseDeserializer deserializer,
   ) {
@@ -3607,6 +3650,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_String(self.models, serializer);
     sse_encode_opt_box_autoadd_tool_support(self.toolSupport, serializer);
     sse_encode_list_String(self.discoveredTools, serializer);
+    sse_encode_list_agent_skipped_tool(self.skippedTools, serializer);
     sse_encode_list_agent_tool_rule(self.discoveredRules, serializer);
     sse_encode_opt_String(self.id, serializer);
     sse_encode_opt_box_autoadd_agent_artifact_content(
@@ -3858,6 +3902,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.url, serializer);
     sse_encode_bool(self.allowHttp, serializer);
     sse_encode_list_agent_secret_header(self.secretHeaders, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_skipped_tool(
+    AgentSkippedTool self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.reason, serializer);
   }
 
   @protected
@@ -4472,6 +4526,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_agent_server_config(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_skipped_tool(
+    List<AgentSkippedTool> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_skipped_tool(item, serializer);
     }
   }
 

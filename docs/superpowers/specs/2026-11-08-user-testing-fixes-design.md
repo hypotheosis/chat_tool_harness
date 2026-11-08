@@ -199,6 +199,25 @@ get bottom padding of `MediaQuery.viewPaddingOf(context).bottom` plus the
 normal margin, so the last widgets are never hidden behind the Android
 navigation bar in edge-to-edge mode.
 
+## 9a. Tool input schemas (added after device testing)
+
+Discovery accepted 1 of a real rmcp server's 40 tools: a hand-written keyword
+allow-list rejected `$schema`, local `$defs` references and generator formats
+such as `uint32`, and the rejected tools were dropped silently.
+
+- The `jsonschema` validator is the gatekeeper: a tool is usable iff its input
+  schema is a JSON object that compiles as draft 2020-12. Unknown keywords and
+  unknown `format` values are annotations, as the standard says; the bounds
+  beside them still apply. This amends the original plan's "reject
+  unsupported schema features explicitly": the validator implements all of
+  2020-12, so nothing it compiles goes unenforced.
+- References resolve only within the schema. The crate is built without
+  remote or file resolvers, so a `$ref` to another document fails to compile
+  and the tool is skipped as "refers to another document".
+- Discovery replies carry `skipped_tools` (name, reason); the server and tool
+  rules screens report "N tools available; M skipped (see below)" and list
+  each skipped tool with its reason.
+
 ## 10. Testing
 
 - Rust unit tests: refresh creates a revision only on change; resume re-binds;

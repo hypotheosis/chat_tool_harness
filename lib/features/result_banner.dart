@@ -129,3 +129,35 @@ class _ResultBannerState extends State<ResultBanner> {
     return const SizedBox.shrink();
   }
 }
+
+/// Tools a discovery found but cannot offer, each with the reason, so a low
+/// tool count is never unexplained.
+class SkippedToolList extends StatelessWidget {
+  const SkippedToolList(this.tools, {super.key});
+  final List<SkippedTool> tools;
+  @override
+  Widget build(BuildContext context) {
+    if (tools.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Skipped tools', style: theme.textTheme.titleSmall),
+          for (final t in tools)
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                Icons.block,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              title: SelectableText(t.name),
+              subtitle: Text(t.reason),
+            ),
+        ],
+      ),
+    );
+  }
+}

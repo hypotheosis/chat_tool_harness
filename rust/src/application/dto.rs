@@ -193,6 +193,11 @@ pub struct AgentAppEvent {
     pub sequence: u64,
     pub conversation_id: String,
 }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentSkippedTool {
+    pub name: String,
+    pub reason: String,
+}
 #[derive(Debug, Clone)]
 pub struct AgentCommandReply {
     pub history: Vec<AgentConversationSummary>,
@@ -200,6 +205,8 @@ pub struct AgentCommandReply {
     pub models: Vec<String>,
     pub tool_support: Option<ToolSupport>,
     pub discovered_tools: Vec<String>,
+    /// Tools the server offered that cannot be used, with why.
+    pub skipped_tools: Vec<AgentSkippedTool>,
     pub discovered_rules: Vec<AgentToolRule>,
     pub id: Option<String>,
     pub artifact: Option<AgentArtifactContent>,

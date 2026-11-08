@@ -214,6 +214,9 @@ class AgentCommandReply {
   final List<String> models;
   final ToolSupport? toolSupport;
   final List<String> discoveredTools;
+
+  /// Tools the server offered that cannot be used, with why.
+  final List<AgentSkippedTool> skippedTools;
   final List<AgentToolRule> discoveredRules;
   final String? id;
   final AgentArtifactContent? artifact;
@@ -224,6 +227,7 @@ class AgentCommandReply {
     required this.models,
     this.toolSupport,
     required this.discoveredTools,
+    required this.skippedTools,
     required this.discoveredRules,
     this.id,
     this.artifact,
@@ -236,6 +240,7 @@ class AgentCommandReply {
       models.hashCode ^
       toolSupport.hashCode ^
       discoveredTools.hashCode ^
+      skippedTools.hashCode ^
       discoveredRules.hashCode ^
       id.hashCode ^
       artifact.hashCode;
@@ -250,6 +255,7 @@ class AgentCommandReply {
           models == other.models &&
           toolSupport == other.toolSupport &&
           discoveredTools == other.discoveredTools &&
+          skippedTools == other.skippedTools &&
           discoveredRules == other.discoveredRules &&
           id == other.id &&
           artifact == other.artifact;
@@ -925,6 +931,24 @@ class AgentServerConfig {
           url == other.url &&
           allowHttp == other.allowHttp &&
           secretHeaders == other.secretHeaders;
+}
+
+class AgentSkippedTool {
+  final String name;
+  final String reason;
+
+  const AgentSkippedTool({required this.name, required this.reason});
+
+  @override
+  int get hashCode => name.hashCode ^ reason.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AgentSkippedTool &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          reason == other.reason;
 }
 
 class AgentToolCall {

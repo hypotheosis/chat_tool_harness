@@ -104,7 +104,7 @@ async fn mcp_diagnostic_only_initializes_and_lists_linked_server() {
     let (url, server) = diagnostic_http(vec![
         (200, "application/json", r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"fixture","version":"1"}}}"#.into()),
         (202, "application/json", String::new()),
-        (200, "application/json", r#"{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"write","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}]}}"#.into()),
+        (200, "application/json", r#"{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"write","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},{"name":"remote","inputSchema":{"$ref":"https://example.invalid/schema"}}]}}"#.into()),
     ].into_iter().cycle().take(9).collect()).await;
     let dir = tempfile::tempdir().unwrap();
     let app = Application::open(
@@ -168,6 +168,15 @@ async fn mcp_diagnostic_only_initializes_and_lists_linked_server() {
         .await
         .unwrap();
     assert_eq!(reply.discovered_tools, vec!["write"]);
+    assert_eq!(
+        reply.skipped_tools,
+        vec![AgentSkippedTool {
+            name: "remote".into(),
+            reason: crate::permissions::SchemaRejection::ExternalReference
+                .reason()
+                .into(),
+        }]
+    );
     let rule = reply.discovered_rules.into_iter().next().unwrap();
     assert_eq!(rule.rule, PermissionRule::Ask);
     app.command(AppCommand::SetRule {

@@ -749,6 +749,8 @@ impl SseDecode for crate::application::dto::AgentCommandReply {
         let mut var_models = <Vec<String>>::sse_decode(deserializer);
         let mut var_toolSupport = <Option<crate::inference::ToolSupport>>::sse_decode(deserializer);
         let mut var_discoveredTools = <Vec<String>>::sse_decode(deserializer);
+        let mut var_skippedTools =
+            <Vec<crate::application::dto::AgentSkippedTool>>::sse_decode(deserializer);
         let mut var_discoveredRules =
             <Vec<crate::application::dto::AgentToolRule>>::sse_decode(deserializer);
         let mut var_id = <Option<String>>::sse_decode(deserializer);
@@ -760,6 +762,7 @@ impl SseDecode for crate::application::dto::AgentCommandReply {
             models: var_models,
             tool_support: var_toolSupport,
             discovered_tools: var_discoveredTools,
+            skipped_tools: var_skippedTools,
             discovered_rules: var_discoveredRules,
             id: var_id,
             artifact: var_artifact,
@@ -1130,6 +1133,18 @@ impl SseDecode for crate::application::dto::AgentServerConfig {
             url: var_url,
             allow_http: var_allowHttp,
             secret_headers: var_secretHeaders,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentSkippedTool {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_reason = <String>::sse_decode(deserializer);
+        return crate::application::dto::AgentSkippedTool {
+            name: var_name,
+            reason: var_reason,
         };
     }
 }
@@ -1709,6 +1724,20 @@ impl SseDecode for Vec<crate::application::dto::AgentServerConfig> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::application::dto::AgentServerConfig>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentSkippedTool> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::application::dto::AgentSkippedTool>::sse_decode(
                 deserializer,
             ));
         }
@@ -2411,6 +2440,7 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentCommandRepl
             self.models.into_into_dart().into_dart(),
             self.tool_support.into_into_dart().into_dart(),
             self.discovered_tools.into_into_dart().into_dart(),
+            self.skipped_tools.into_into_dart().into_dart(),
             self.discovered_rules.into_into_dart().into_dart(),
             self.id.into_into_dart().into_dart(),
             self.artifact.into_into_dart().into_dart(),
@@ -2883,6 +2913,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentServerConfi
     for crate::application::dto::AgentServerConfig
 {
     fn into_into_dart(self) -> crate::application::dto::AgentServerConfig {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentSkippedTool {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.name.into_into_dart().into_dart(),
+            self.reason.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentSkippedTool
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentSkippedTool>
+    for crate::application::dto::AgentSkippedTool
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentSkippedTool {
         self
     }
 }
@@ -3710,6 +3761,10 @@ impl SseEncode for crate::application::dto::AgentCommandReply {
         <Vec<String>>::sse_encode(self.models, serializer);
         <Option<crate::inference::ToolSupport>>::sse_encode(self.tool_support, serializer);
         <Vec<String>>::sse_encode(self.discovered_tools, serializer);
+        <Vec<crate::application::dto::AgentSkippedTool>>::sse_encode(
+            self.skipped_tools,
+            serializer,
+        );
         <Vec<crate::application::dto::AgentToolRule>>::sse_encode(
             self.discovered_rules,
             serializer,
@@ -3953,6 +4008,14 @@ impl SseEncode for crate::application::dto::AgentServerConfig {
             self.secret_headers,
             serializer,
         );
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentSkippedTool {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.name, serializer);
+        <String>::sse_encode(self.reason, serializer);
     }
 }
 
@@ -4451,6 +4514,16 @@ impl SseEncode for Vec<crate::application::dto::AgentServerConfig> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::application::dto::AgentServerConfig>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentSkippedTool> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentSkippedTool>::sse_encode(item, serializer);
         }
     }
 }

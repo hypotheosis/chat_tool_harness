@@ -28,6 +28,7 @@ class _ServerScreenState extends State<ServerScreen> {
   late bool http = widget.server?.allowHttp ?? false;
   String? profileId;
   List<String> tools = [];
+  List<SkippedTool> skipped = [];
   @override
   void initState() {
     super.initState();
@@ -77,14 +78,17 @@ class _ServerScreenState extends State<ServerScreen> {
     }
     setState(() {
       tools = [];
+      skipped = [];
     });
     final reply = await state.perform(DiscoverServer(profileId!, id!));
     if (!mounted || reply == null) return;
     setState(() {
       tools = reply.discoveredTools;
+      skipped = reply.skippedTools;
     });
-    final count = tools.length == 1 ? '1 tool' : '${tools.length} tools';
-    state.succeed('Connected to ${name.text}: $count available');
+    state.succeed(
+      'Connected to ${name.text}: ${discoverySummary(tools.length, skipped.length)}',
+    );
   }
 
   @override
@@ -176,6 +180,7 @@ class _ServerScreenState extends State<ServerScreen> {
             ),
             ResultBanner(state: state),
             for (final tool in tools) SelectableText(tool),
+            SkippedToolList(skipped),
           ],
         ),
       ),

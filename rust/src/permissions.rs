@@ -99,92 +99,54 @@ fn key_parts(key: &ToolKey) -> (String, String, String) {
     };
     (key.profile_id.0.to_string(), server, key.name.clone())
 }
-fn schema_allowed(value: &Value) -> CoreResult<()> {
-    let Some(obj) = value.as_object() else {
-        return Err(CoreError::InvalidInput);
-    };
-    const KEYS: &[&str] = &[
-        "type",
-        "properties",
-        "required",
-        "additionalProperties",
-        "items",
-        "minItems",
-        "maxItems",
-        "minLength",
-        "maxLength",
-        "minimum",
-        "maximum",
-        "exclusiveMinimum",
-        "exclusiveMaximum",
-        "enum",
-        "const",
-        "description",
-        "title",
-        "default",
-        "examples",
-        "pattern",
-        "format",
-        "oneOf",
-        "anyOf",
-        "allOf",
-        "not",
-        "$defs",
-        "definitions",
-        "$ref",
-        "minProperties",
-        "maxProperties",
-        "uniqueItems",
-        "multipleOf",
-        "propertyNames",
-        "patternProperties",
-    ];
-    for key in obj.keys() {
-        if !KEYS.contains(&key.as_str()) {
-            return Err(CoreError::InvalidInput);
-        }
-        // No reference resolution is permitted, even for local references.
-        // This is an explicit restricted subset rather than a silent fallback.
-        if key == "$ref" {
-            return Err(CoreError::InvalidInput);
-        }
-    }
-    for key in ["properties", "$defs", "definitions", "patternProperties"] {
-        if let Some(map) = obj.get(key) {
-            for child in map.as_object().ok_or(CoreError::InvalidInput)?.values() {
-                schema_allowed(child)?;
-            }
-        }
-    }
-    for key in ["items", "additionalProperties", "not", "propertyNames"] {
-        if let Some(child) = obj.get(key) {
-            if child.is_object() {
-                schema_allowed(child)?;
-            } else if !child.is_boolean() {
-                return Err(CoreError::InvalidInput);
-            }
-        }
-    }
-    for key in ["oneOf", "anyOf", "allOf"] {
-        if let Some(array) = obj.get(key) {
-            for child in array.as_array().ok_or(CoreError::InvalidInput)? {
-                schema_allowed(child)?;
-            }
-        }
-    }
-    Ok(())
+/// Why a discovered tool's input schema cannot be used to check its arguments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SchemaRejection {
+    /// Not a JSON object, or not parseable within the size limit.
+    NotAnObject,
+    /// A `$ref` names a document other than the schema itself; nothing is fetched.
+    ExternalReference,
+    /// The validator cannot compile it as JSON Schema 2020-12.
+    Invalid,
 }
-pub(crate) fn validate_discovery_schema(raw: &str) -> CoreResult<()> {
-    validated_schema(raw).map(|_| ())
+impl SchemaRejection {
+    pub(crate) fn reason(self) -> &'static str {
+        match self {
+            Self::NotAnObject => "input schema is not a JSON object",
+            Self::ExternalReference => {
+                "input schema refers to another document; only references within the schema are supported"
+            }
+            Self::Invalid => "input schema is not valid JSON Schema 2020-12",
+        }
+    }
+}
+pub(crate) fn validate_discovery_schema(raw: &str) -> Result<(), SchemaRejection> {
+    let schema = parse_json(raw).map_err(|_| SchemaRejection::NotAnObject)?;
+    compile_schema(&schema).map(|_| ())
+}
+/// The validator is the gatekeeper: whatever it compiles, it enforces.
+///
+/// Unknown keywords and unknown `format` values are annotations under 2020-12
+/// and do not constrain arguments. The crate is built without remote or file
+/// resolvers, so only references within the schema itself can resolve.
+fn compile_schema(schema: &Value) -> Result<jsonschema::Validator, SchemaRejection> {
+    if !schema.is_object() {
+        return Err(SchemaRejection::NotAnObject);
+    }
+    jsonschema::draft202012::options()
+        .should_validate_formats(true)
+        .should_ignore_unknown_formats(true)
+        .build(schema)
+        .map_err(|error| match error.kind {
+            jsonschema::error::ValidationErrorKind::Referencing(_) => {
+                SchemaRejection::ExternalReference
+            }
+            _ => SchemaRejection::Invalid,
+        })
 }
 fn validated_schema(raw: &str) -> CoreResult<Value> {
     let schema = parse_json(raw)?;
-    schema_allowed(&schema)?;
-    jsonschema::draft202012::options()
-        .should_validate_formats(true)
-        .should_ignore_unknown_formats(false)
-        .build(&schema)
-        .map_err(|_| CoreError::InvalidInput)?;
+    compile_schema(&schema).map_err(|_| CoreError::InvalidInput)?;
     Ok(schema)
 }
 fn mcp_destination_digest(config: &crate::model::core::ServerConfig) -> CoreResult<String> {
@@ -494,11 +456,8 @@ pub(crate) fn validate_call(call: &ToolCall, definition: &ToolDefinition) -> Cor
     if !args.is_object() {
         return Err(CoreError::InvalidInput);
     }
-    let schema = validated_schema(&definition.schema_json)?;
-    if !jsonschema::draft202012::options()
-        .should_validate_formats(true)
-        .should_ignore_unknown_formats(false)
-        .build(&schema)
+    let schema = parse_json(&definition.schema_json)?;
+    if !compile_schema(&schema)
         .map_err(|_| CoreError::InvalidInput)?
         .is_valid(&args)
     {
@@ -1380,7 +1339,7 @@ mod tests {
         assert_eq!(calls, 0);
     }
     #[test]
-    fn uri_format_asserts_and_unknown_format_rejected() {
+    fn uri_format_asserts_and_unknown_format_is_an_annotation() {
         let f = Fixture::new();
         let schema = r#"{"type":"object","properties":{"path":{"type":"string","format":"uri"}},"required":["path"]}"#;
         let definition =
@@ -1391,12 +1350,18 @@ mod tests {
             authorize(&f.repo, f.attempt, &call, &definition, None),
             Err(CoreError::InvalidInput)
         );
-        assert!(ToolDefinition::from_discovery(
+        let unknown = ToolDefinition::from_discovery(
             &f.repo,
             definition.key.clone(),
-            r#"{"type":"object","properties":{"path":{"format":"unknown-format"}}}"#
+            r#"{"type":"object","properties":{"n":{"type":"integer","format":"uint32","minimum":0}}}"#,
         )
-        .is_err());
+        .unwrap();
+        call.arguments_json = r#"{"n":-1}"#.into();
+        assert_eq!(
+            authorize(&f.repo, f.attempt, &call, &unknown, None),
+            Err(CoreError::InvalidInput),
+            "the bounds next to an unknown format still apply"
+        );
     }
     #[test]
     fn observed_schema_rejects_bad_asserted_uri_before_rule() {
@@ -1541,17 +1506,69 @@ mod tests {
         }
         assert_eq!(calls, 0);
     }
+    /// Regression: schemas as rmcp/schemars emit them (`$schema`, local `$defs`
+    /// references, integer `format`s, nullable type arrays) were all rejected
+    /// by a keyword allow-list, hiding nearly every tool of a real server.
+    #[test]
+    fn generated_schemas_are_accepted_and_still_enforced() {
+        let f = Fixture::new();
+        let schema = r##"{
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "StampParams",
+            "type": "object",
+            "required": ["path", "field"],
+            "properties": {
+                "path": {"type": "string", "description": "The concept."},
+                "field": {"$ref": "#/$defs/StampField"},
+                "limit": {"type": ["integer", "null"], "format": "uint32", "minimum": 0},
+                "note": {"type": ["string", "null"], "x-extension": true}
+            },
+            "$defs": {
+                "StampField": {"type": "string", "enum": ["generated", "reviewed"]}
+            }
+        }"##;
+        let definition =
+            ToolDefinition::from_discovery(&f.repo, f.definition().key, schema).unwrap();
+        let mut call = f.call();
+        for (arguments, allowed) in [
+            (r#"{"path":"/a","field":"generated","limit":3}"#, true),
+            (r#"{"path":"/a","field":"reviewed","limit":null}"#, true),
+            (r#"{"path":"/a","field":"other"}"#, false),
+            (r#"{"path":"/a","field":"generated","limit":-1}"#, false),
+            (r#"{"path":"/a"}"#, false),
+        ] {
+            call.arguments_json = arguments.into();
+            let result = authorize(&f.repo, f.attempt, &call, &definition, None);
+            assert_eq!(
+                result != Err(CoreError::InvalidInput),
+                allowed,
+                "{arguments}: {result:?}"
+            );
+        }
+    }
     #[test]
     fn rejects_unsupported_schema_and_forged_definition() {
         let f = Fixture::new();
         for schema in [
-            r#"{"$schema":"https://json-schema.org/draft/2020-12/schema"}"#,
             r#"{"$ref":"https://example.test/schema"}"#,
-            r#"{"x-custom":true}"#,
             r##"{"$ref":"#/$defs/missing"}"##,
+            r#"{"type":"object","properties":{"a":{"type":"no-such-type"}}}"#,
+            "true",
+            "[]",
         ] {
-            assert!(ToolDefinition::from_discovery(&f.repo, f.definition().key, schema).is_err());
+            assert!(
+                ToolDefinition::from_discovery(&f.repo, f.definition().key, schema).is_err(),
+                "{schema}"
+            );
         }
+        assert_eq!(
+            validate_discovery_schema(r#"{"$ref":"https://example.test/schema"}"#),
+            Err(SchemaRejection::ExternalReference)
+        );
+        assert_eq!(
+            validate_discovery_schema("[]"),
+            Err(SchemaRejection::NotAnObject)
+        );
         let mut d = f.definition();
         d.schema_digest = "forged".into();
         assert!(authorize(&f.repo, f.attempt, &f.call(), &d, None).is_err());

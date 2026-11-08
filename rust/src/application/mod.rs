@@ -448,6 +448,7 @@ impl Application {
             models: Vec::new(),
             tool_support: None,
             discovered_tools: Vec::new(),
+            skipped_tools: Vec::new(),
         })
     }
     pub async fn snapshot(&self) -> CoreResult<AgentAppSnapshot> {
