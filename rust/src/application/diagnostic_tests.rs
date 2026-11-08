@@ -589,9 +589,10 @@ async fn discover_server_missing_credential_is_credential_missing() {
         .unwrap();
     let failure = f.app.command_with_detail(f.discover()).await.unwrap_err();
     assert_eq!(failure.code, CoreError::CredentialMissing);
+    // The note names the server that holds the header credential.
     let detail = failure.detail.expect("failure detail");
-    assert_eq!(detail.target_kind, "credential");
-    assert_eq!(detail.target_name, None);
+    assert_eq!(detail.target_kind, "mcpServer");
+    assert_eq!(detail.target_name.as_deref(), Some("s"));
     assert_eq!(detail.step, "resolveCredential");
     // The plain command path reports the same kind.
     assert_eq!(

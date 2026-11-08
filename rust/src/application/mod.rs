@@ -26,7 +26,8 @@ impl std::fmt::Debug for CredentialReply {
 }
 // Credential notes must never carry external text (platform messages, lookup
 // errors): `failure::promote` treats the CREDENTIAL_MISSING_REASON reason on a
-// Credential note as the marker for an absent credential.
+// ResolveCredential note as the marker for an absent credential. net.rs
+// re-targets these notes at the endpoint or server holding the credential.
 fn credential_value(reply: CredentialReply) -> CoreResult<SecretValue> {
     match reply {
         CredentialReply::Value(value) => Ok(SecretValue::new(value)),
@@ -472,14 +473,9 @@ impl Application {
                 attempt_count: v.attempt_count,
                 active_ms: v.active_ms,
                 partial_text: v.partial_text,
-                failure: v.failure.as_ref().map(|f| {
-                    f.detail
-                        .reason
-                        .clone()
-                        .unwrap_or_else(|| f.code.to_string())
-                }),
+                failure: v.failure.as_ref().map(|f| f.display()),
                 failure_code: v.failure.as_ref().map(|f| f.code.clone()),
-                failure_detail: v.failure.map(|f| f.detail.into()),
+                failure_detail: v.failure.and_then(|f| f.detail).map(Into::into),
                 attempts: v
                     .attempts
                     .into_iter()

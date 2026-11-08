@@ -253,11 +253,15 @@ impl<P: CredentialProvider> NetClient<P> {
             builder = builder.header("MCP-Session-Id", value);
         }
         let mut sent = Vec::new();
+        let holder = crate::failure::FailureTarget::McpServer {
+            name: server.name.clone(),
+        };
         for (name, reference) in custom {
             let secret = tokio::select! {
                 _ = cancel.cancelled() => return Err(CoreError::Cancelled),
-                result = tokio::time::timeout_at(deadline, self.provider.resolve(reference)) => result.map_err(|_| CoreError::Cancelled)??,
-            };
+                result = tokio::time::timeout_at(deadline, self.provider.resolve(reference)) => result.map_err(|_| CoreError::Cancelled)?,
+            }
+            .inspect_err(|_| crate::failure::attribute_credential(&holder))?;
             let mut value = if name == header::AUTHORIZATION {
                 header::HeaderValue::from_str(&authorization_value(secret.as_str()))
             } else {
@@ -349,8 +353,9 @@ impl<P: CredentialProvider> NetClient<P> {
         if let Some(reference) = endpoint.credential {
             let resolved = tokio::select! {
                 _ = cancel.cancelled() => return Err(CoreError::Cancelled),
-                result = tokio::time::timeout_at(deadline, self.provider.resolve(reference)) => result.map_err(|_| CoreError::Cancelled)??,
-            };
+                result = tokio::time::timeout_at(deadline, self.provider.resolve(reference)) => result.map_err(|_| CoreError::Cancelled)?,
+            }
+            .inspect_err(|_| crate::failure::attribute_credential(&target))?;
             builder = builder.header(header::AUTHORIZATION, authorization_header(&resolved)?);
             secret = Some(resolved);
         }
@@ -1126,6 +1131,92 @@ mod tests {
         assert_eq!(
             detail.url.as_deref(),
             Some(format!("http://{addr}/v1/models").as_str())
+        );
+    }
+
+    /// A provider whose stored credential is absent, noting it as the
+    /// platform credential provider does.
+    struct MissingKey;
+    impl CredentialProvider for MissingKey {
+        fn resolve(
+            &self,
+            _: CredentialRef,
+        ) -> Pin<Box<dyn Future<Output = CoreResult<SecretValue>> + Send + '_>> {
+            Box::pin(async {
+                crate::failure::note(crate::failure::credential_missing());
+                Err(CoreError::CredentialMissing)
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn net_missing_endpoint_credential_note_names_the_endpoint() {
+        let mut endpoint = endpoint("https://never-contact.invalid/v1");
+        endpoint.credential = Some(CredentialRef::new());
+        let (result, detail) = crate::failure::scope(async {
+            NetClient::new(MissingKey)
+                .unwrap()
+                .get(
+                    &endpoint,
+                    "models",
+                    Instant::now() + Duration::from_secs(5),
+                    Cancellation::new(),
+                )
+                .await
+        })
+        .await;
+        assert!(matches!(result, Err(CoreError::CredentialMissing)));
+        let detail = detail.expect("credential note");
+        assert_eq!(
+            detail.target,
+            crate::failure::FailureTarget::Inference {
+                name: "test".into()
+            }
+        );
+        assert_eq!(detail.step, crate::failure::FailureStep::ResolveCredential);
+        assert_eq!(
+            crate::failure::promote(CoreError::Authentication, Some(&detail)),
+            CoreError::CredentialMissing
+        );
+    }
+
+    #[tokio::test]
+    async fn net_missing_mcp_header_credential_note_names_the_server() {
+        let config = crate::model::core::ServerConfig {
+            id: crate::model::core::ServerId::new(),
+            name: "tools".into(),
+            url: "https://never-contact.invalid/mcp".into(),
+            allow_http: false,
+            secret_headers: vec![("X-Api-Key".into(), CredentialRef::new())],
+        };
+        let (result, detail) = crate::failure::scope(async {
+            NetClient::new(MissingKey)
+                .unwrap()
+                .mcp_request(
+                    &config,
+                    Method::POST,
+                    Some(b"{}".to_vec()),
+                    None,
+                    None,
+                    Instant::now() + Duration::from_secs(5),
+                    &Cancellation::new(),
+                )
+                .await
+                .map(|_| ())
+        })
+        .await;
+        assert!(matches!(result, Err(CoreError::CredentialMissing)));
+        let detail = detail.expect("credential note");
+        assert_eq!(
+            detail.target,
+            crate::failure::FailureTarget::McpServer {
+                name: "tools".into()
+            }
+        );
+        assert_eq!(detail.step, crate::failure::FailureStep::ResolveCredential);
+        assert_eq!(
+            detail.reason.as_deref(),
+            Some(crate::failure::CREDENTIAL_MISSING_REASON)
         );
     }
 

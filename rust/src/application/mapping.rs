@@ -327,7 +327,7 @@ impl From<crate::failure::FailureDetail> for AgentFailureDetail {
         };
         Self {
             target_kind: target_kind.into(),
-            // Settlement falls back to an empty name when the snapshot is unreadable.
+            // An empty name reads as unnamed.
             target_name: target_name.filter(|name| !name.is_empty()),
             step: step.into(),
             url: v.url,

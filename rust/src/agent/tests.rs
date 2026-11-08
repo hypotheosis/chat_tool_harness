@@ -1583,9 +1583,10 @@ async fn failed_run_persists_noted_failure_detail() {
     assert_eq!(data.state, RunState::Failed);
     let stored = state::load(&f.repo, run).unwrap().failure.unwrap();
     assert_eq!(stored.code, CoreError::Authentication);
-    assert_eq!(stored.detail.step, FailureStep::ChatRequest);
-    assert_eq!(stored.detail.status, Some(401));
-    assert_eq!(stored.detail.reason.as_deref(), Some("unknown API key"));
+    let detail = stored.detail.expect("noted detail");
+    assert_eq!(detail.step, FailureStep::ChatRequest);
+    assert_eq!(detail.status, Some(401));
+    assert_eq!(detail.reason.as_deref(), Some("unknown API key"));
     let raw: Option<String> = f
         .repo
         .with_connection(move |conn| {
@@ -1602,26 +1603,23 @@ async fn failed_run_persists_noted_failure_detail() {
 }
 
 #[tokio::test]
-async fn failed_run_without_note_stores_fallback_detail() {
-    use crate::failure::{FailureStep, FailureTarget};
-    let mut f = Fixture::new();
-    let run = f.start().await;
-    f.request().await.finish(Err(CoreError::Authentication));
-    let data = f.settled(run).await;
-    assert_eq!(data.state, RunState::Failed);
-    let stored = data.failure.unwrap();
-    assert_eq!(stored.code, CoreError::Authentication);
-    assert_eq!(
-        stored.detail.target,
-        FailureTarget::Inference {
-            name: "model".into()
-        }
-    );
-    assert_eq!(stored.detail.step, FailureStep::Request);
-    assert_eq!(
-        stored.detail.reason.as_deref(),
-        Some("core authentication failure")
-    );
+async fn failed_run_without_note_stores_no_detail() {
+    // Regression: an un-noted failure (for example an MCP JSON-RPC error,
+    // a batch validation conflict or a local limit) was blamed on the
+    // inference endpoint's request.
+    for code in [CoreError::Conflict, CoreError::Protocol] {
+        let mut f = Fixture::new();
+        let run = f.start().await;
+        f.request().await.finish(Err(code.clone()));
+        let data = f.settled(run).await;
+        assert_eq!(data.state, RunState::Failed);
+        let stored = data.failure.unwrap();
+        assert_eq!(stored.code, code);
+        assert_eq!(stored.detail, None);
+        let (_, raw) = raw_run(&f, run).await;
+        let raw: serde_json::Value = serde_json::from_str(&raw.unwrap()).unwrap();
+        assert!(raw["detail"].is_null(), "{raw}");
+    }
 }
 
 #[tokio::test]
@@ -1635,15 +1633,16 @@ async fn credential_note_promotes_authentication_to_credential_missing() {
     );
     let stored = f.settled(run).await.failure.unwrap();
     assert_eq!(stored.code, CoreError::CredentialMissing);
-    assert_eq!(stored.detail.target, FailureTarget::Credential);
+    let detail = stored.detail.expect("credential detail");
+    assert_eq!(detail.target, FailureTarget::Credential);
     assert_eq!(
-        stored.detail.reason.as_deref(),
-        Some(CoreError::CredentialMissing.to_string().as_str())
+        detail.reason.as_deref(),
+        Some(crate::failure::CREDENTIAL_MISSING_REASON)
     );
 }
 
 #[tokio::test]
-async fn legacy_plain_failure_string_loads_as_reason() {
+async fn legacy_plain_failure_string_loads_code_without_detail() {
     let mut f = Fixture::new();
     let run = f.start().await;
     f.request().await.finish(Err(CoreError::Authentication));
@@ -1659,14 +1658,49 @@ async fn legacy_plain_failure_string_loads_as_reason() {
         .unwrap();
     let stored = state::load(&f.repo, run).unwrap().failure.unwrap();
     assert_eq!(stored.code, CoreError::Authentication);
-    assert_eq!(
-        stored.detail.reason.as_deref(),
-        Some("core authentication failure")
-    );
+    // No target is invented for a row that never named one.
+    assert_eq!(stored.detail, None);
     f.sql("UPDATE runs SET failure='something else'").await;
     let stored = state::load(&f.repo, run).unwrap().failure.unwrap();
     assert_eq!(stored.code, CoreError::Protocol);
-    assert_eq!(stored.detail.reason.as_deref(), Some("something else"));
+    assert_eq!(stored.detail, None);
+    // A row stored before the detail became optional still loads, including a
+    // unit Credential target.
+    f.sql(r#"UPDATE runs SET failure='{"code":"CredentialMissing","detail":{"target":"Credential","step":"ResolveCredential","url":null,"status":null,"reason":"stored credential missing; re-enter it in settings"}}'"#).await;
+    let stored = state::load(&f.repo, run).unwrap().failure.unwrap();
+    assert_eq!(stored.code, CoreError::CredentialMissing);
+    let detail = stored.detail.expect("stored detail");
+    assert_eq!(detail.target, crate::failure::FailureTarget::Credential);
+    assert_eq!(
+        detail.reason.as_deref(),
+        Some("stored credential missing; re-enter it in settings")
+    );
+    // A row without the detail key loads with none.
+    f.sql(r#"UPDATE runs SET failure='{"code":"Limit"}'"#).await;
+    let stored = state::load(&f.repo, run).unwrap().failure.unwrap();
+    assert_eq!((stored.code, stored.detail), (CoreError::Limit, None));
+}
+
+#[test]
+fn stored_failure_display_is_reason_or_code_text() {
+    let bare = state::StoredFailure {
+        code: CoreError::Conflict,
+        detail: None,
+    };
+    assert_eq!(bare.display(), CoreError::Conflict.to_string());
+    let reasonless = state::StoredFailure {
+        code: CoreError::Authentication,
+        detail: Some(crate::failure::FailureDetail {
+            reason: None,
+            ..noted_401()
+        }),
+    };
+    assert_eq!(reasonless.display(), CoreError::Authentication.to_string());
+    let noted = state::StoredFailure {
+        code: CoreError::Authentication,
+        detail: Some(noted_401()),
+    };
+    assert_eq!(noted.display(), "unknown API key");
 }
 
 fn noted_401() -> crate::failure::FailureDetail {
@@ -1709,12 +1743,7 @@ async fn failed_run_settles_when_snapshot_cannot_name_endpoint() {
     assert_eq!(state, "Failed");
     let stored: state::StoredFailure = serde_json::from_str(&failure.unwrap()).unwrap();
     assert_eq!(stored.code, CoreError::Authentication);
-    assert_eq!(
-        stored.detail.target,
-        crate::failure::FailureTarget::Inference {
-            name: String::new()
-        }
-    );
+    assert_eq!(stored.detail, None);
 }
 
 #[tokio::test]
@@ -1737,13 +1766,7 @@ async fn absorbed_tool_failure_note_is_not_attached_to_later_failure() {
     assert_eq!(data.attempts[0].state, AttemptState::Failed);
     let stored = data.failure.unwrap();
     assert_eq!(stored.code, CoreError::Limit);
-    assert_eq!(
-        stored.detail.target,
-        crate::failure::FailureTarget::Inference {
-            name: "model".into()
-        }
-    );
-    assert_eq!(stored.detail.status, None);
+    assert_eq!(stored.detail, None);
 }
 
 #[tokio::test]
@@ -1763,7 +1786,7 @@ async fn credential_lookup_failure_note_does_not_promote() {
     let stored = f.settled(run).await.failure.unwrap();
     assert_eq!(stored.code, CoreError::Authentication);
     assert_eq!(
-        stored.detail.target,
+        stored.detail.expect("lookup detail").target,
         crate::failure::FailureTarget::Credential
     );
 }
@@ -1779,11 +1802,7 @@ async fn cancelled_run_does_not_keep_noted_detail() {
     assert_eq!(data.state, RunState::Cancelled);
     let stored = data.failure.unwrap();
     assert_eq!(stored.code, CoreError::Cancelled);
-    assert_eq!(stored.detail.status, None);
-    assert_eq!(
-        stored.detail.reason.as_deref(),
-        Some("core operation cancelled")
-    );
+    assert_eq!(stored.detail, None);
 }
 
 #[tokio::test]
@@ -1805,8 +1824,9 @@ async fn host_release_failure_keeps_original_failure_detail() {
     assert_eq!(data.state, RunState::Paused);
     let stored = data.failure.unwrap();
     assert_eq!(stored.code, CoreError::Authentication);
-    assert_eq!(stored.detail.status, Some(401));
-    assert_eq!(stored.detail.reason.as_deref(), Some("unknown API key"));
+    let detail = stored.detail.expect("original detail");
+    assert_eq!(detail.status, Some(401));
+    assert_eq!(detail.reason.as_deref(), Some("unknown API key"));
 }
 
 #[tokio::test]

@@ -334,7 +334,9 @@ void main() {
       expect(run.failure, 'credential lookup failed');
       expect(run.failure, isNot(contains('private')));
       expect(run.failureCode, FailureCode.authentication);
-      expect(run.failureDetail?.targetKind, 'credential');
+      // The note names the endpoint that holds the credential.
+      expect(run.failureDetail?.targetKind, 'inference');
+      expect(run.failureDetail?.targetName, 'no network');
       expect(run.failureDetail?.step, 'resolveCredential');
       expect(run.failureDetail?.reason, isNot(contains('private')));
     } finally {

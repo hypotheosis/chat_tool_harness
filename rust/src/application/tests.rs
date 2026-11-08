@@ -710,7 +710,8 @@ async fn chat_turn_with_missing_credential_fails_as_credential_missing() {
     );
     assert_eq!(
         raw["detail"]["target"],
-        serde_json::to_value(crate::failure::FailureTarget::Credential).unwrap()
+        serde_json::to_value(crate::failure::FailureTarget::Inference { name: "e".into() })
+            .unwrap()
     );
     assert_eq!(
         raw["detail"]["step"],
@@ -726,9 +727,14 @@ async fn chat_turn_with_missing_credential_fails_as_credential_missing() {
         .expect("run in snapshot");
     assert_eq!(dto.state, RunState::Failed);
     assert_eq!(dto.failure_code, Some(CoreError::CredentialMissing));
+    assert_eq!(
+        dto.failure.as_deref(),
+        Some(crate::failure::CREDENTIAL_MISSING_REASON)
+    );
+    // The note names the endpoint that holds the credential.
     let detail = dto.failure_detail.as_ref().expect("failure detail");
-    assert_eq!(detail.target_kind, "credential");
-    assert_eq!(detail.target_name, None);
+    assert_eq!(detail.target_kind, "inference");
+    assert_eq!(detail.target_name.as_deref(), Some("e"));
     assert_eq!(detail.step, "resolveCredential");
     app.close().await.unwrap();
 }

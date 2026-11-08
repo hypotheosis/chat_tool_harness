@@ -16,17 +16,25 @@ use std::cell::RefCell;
 use std::future::Future;
 
 pub const MAX_REASON_CHARS: usize = 160;
-/// Reason of the Credential note that marks an absent stored credential. MCP
-/// collapses `CredentialMissing` into `Authentication`; this note lets a
-/// boundary restore the precise kind (see [`promote`]).
-pub const CREDENTIAL_MISSING_REASON: &str = "stored credential missing; re-enter it in settings";
+/// Reason of the `ResolveCredential` note that marks an absent stored
+/// credential. MCP collapses `CredentialMissing` into `Authentication`; this
+/// note lets a boundary restore the precise kind (see [`promote`]).
+pub const CREDENTIAL_MISSING_REASON: &str = "stored credential missing";
 const MAX_BODY_BYTES: usize = 8192;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FailureTarget {
-    Inference { name: String },
-    McpServer { name: String },
-    Profile { name: String },
+    Inference {
+        name: String,
+    },
+    McpServer {
+        name: String,
+    },
+    Profile {
+        name: String,
+    },
+    /// A credential whose holder is not known; network code re-targets it at
+    /// the endpoint or server (see [`attribute_credential`]).
     Credential,
 }
 
@@ -102,17 +110,31 @@ pub fn credential_missing() -> FailureDetail {
     }
 }
 
-/// Restores `CredentialMissing` for an `Authentication` failure whose note
-/// marks an absent credential; every other kind is returned unchanged.
+/// Restores `CredentialMissing` for an `Authentication` failure whose
+/// credential-lookup note marks an absent credential; every other kind is
+/// returned unchanged. Only credential lookup records `ResolveCredential`, so
+/// request notes quoting the marker text do not match.
 pub fn promote(code: CoreError, detail: Option<&FailureDetail>) -> CoreError {
     let missing = detail.is_some_and(|d| {
-        d.target == FailureTarget::Credential
+        d.step == FailureStep::ResolveCredential
             && d.reason.as_deref() == Some(CREDENTIAL_MISSING_REASON)
     });
     match code {
         CoreError::Authentication if missing => CoreError::CredentialMissing,
         other => other,
     }
+}
+
+/// Re-targets a pending Credential note at `holder`, the endpoint or server
+/// whose credential failed to resolve; any other note is left alone.
+pub fn attribute_credential(holder: &FailureTarget) {
+    let _ = NOTE.try_with(|n| {
+        if let Some(detail) = n.borrow_mut().as_mut() {
+            if detail.target == FailureTarget::Credential {
+                detail.target = holder.clone();
+            }
+        }
+    });
 }
 
 /// Sets the logical step for notes recorded with `FailureStep::Request`.
@@ -299,6 +321,57 @@ mod tests {
             promote(CoreError::Protocol, Some(&missing)),
             CoreError::Protocol
         );
+        // A note re-targeted at its holder keeps the marker.
+        let held = FailureDetail {
+            target: FailureTarget::McpServer { name: "s".into() },
+            ..credential_missing()
+        };
+        assert_eq!(
+            promote(CoreError::Authentication, Some(&held)),
+            CoreError::CredentialMissing
+        );
+        // The marker text in a request note (for example a response body) is
+        // not a credential note.
+        let echoed = FailureDetail {
+            step: FailureStep::ChatRequest,
+            ..held
+        };
+        assert_eq!(
+            promote(CoreError::Authentication, Some(&echoed)),
+            CoreError::Authentication
+        );
+    }
+
+    #[test]
+    fn failure_credential_missing_reason_is_short() {
+        assert_eq!(CREDENTIAL_MISSING_REASON, "stored credential missing");
+        assert_eq!(
+            CoreError::CredentialMissing.to_string(),
+            CREDENTIAL_MISSING_REASON
+        );
+    }
+
+    #[tokio::test]
+    async fn failure_attribute_credential_names_the_holder() {
+        let holder = FailureTarget::Inference { name: "e".into() };
+        let ((), got) = scope(async {
+            note(credential_missing());
+            attribute_credential(&holder);
+        })
+        .await;
+        let got = got.expect("note kept");
+        assert_eq!(got.target, holder);
+        assert_eq!(got.step, FailureStep::ResolveCredential);
+        assert_eq!(got.reason.as_deref(), Some(CREDENTIAL_MISSING_REASON));
+        // A note about something else is left alone.
+        let ((), got) = scope(async {
+            note(detail("busy"));
+            attribute_credential(&holder);
+        })
+        .await;
+        assert_eq!(got, Some(detail("busy")));
+        let ((), got) = scope(async { attribute_credential(&holder) }).await;
+        assert_eq!(got, None);
     }
 
     #[tokio::test]

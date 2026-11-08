@@ -200,7 +200,8 @@ class _ChatScreenState extends State<ChatScreen> {
   );
 
   /// The settings screen of the target that failed in [run]: the endpoint or
-  /// server it names, or the profile when the target is not known.
+  /// server it names (credential notes name the holder of the credential),
+  /// or the profile when the target is not known.
   Widget targetSettings(Run run) {
     final detail = run.failureDetail;
     final profile = run.profile;
@@ -218,12 +219,9 @@ class _ChatScreenState extends State<ChatScreen> {
           return ServerScreen(backend: widget.backend, server: server);
         }
       case 'credential':
-        // The endpoint holds the credential for chat requests and model
-        // discovery, and is the only holder when no server has secret headers.
-        final step = detail?.step;
-        if (step == 'chatRequest' ||
-            step == 'discoverModels' ||
-            profile.servers.every((s) => s.secretHeaders.isEmpty)) {
+        // A credential note without a holder: the endpoint is the only
+        // possible holder when no server has secret headers.
+        if (profile.servers.every((s) => s.secretHeaders.isEmpty)) {
           return endpointScreen(profile);
         }
     }

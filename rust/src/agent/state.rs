@@ -1,5 +1,5 @@
 use crate::error::{CoreError, CoreResult};
-use crate::failure::{FailureDetail, FailureStep, FailureTarget};
+use crate::failure::FailureDetail;
 use crate::inference::{ChatMessage, ChatRole};
 use crate::model::core::*;
 use crate::storage::Repository;
@@ -10,27 +10,29 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoredFailure {
     pub code: CoreError,
-    pub detail: FailureDetail,
+    /// What failed and where; none when nothing noted the failure, so no
+    /// target is guessed.
+    #[serde(default)]
+    pub detail: Option<FailureDetail>,
 }
 impl StoredFailure {
     /// Parses a stored value; values written before details existed were the
-    /// plain `CoreError` display text and keep it as the reason.
+    /// plain `CoreError` display text and load as that code without detail.
     fn parse(stored: String) -> Self {
         serde_json::from_str(&stored).unwrap_or_else(|_| Self {
             code: CoreError::ALL
                 .into_iter()
                 .find(|code| code.to_string() == stored)
                 .unwrap_or(CoreError::Protocol),
-            detail: FailureDetail {
-                target: FailureTarget::Inference {
-                    name: String::new(),
-                },
-                step: FailureStep::Request,
-                url: None,
-                status: None,
-                reason: Some(stored),
-            },
+            detail: None,
         })
+    }
+    /// One-line display text: the noted reason, or the code's text.
+    pub fn display(&self) -> String {
+        self.detail
+            .as_ref()
+            .and_then(|d| d.reason.clone())
+            .unwrap_or_else(|| self.code.to_string())
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -338,45 +340,15 @@ fn settle_with(
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .map_err(sql_error)?;
-        // A stop is not a diagnosable failure; keep only the code-based fallback.
+        // A stop is not a diagnosable failure; keep only its code.
         let stopped =
             previous == "Cancelled" || matches!(status, RunState::Cancelled | RunState::Interrupted);
         let detail = detail.filter(|_| !stopped);
-        let failure = match error {
-            None => None,
-            Some(code) => {
-                let detail = match detail {
-                    Some(detail) => detail,
-                    None => {
-                        // Best effort: an unreadable snapshot must not block settlement.
-                        let name = tx
-                            .query_row(
-                                "SELECT s.payload FROM runs r JOIN conversation_snapshots s ON s.conversation_id=r.conversation_id AND s.revision=r.snapshot_revision WHERE r.id=?1",
-                                [run.0.to_string()],
-                                |r| r.get::<_, String>(0),
-                            )
-                            .optional()
-                            .ok()
-                            .flatten()
-                            .and_then(|p| parse::<ProfileSnapshot>(&p).ok())
-                            .map(|s| s.endpoint.name)
-                            .unwrap_or_default();
-                        FailureDetail {
-                            target: FailureTarget::Inference { name },
-                            step: FailureStep::Request,
-                            url: None,
-                            status: None,
-                            reason: None,
-                        }
-                    }
-                };
-                let detail = FailureDetail {
-                    reason: detail.reason.or_else(|| Some(code.to_string())),
-                    ..detail
-                };
-                Some(json(&StoredFailure { code, detail })?)
-            }
-        };
+        // Only a note says what failed; without one the code stands alone
+        // rather than blaming a guessed target.
+        let failure = error
+            .map(|code| json(&StoredFailure { code, detail }))
+            .transpose()?;
         let status = if previous == "Cancelled" {
             previous
         } else {

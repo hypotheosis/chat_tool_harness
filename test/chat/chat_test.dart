@@ -144,6 +144,82 @@ void main() {
       expect(find.byType(screen), findsOneWidget);
     });
   }
+  // The profile's server has a secret header, so a credential failure could
+  // belong to the endpoint or the server; the note names the holder.
+  const securedProfile = ProfileSnapshot(
+    inferenceOrigin: 'https://example.test',
+    profileId: 'p',
+    revision: 1,
+    name: 'Old profile',
+    endpoint: endpoint,
+    servers: [
+      ServerConfig(
+        id: 's',
+        name: 'Server',
+        url: 'https://example.test/mcp',
+        allowHttp: false,
+        secretHeaders: [SecretHeader(name: 'X-Api-Key', credential: 'k')],
+      ),
+    ],
+    instructions: '',
+    limits: RunLimits(),
+  );
+  final holderCases = <String, (FailureDetail, Type)>{
+    'endpoint': (
+      const FailureDetail(
+        targetKind: 'inference',
+        targetName: 'Endpoint',
+        step: 'resolveCredential',
+        reason: 'stored credential missing',
+      ),
+      EndpointScreen,
+    ),
+    'server': (
+      const FailureDetail(
+        targetKind: 'mcpServer',
+        targetName: 'Server',
+        step: 'resolveCredential',
+        reason: 'stored credential missing',
+      ),
+      ServerScreen,
+    ),
+    'unknown holder': (
+      const FailureDetail(
+        targetKind: 'credential',
+        step: 'resolveCredential',
+        reason: 'stored credential missing',
+      ),
+      ProfileScreen,
+    ),
+  };
+  for (final MapEntry(key: name, value: (detail, screen))
+      in holderCases.entries) {
+    testWidgets('re-enter credential held by the $name opens $screen', (
+      t,
+    ) async {
+      final b = UiBackend()
+        ..runs = [
+          turnRun(
+            code: FailureCode.credentialMissing,
+            detail: detail,
+            profile: securedProfile,
+          ),
+        ];
+      await pumpChat(t, b);
+      final message = failureMessage(
+        BackendFailure(FailureCode.credentialMissing, detail: detail),
+      );
+      expect(inCard('r', find.text(message)), findsOneWidget);
+      expect(
+        'stored credential missing'.allMatches(message).length,
+        1,
+        reason: message,
+      );
+      await t.tap(inCard('r', find.text('Re-enter credential')));
+      await t.pumpAndSettle();
+      expect(find.byType(screen), findsOneWidget);
+    });
+  }
   testWidgets('failed run shows one card with cause and settings action', (
     t,
   ) async {
