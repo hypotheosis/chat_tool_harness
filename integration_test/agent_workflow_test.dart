@@ -178,14 +178,21 @@ void main() {
       );
       Future<void> approve(Run pending) async {
         await chat();
-        // The transcript card, `tool · server · state`.
-        final tile = find.textContaining(
-          RegExp(
-            '^${RegExp.escape(pending.attempts.first.call.key.name)} · .* · Needs approval\$',
-          ),
-        );
-        await tap(tile.first);
-        expect(find.text('Requested arguments (immutable)'), findsOneWidget);
+        // The approval card above the composer lists every pending call.
+        final card = find.byKey(Key('approval-${pending.id}'));
+        for (var i = 0; i < 200 && card.evaluate().isEmpty; i++) {
+          await tester.pump(const Duration(milliseconds: 20));
+        }
+        expect(card, findsOneWidget);
+        for (final a in pending.attempts) {
+          expect(
+            find.descendant(
+              of: card,
+              matching: find.textContaining(a.call.key.name),
+            ),
+            findsWidgets,
+          );
+        }
         // Approve all decides every pending call and resumes the run.
         await tap(find.byKey(Key('approve-all-${pending.id}')));
         await waitRun(
@@ -215,8 +222,8 @@ void main() {
       lastRun = run.id;
       expect(run.attempts.single.state, AttemptState.succeeded);
       expect(fixture.calls.last['arguments'], {'value': 'trusted-exact'});
-      await chat();
-      expect(find.byKey(Key('approval-${run.id}')), findsNothing);
+      // Trust allowed it outright: no approval binding was ever prepared.
+      expect(run.attempts.single.binding, isNull);
       await backend.execute(SetServerTrust(server, trusted: false));
       run = await send('ask', (r) => r.state == RunState.waitingApproval);
       lastRun = run.id;
@@ -294,7 +301,7 @@ void main() {
       );
       expect(stopped.state, RunState.cancelled);
       expect(stopped.partialText, 'controlled partial');
-      // read, two pair reads, trusted read, then three writes.
+      // read, two pair reads, trusted read, then two writes.
       expect(fixture.calls.length, 6);
       await policy('write', PermissionRule.allow);
       run = await send(

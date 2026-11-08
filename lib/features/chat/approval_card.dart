@@ -47,7 +47,7 @@ String attemptStateLabel(
   AttemptState.proposed when unresolved =>
     "Waiting — an earlier call's outcome is unknown",
   AttemptState.proposed when trusted.contains(a.call.key.serverId) =>
-    'Trusted, runs on resume',
+    'Trusted, runs on resume unless blocked',
   AttemptState.proposed => 'Needs approval',
   AttemptState.approved => 'Approved',
   AttemptState.denied => 'Denied',

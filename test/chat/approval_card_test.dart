@@ -332,7 +332,10 @@ void main() {
     );
     await pumpChat(t, b);
     expect(find.byKey(const Key('approval-r')), findsNothing);
-    expect(find.text('search · Notes · Trusted, runs on resume'), findsOne);
+    expect(
+      find.text('search · Notes · Trusted, runs on resume unless blocked'),
+      findsOne,
+    );
     await tapKey(t, 'resume-r');
     expect(b.commands.whereType<ResumeRun>().single.runId, 'r');
     expect(b.commands.whereType<DecideApprovals>(), isEmpty);
@@ -380,7 +383,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('Needs approval'), findsNothing);
+    expect(find.textContaining('Needs approval'), findsNothing);
     expect(find.text('Waiting for your approval'), findsNothing);
     expect(
       find.text("Waiting — a tool call's outcome is unknown"),
