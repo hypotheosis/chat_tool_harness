@@ -87,6 +87,7 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Failed'), findsNothing);
     expect(b.snapshotCalls, 2);
+    b.failure = const BackendFailure(FailureCode.unavailableTransport);
     await t.scrollUntilVisible(
       testButton,
       200,
@@ -153,35 +154,27 @@ void main() {
   });
 
   testWidgets(
-    'server_diagnostic_requires_linked_profile_and_never_calls_tools',
+    'a saved server tests against its linked profile without re-picking it',
     (t) async {
-      final b = UiBackend();
-      final server = b.current.servers.single;
+      final b = UiBackend()
+        ..reply = const CommandReply(discoveredTools: ['write']);
       await t.pumpWidget(
         MaterialApp(
-          home: ServerScreen(backend: b, server: server),
+          home: ServerScreen(backend: b, server: b.current.servers.single),
         ),
       );
       await t.pumpAndSettle();
-      final test = find.text('Test connection and discover tools');
       await t.scrollUntilVisible(
-        test,
+        testButton,
         200,
         scrollable: find.byType(Scrollable).first,
       );
-      await t.tap(test);
+      expect(find.text('Profile • p'), findsOneWidget);
+      await t.tap(testButton);
       await t.pumpAndSettle();
-      expect(b.commands.whereType<DiscoverServer>(), isEmpty);
-      expect(find.textContaining('select a saved profile'), findsOneWidget);
-      await t.tap(find.byType(DropdownButtonFormField<String>));
-      await t.pumpAndSettle();
-      await t.tap(find.text('Profile • p').last);
-      await t.pumpAndSettle();
-      b.reply = const CommandReply(discoveredTools: ['write']);
-      await t.tap(test);
-      await t.pumpAndSettle();
-      expect(b.commands.whereType<DiscoverServer>().single.serverId, 's');
-      expect(b.commands.whereType<DiscoverServer>().single.profileId, 'p');
+      final command = b.commands.whereType<DiscoverServer>().single;
+      expect(command.serverId, 's');
+      expect(command.profileId, 'p');
       expect(
         find.textContaining('Connected to Server: 1 tool available'),
         findsOneWidget,
@@ -189,6 +182,32 @@ void main() {
       expect(b.commands.whereType<SaveProfile>(), isEmpty);
     },
   );
+  testWidgets('a server no profile includes is not tested', (t) async {
+    final b = UiBackend();
+    b.current = AppSnapshot(
+      endpoints: b.current.endpoints,
+      servers: b.current.servers,
+      profiles: const [],
+    );
+    await t.pumpWidget(
+      MaterialApp(
+        home: ServerScreen(backend: b, server: b.current.servers.single),
+      ),
+    );
+    await t.pumpAndSettle();
+    await t.scrollUntilVisible(
+      testButton,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await t.tap(testButton);
+    await t.pumpAndSettle();
+    expect(b.commands.whereType<DiscoverServer>(), isEmpty);
+    expect(
+      find.textContaining('No saved profile includes this server'),
+      findsOneWidget,
+    );
+  });
   testWidgets('server_configuration_preserves_reference_headers', (t) async {
     final b = UiBackend();
     const server = ServerConfig(

@@ -26,7 +26,24 @@ class _ServerScreenState extends State<ServerScreen> {
       ),
   ];
   late bool http = widget.server?.allowHttp ?? false;
+
+  /// The profile picked in "Linked profile"; null until the user picks one.
   String? profileId;
+
+  /// Saved profiles that include this server.
+  List<Profile> get linkedProfiles => [
+    for (final p in state.snapshot?.profiles ?? <Profile>[])
+      if (id != null && p.serverIds.contains(id)) p,
+  ];
+
+  /// The user's pick while it still includes this server, else the first
+  /// profile that does, so a saved setup can be tested without re-picking.
+  String? get selectedProfile {
+    final linked = linkedProfiles;
+    if (linked.any((p) => p.id == profileId)) return profileId;
+    return linked.isEmpty ? null : linked.first.id;
+  }
+
   List<String> tools = [];
   List<SkippedTool> skipped = [];
   @override
@@ -70,9 +87,14 @@ class _ServerScreenState extends State<ServerScreen> {
   }
 
   Future<void> discover() async {
-    if (id == null || profileId == null) {
+    final profile = selectedProfile;
+    if (id == null) {
+      state.reject('Save the server first.');
+      return;
+    }
+    if (profile == null) {
       state.reject(
-        'Save the server and select a saved profile containing it first.',
+        'No saved profile includes this server. Add it to a profile, then test again.',
       );
       return;
     }
@@ -80,7 +102,7 @@ class _ServerScreenState extends State<ServerScreen> {
       tools = [];
       skipped = [];
     });
-    final reply = await state.perform(DiscoverServer(profileId!, id!));
+    final reply = await state.perform(DiscoverServer(profile, id!));
     if (!mounted || reply == null) return;
     setState(() {
       tools = reply.discoveredTools;
@@ -156,19 +178,20 @@ class _ServerScreenState extends State<ServerScreen> {
               'Safe connectivity/discovery only. Select a saved profile that includes this server; save edits before testing.',
             ),
             DropdownButtonFormField<String>(
-              initialValue: profileId,
+              // Rebuilt when the default changes, e.g. once profiles load.
+              key: ValueKey(selectedProfile),
+              initialValue: selectedProfile,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Linked profile'),
               items: [
-                for (final p in state.snapshot?.profiles ?? <Profile>[])
-                  if (p.serverIds.contains(id))
-                    DropdownMenuItem(
-                      value: p.id,
-                      child: Text(
-                        '${p.name} • ${p.id}',
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                for (final p in linkedProfiles)
+                  DropdownMenuItem(
+                    value: p.id,
+                    child: Text(
+                      '${p.name} • ${p.id}',
+                      overflow: TextOverflow.ellipsis,
                     ),
+                  ),
               ],
               onChanged: (v) => setState(() {
                 profileId = v;
