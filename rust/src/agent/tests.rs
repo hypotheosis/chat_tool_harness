@@ -1428,6 +1428,115 @@ async fn handoff_never_repolls_unsent_work_after_stop() {
     assert!(!sent.load(Ordering::SeqCst));
 }
 #[tokio::test]
+async fn failed_run_persists_noted_failure_detail() {
+    use crate::failure::{FailureDetail, FailureStep, FailureTarget};
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    f.request().await.finish_noted(
+        Err(CoreError::Authentication),
+        FailureDetail {
+            target: FailureTarget::Inference {
+                name: "fake".into(),
+            },
+            step: FailureStep::ChatRequest,
+            url: None,
+            status: Some(401),
+            reason: Some("unknown API key".into()),
+        },
+    );
+    let data = f.settled(run).await;
+    assert_eq!(data.state, RunState::Failed);
+    let stored = state::load(&f.repo, run).unwrap().failure.unwrap();
+    assert_eq!(stored.code, CoreError::Authentication);
+    assert_eq!(stored.detail.step, FailureStep::ChatRequest);
+    assert_eq!(stored.detail.status, Some(401));
+    assert_eq!(stored.detail.reason.as_deref(), Some("unknown API key"));
+    let raw: Option<String> = f
+        .repo
+        .with_connection(move |conn| {
+            conn.query_row(
+                "SELECT failure FROM runs WHERE id=?1",
+                [run.0.to_string()],
+                |r| r.get(0),
+            )
+            .map_err(|_| CoreError::Storage)
+        })
+        .unwrap();
+    let raw: serde_json::Value = serde_json::from_str(&raw.unwrap()).unwrap();
+    assert_eq!(raw["detail"]["reason"], "unknown API key");
+}
+
+#[tokio::test]
+async fn failed_run_without_note_stores_fallback_detail() {
+    use crate::failure::{FailureStep, FailureTarget};
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    f.request().await.finish(Err(CoreError::Authentication));
+    let data = f.settled(run).await;
+    assert_eq!(data.state, RunState::Failed);
+    let stored = data.failure.unwrap();
+    assert_eq!(stored.code, CoreError::Authentication);
+    assert_eq!(
+        stored.detail.target,
+        FailureTarget::Inference {
+            name: "model".into()
+        }
+    );
+    assert_eq!(stored.detail.step, FailureStep::Request);
+    assert_eq!(
+        stored.detail.reason.as_deref(),
+        Some("core authentication failure")
+    );
+}
+
+#[tokio::test]
+async fn credential_note_promotes_authentication_to_credential_missing() {
+    use crate::failure::{FailureDetail, FailureStep, FailureTarget};
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    f.request().await.finish_noted(
+        Err(CoreError::Authentication),
+        FailureDetail {
+            target: FailureTarget::Credential,
+            step: FailureStep::ResolveCredential,
+            url: None,
+            status: None,
+            reason: None,
+        },
+    );
+    let stored = f.settled(run).await.failure.unwrap();
+    assert_eq!(stored.code, CoreError::CredentialMissing);
+    assert_eq!(stored.detail.target, FailureTarget::Credential);
+    assert_eq!(
+        stored.detail.reason.as_deref(),
+        Some(CoreError::CredentialMissing.to_string().as_str())
+    );
+}
+
+#[tokio::test]
+async fn legacy_plain_failure_string_loads_as_reason() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    f.request().await.finish(Err(CoreError::Authentication));
+    f.settled(run).await;
+    f.repo
+        .with_connection(move |conn| {
+            conn.execute(
+                "UPDATE runs SET failure='core authentication failure' WHERE id=?1",
+                [run.0.to_string()],
+            )
+            .map_err(|_| CoreError::Storage)
+        })
+        .unwrap();
+    let stored = state::load(&f.repo, run).unwrap().failure.unwrap();
+    assert_eq!(stored.code, CoreError::Protocol);
+    assert_eq!(
+        stored.detail.reason.as_deref(),
+        Some("core authentication failure")
+    );
+}
+
+#[tokio::test]
 async fn host_release_failure_persists_pause_instead_of_clean_completion() {
     let mut f = Fixture::new();
     let run = f.start().await;
@@ -1445,8 +1554,8 @@ async fn host_release_failure_persists_pause_instead_of_clean_completion() {
     let data = f.settled(run).await;
     assert_eq!(data.state, RunState::Paused);
     assert_eq!(
-        data.failure,
-        Some(CoreError::UnavailableTransport.to_string())
+        data.failure.map(|f| f.code),
+        Some(CoreError::UnavailableTransport)
     );
     assert_eq!(f.coordinator.resume(run).await, Err(CoreError::Conflict));
 }
@@ -1797,15 +1906,28 @@ use crate::inference::ChatRole;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use tokio::sync::{mpsc, oneshot, Notify};
 
+type Reply = (
+    CoreResult<InferenceTurn>,
+    Option<crate::failure::FailureDetail>,
+);
 struct Request {
     request: InferenceRequest,
     events: mpsc::Sender<InferenceEvent>,
-    reply: oneshot::Sender<CoreResult<InferenceTurn>>,
+    reply: oneshot::Sender<Reply>,
 }
 impl Request {
     fn finish(self, result: CoreResult<InferenceTurn>) {
         drop(self.events);
-        self.reply.send(result).unwrap();
+        self.reply.send((result, None)).unwrap();
+    }
+    /// Finishes after the fake transport notes `detail` in the run's task.
+    fn finish_noted(
+        self,
+        result: CoreResult<InferenceTurn>,
+        detail: crate::failure::FailureDetail,
+    ) {
+        drop(self.events);
+        self.reply.send((result, Some(detail))).unwrap();
     }
 }
 struct FakeInference(mpsc::UnboundedSender<Request>);
@@ -1824,7 +1946,13 @@ impl InferenceTransport for FakeInference {
                 reply,
             })
             .unwrap();
-        Box::pin(async move { rx.await.map_err(|_| CoreError::UnavailableTransport)? })
+        Box::pin(async move {
+            let (result, detail) = rx.await.map_err(|_| CoreError::UnavailableTransport)?;
+            if let Some(detail) = detail {
+                crate::failure::note(detail);
+            }
+            result
+        })
     }
 }
 struct CallRequest {

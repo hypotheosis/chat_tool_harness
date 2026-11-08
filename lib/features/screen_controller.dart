@@ -10,6 +10,8 @@ String failureMessage(Object error, {bool approval = false}) {
   return switch (code) {
     FailureCode.authentication =>
       'Authentication failed or credential missing. Repair the credential reference in Settings; secure token entry arrives in Task 12.',
+    FailureCode.credentialMissing =>
+      'The stored credential is missing. Re-enter it in settings.',
     FailureCode.conflict when approval =>
       'This is a stale approval or changed policy. Refresh and review the current exact arguments.',
     FailureCode.conflict =>

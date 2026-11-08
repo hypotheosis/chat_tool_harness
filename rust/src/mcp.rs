@@ -43,7 +43,7 @@ impl From<CoreError> for McpError {
     fn from(error: CoreError) -> Self {
         match error {
             CoreError::InvalidInput | CoreError::Configuration => Self::InvalidInput,
-            CoreError::Authentication => Self::Authentication,
+            CoreError::Authentication | CoreError::CredentialMissing => Self::Authentication,
             CoreError::Limit => Self::Limit,
             CoreError::Cancelled => Self::Cancelled,
             CoreError::Storage => Self::Storage,

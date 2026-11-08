@@ -5,6 +5,7 @@ enum FailureCode {
   invalidInput,
   configuration,
   authentication,
+  credentialMissing,
   rateLimited,
   toolUnsupported,
   discoveryUnavailable,

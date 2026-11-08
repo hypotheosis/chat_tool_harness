@@ -1,10 +1,35 @@
 use crate::error::{CoreError, CoreResult};
+use crate::failure::{FailureDetail, FailureStep, FailureTarget};
 use crate::inference::{ChatMessage, ChatRole};
 use crate::model::core::*;
 use crate::storage::Repository;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
+/// A run failure as persisted in `runs.failure`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoredFailure {
+    pub code: CoreError,
+    pub detail: FailureDetail,
+}
+impl StoredFailure {
+    /// Parses a stored value; values written before details existed were the
+    /// plain `CoreError` display text and keep it as the reason.
+    fn parse(stored: String) -> Self {
+        serde_json::from_str(&stored).unwrap_or_else(|_| Self {
+            code: CoreError::Protocol,
+            detail: FailureDetail {
+                target: FailureTarget::Inference {
+                    name: String::new(),
+                },
+                step: FailureStep::Request,
+                url: None,
+                status: None,
+                reason: Some(stored),
+            },
+        })
+    }
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoredMessage {
     pub role: String,
@@ -77,7 +102,7 @@ pub struct RunData {
     pub messages: Vec<StoredMessage>,
     pub attempts: Vec<PendingAttempt>,
     pub partial_text: String,
-    pub failure: Option<String>,
+    pub failure: Option<StoredFailure>,
     pub context: super::context::RunContext,
 }
 fn sql_error(_: rusqlite::Error) -> CoreError {
@@ -175,7 +200,7 @@ pub fn load(repo: &Repository, run: RunId) -> CoreResult<RunData> {
             Ok(PendingAttempt { id:AttemptId(uuid(id)?),state:attempt_state(&status)?,call:parse::<StoredCall>(&call)?.call(),binding:binding.map(|v|parse(&v)).transpose()? })
         }).collect::<CoreResult<Vec<_>>>()?;
         let context:String=conn.query_row("SELECT context_json FROM runs WHERE id=?1",[run.0.to_string()],|r|r.get(0)).map_err(sql_error)?;
-        Ok(RunData { context:parse(&context)?, id:run, conversation, profile:parse(&profile)?, state:state(&status)?, inference_count:u32::try_from(inference_count).map_err(|_|CoreError::Storage)?,attempt_count:u32::try_from(attempt_count).map_err(|_|CoreError::Storage)?,active_ms:u64::try_from(active_ms).map_err(|_|CoreError::Storage)?,messages,attempts,partial_text,failure })
+        Ok(RunData { context:parse(&context)?, id:run, conversation, profile:parse(&profile)?, state:state(&status)?, inference_count:u32::try_from(inference_count).map_err(|_|CoreError::Storage)?,attempt_count:u32::try_from(attempt_count).map_err(|_|CoreError::Storage)?,active_ms:u64::try_from(active_ms).map_err(|_|CoreError::Storage)?,messages,attempts,partial_text,failure:failure.map(StoredFailure::parse) })
     })
 }
 pub fn transition(
@@ -266,10 +291,42 @@ pub fn settle(
     run: RunId,
     status: RunState,
     error: Option<CoreError>,
+    detail: Option<FailureDetail>,
     total: u64,
 ) -> CoreResult<()> {
     repo.with_connection(move |conn| {
         let tx = conn.transaction().map_err(sql_error)?;
+        let failure = match error {
+            None => None,
+            Some(code) => {
+                let detail = match detail {
+                    Some(detail) => detail,
+                    None => {
+                        let snapshot: String = tx
+                            .query_row(
+                                "SELECT s.payload FROM runs r JOIN conversation_snapshots s ON s.conversation_id=r.conversation_id AND s.revision=r.snapshot_revision WHERE r.id=?1",
+                                [run.0.to_string()],
+                                |r| r.get(0),
+                            )
+                            .map_err(sql_error)?;
+                        FailureDetail {
+                            target: FailureTarget::Inference {
+                                name: parse::<ProfileSnapshot>(&snapshot)?.endpoint.name,
+                            },
+                            step: FailureStep::Request,
+                            url: None,
+                            status: None,
+                            reason: None,
+                        }
+                    }
+                };
+                let detail = FailureDetail {
+                    reason: detail.reason.or_else(|| Some(code.to_string())),
+                    ..detail
+                };
+                Some(json(&StoredFailure { code, detail })?)
+            }
+        };
         let (conversation, previous): (String, String) = tx
             .query_row(
                 "SELECT conversation_id,state FROM runs WHERE id=?1",
@@ -291,7 +348,7 @@ pub fn settle(
             "UPDATE runs SET state=?1,failure=?2,active_ms=max(active_ms,?3) WHERE id=?4",
             params![
                 status,
-                error.map(|e| e.to_string()),
+                failure,
                 i64::try_from(total).map_err(|_| CoreError::Limit)?,
                 run.0.to_string()
             ],

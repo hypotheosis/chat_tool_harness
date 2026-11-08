@@ -26,6 +26,7 @@ enum CoreError {
   invalidInput,
   configuration,
   authentication,
+  credentialMissing,
   rateLimited,
   toolUnsupported,
   discoveryUnavailable,

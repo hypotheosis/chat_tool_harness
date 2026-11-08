@@ -27,7 +27,17 @@ impl std::fmt::Debug for CredentialReply {
 fn credential_value(reply: CredentialReply) -> CoreResult<SecretValue> {
     match reply {
         CredentialReply::Value(value) => Ok(SecretValue::new(value)),
-        _ => Err(CoreError::Authentication),
+        CredentialReply::Missing => {
+            crate::failure::note(crate::failure::FailureDetail {
+                target: crate::failure::FailureTarget::Credential,
+                step: crate::failure::FailureStep::ResolveCredential,
+                url: None,
+                status: None,
+                reason: None,
+            });
+            Err(CoreError::CredentialMissing)
+        }
+        CredentialReply::Failed(_) => Err(CoreError::Authentication),
     }
 }
 fn platform_result(reply: PlatformReply) -> CoreResult<()> {
@@ -451,7 +461,7 @@ impl Application {
                 attempt_count: v.attempt_count,
                 active_ms: v.active_ms,
                 partial_text: v.partial_text,
-                failure: v.failure,
+                failure: v.failure.map(|f| f.code.to_string()),
                 attempts: v
                     .attempts
                     .into_iter()

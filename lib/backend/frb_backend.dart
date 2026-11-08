@@ -156,6 +156,7 @@ BackendFailure _failure(Object error) {
       errors.CoreError.invalidInput => FailureCode.invalidInput,
       errors.CoreError.configuration => FailureCode.configuration,
       errors.CoreError.authentication => FailureCode.authentication,
+      errors.CoreError.credentialMissing => FailureCode.credentialMissing,
       errors.CoreError.rateLimited => FailureCode.rateLimited,
       errors.CoreError.toolUnsupported => FailureCode.toolUnsupported,
       errors.CoreError.discoveryUnavailable => FailureCode.discoveryUnavailable,

@@ -210,7 +210,7 @@ async fn mcp_diagnostic_only_initializes_and_lists_linked_server() {
 }
 
 #[tokio::test]
-async fn diagnostics_missing_credentials_are_auth_not_tool_unsupported() {
+async fn diagnostics_missing_credentials_are_credential_missing_not_tool_unsupported() {
     let dir = tempfile::tempdir().unwrap();
     let app = Application::open(
         dir.path().to_string_lossy().into_owned(),
@@ -243,7 +243,7 @@ async fn diagnostics_missing_credentials_are_auth_not_tool_unsupported() {
     ] {
         assert!(matches!(
             app.command(command).await,
-            Err(CoreError::Authentication)
+            Err(CoreError::CredentialMissing)
         ));
     }
     assert!(app.snapshot().await.unwrap().profiles.is_empty());
@@ -379,6 +379,22 @@ async fn observed_mcp_rule_can_be_revoked_without_connectivity_or_credentials() 
         PermissionRule::Block
     );
     app.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn credential_missing_reply_maps_to_credential_missing() {
+    let (result, detail) =
+        crate::failure::scope(async { credential_value(CredentialReply::Missing).err() }).await;
+    assert_eq!(result, Some(CoreError::CredentialMissing));
+    let detail = detail.expect("credential note");
+    assert_eq!(detail.target, crate::failure::FailureTarget::Credential);
+    assert_eq!(detail.step, crate::failure::FailureStep::ResolveCredential);
+    let (result, detail) = crate::failure::scope(async {
+        credential_value(CredentialReply::Failed("x".into())).err()
+    })
+    .await;
+    assert_eq!(result, Some(CoreError::Authentication));
+    assert!(detail.is_none());
 }
 
 #[test]

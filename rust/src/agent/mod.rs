@@ -394,7 +394,7 @@ impl Coordinator {
             }
             let _ = ready.send(prepared);
             if success {
-                execute(inner, worker_execution, child).await;
+                crate::failure::scope(execute(inner, worker_execution, child)).await;
             }
             let _ = done.send(true);
         });
@@ -761,10 +761,24 @@ async fn execute(inner: Arc<Inner>, execution: Arc<Execution>, cancel: Cancellat
             Err(_) => RunState::Failed,
         },
     };
-    let error = result.err().or(flush.err());
+    // Teardown above runs in nested scopes, so this is the run's own last note;
+    // a note is only meaningful when the run itself failed.
+    let detail = crate::failure::take().filter(|_| result.is_err());
+    let error = match result {
+        Err(CoreError::Authentication)
+            if detail
+                .as_ref()
+                .is_some_and(|d| d.target == crate::failure::FailureTarget::Credential) =>
+        {
+            Err(CoreError::CredentialMissing)
+        }
+        other => other,
+    }
+    .err()
+    .or(flush.err());
     let total = active.total();
     let settled = inner
-        .persist(move |repo| state::settle(&repo, run, status, error, total))
+        .persist(move |repo| state::settle(&repo, run, status, error, detail, total))
         .await;
     let host = async {
         if let Some(conversation) = conversation {
@@ -800,7 +814,7 @@ async fn execute(inner: Arc<Inner>, execution: Arc<Execution>, cancel: Cancellat
         };
         let total = active.total();
         let _ = inner
-            .persist(move |repo| state::settle(&repo, run, uncertain, Some(error), total))
+            .persist(move |repo| state::settle(&repo, run, uncertain, Some(error), None, total))
             .await;
     }
     let _ = active.save(&inner, run).await;

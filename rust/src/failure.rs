@@ -61,6 +61,11 @@ pub async fn scope<F: Future>(work: F) -> (F::Output, Option<FailureDetail>) {
     .await
 }
 
+/// Takes the current note without leaving the scope.
+pub fn take() -> Option<FailureDetail> {
+    NOTE.try_with(|n| n.borrow_mut().take()).ok().flatten()
+}
+
 /// Records `detail` as the most recent failure in the current scope.
 pub fn note(mut detail: FailureDetail) {
     if detail.step == FailureStep::Request {
