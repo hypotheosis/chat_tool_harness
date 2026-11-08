@@ -2,6 +2,7 @@ pub mod agent;
 pub mod api;
 pub mod application;
 pub mod error;
+pub mod failure;
 pub mod files;
 mod frb_generated;
 pub mod history;
