@@ -1,6 +1,6 @@
 # User-testing fixes: diagnosability, credentials, live profile, chat cleanup
 
-Status: approved for planning (2026-11-08).
+Status: implemented on branch `user-testing-fixes` (2026-11-08); amendments from implementation review are marked "Amended".
 Amends: `2026-11-07-android-mcp-agent-design.md` (profile snapshots, disclosure).
 
 ## Background
@@ -35,6 +35,9 @@ they stop being user-managed.
 - Resume re-binds the run to the newest revision (`runs.snapshot_revision` is
   updated in the same transaction) so a fixed URL or credential applies to a
   paused run. Unknown-outcome tool attempts are still never replayed.
+  Amended: the refresh commits in its own transaction first; the rebind and the
+  state change to Running are one transaction guarded by the run's state, so a
+  concurrent cancel leaves the cancelled run's revision untouched.
 - The UI "Apply current profile" action and its explanatory text are removed.
   `AppCommand::ApplyProfile` remains for switching a conversation to a
   different profile id.
@@ -53,9 +56,12 @@ that profile; run history keeps the revision each run actually used.
 - A run or summary needs disclosure iff its endpoint's origin is not in the
   table. Path, model, credential and profile changes never re-prompt; a new
   host, scheme or port does.
-- Acknowledging stores the origin. Migration copies existing per-conversation
-  acknowledgments into the table by reducing their destination to its origin;
-  the old table is left in place but no longer read.
+- Acknowledging stores the origin. Amended: any origin the conversation has
+  used (in any snapshot revision, newest first, skipping unreadable ones) may
+  be acknowledged, so a paused run on an older revision can be allowed.
+- Migration copies existing per-conversation acknowledgments into the table by
+  reducing their destination to its origin; the old table is left in place but
+  no longer read.
 - `DisclosureAcknowledgment` becomes `{ origin }`; `ContextChoiceReason::
   DisclosureRequired` is kept.
 
@@ -77,14 +83,19 @@ pub struct FailureDetail {
   (string) or `message`, read within the existing response limits; otherwise
   from the transport error class: `dns`, `connect`, `tls`, `timeout`, `body`.
   Control characters are stripped, length is capped at 160 characters on a
-  char boundary, and the value is discarded if the existing secret scanner
-  flags it.
-- `CoreError` keeps its kinds. Fallible boundary operations return
-  `Failure { kind: CoreError, detail: Option<FailureDetail> }` from the net,
-  MCP and inference layers up to the agent and application layers; internal
-  modules that cannot add detail keep `CoreResult`.
+  char boundary, with the request's resolved secrets (inference credential and
+  MCP header values) and any 32+ character token-like word replaced by •••.
+- `CoreError` keeps its kinds and `CoreResult` is unchanged. Lower layers
+  record the detail with a task-local note (`rust/src/failure.rs`); run
+  execution, diagnostics and pre-launch preparation run inside a failure scope
+  (`scope`, or `sync_scope` on blocking threads) and read the last note at
+  their boundary. The bridge's `agent_command` returns
+  `AgentFailure { code, detail }`.
 - A missing credential reference gets its own kind, `CredentialMissing`,
-  instead of `Authentication`.
+  instead of `Authentication`. Amended: on Android a reference whose file is
+  absent resolves to "missing"; decrypt, keystore and unreadable-file errors
+  stay authentication failures. `AgentRun.failure` holds the sanitized
+  reason; `failure_code` and `failure_detail` carry the rest.
 - `runs.failure` stores the detail as JSON (old string values still read as a
   reason-only detail). The bridge error carries `{ code, detail }`; Dart's
   `BackendFailure` gains `detail`.
@@ -94,13 +105,18 @@ pub struct FailureDetail {
 
 - One rule for both the inference credential and an MCP header named
   `Authorization` (case-insensitive): if the stored value begins with an auth
-  scheme token followed by a space (`^[A-Za-z][A-Za-z0-9!#$%&'*+.^_`|~-]* `),
-  send it verbatim; otherwise send `Bearer <value>`. Other header names are
+  scheme token followed by a space and more text
+  (`^[A-Za-z][A-Za-z0-9!#$%&'*+.^_`|~-]* .`), send it verbatim; otherwise send `Bearer <value>`. Other header names are
   always verbatim.
 - New platform call `describeCredential(reference)` returns
-  `{ scheme: Option<String>, length }` computed on-device after decryption;
-  the secret never crosses into Dart. Settings show the effective header,
-  e.g. `Authorization: Bearer ••• (54 chars)` or "no credential stored".
+  `{ scheme: Option<String>, length, sendable }` computed on-device after
+  decryption; the secret never crosses into Dart. Amended: `sendable` is false
+  unless every byte is visible ASCII or a single space between visible bytes,
+  which flags pasted newlines, tabs and stray spaces. Settings show the
+  effective header with the secret's length, e.g.
+  `Authorization: Bearer ••• (40 chars)`, `(47 chars; Bearer added)`, a warning
+  when not sendable, "No credential stored", or "Stored credential cannot be
+  read; re-enter it." Kotlin and Rust share one table of test cases.
 
 ## 5. Endpoint defaults
 
@@ -116,6 +132,10 @@ New endpoints default to 32768 context tokens and 2048 max output tokens
   ("Connected to <name>: N tools available" / "N models available") or the
   failure sentence with a Details toggle (target, step, URL, status, reason).
 - The stale "secure token entry arrives in Task 12" message is removed.
+- Amended: a new result scrolls itself into view (only when it changes, not
+  when a lazy list rebuilds the banner); "Reload" appears only when the
+  screen's own load failed; progress shows in the app bar, not under the
+  navigation bar.
 
 ## 7. Messages and actions
 
@@ -147,6 +167,19 @@ otherwise falls back to plain per-code text. Each code maps to one action:
   card above the composer, "Messages will be sent to <host>." with Allow.
 - Context and summary-context choosers appear only when the backend reports a
   context choice is needed, as that card's action.
+- Amended after review:
+  - A run with a Dispatching or OutcomeUnknown tool attempt is never offered
+    Retry, Resume or Allow: a failed one shows "A tool call's outcome is
+    unknown; check the remote system before continuing." with no action; an
+    unfinished one offers Stop only.
+  - A paused run whose action opens settings or a context chooser switches to
+    Resume once the user returns from that screen or applies a selection.
+  - Every paused or interrupted run keeps its card and action; older failed
+    runs collapse to one muted line with Details.
+  - A disclosure pause offers Allow for the run's own origin, then resumes.
+  - Runs carry `input_message_id` so cards sit under their turn; Retry
+    re-sends that message as a new turn (it appears twice in the transcript;
+    a backend re-run command would be cleaner).
 
 ## 9. Safe area on settings screens
 
