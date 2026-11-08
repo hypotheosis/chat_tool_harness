@@ -1065,6 +1065,22 @@ mod tests {
         assert_eq!(authorization_value("bearer abc"), "bearer abc");
         assert_eq!(authorization_value("Basic dXNlcg=="), "Basic dXNlcg==");
         assert_eq!(authorization_value("okf_abc-def"), "Bearer okf_abc-def");
+        // Shared with the Android describe test (integration_test/
+        // credential_lifecycle_test.dart) so both sides agree on the scheme.
+        let cases: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+            "../../test/fixtures/authorization_parity.json"
+        ))
+        .unwrap();
+        assert!(!cases.is_empty());
+        for case in cases {
+            let value = case["value"].as_str().unwrap();
+            let expected = if case["scheme"].is_string() {
+                value.to_string()
+            } else {
+                format!("Bearer {value}")
+            };
+            assert_eq!(authorization_value(value), expected, "case {value:?}");
+        }
     }
 
     #[tokio::test]

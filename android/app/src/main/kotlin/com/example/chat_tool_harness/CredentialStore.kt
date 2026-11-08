@@ -51,11 +51,16 @@ class CredentialStore(context: Context, private val alias: String = "agent.crede
             throw error
         }
     }
-    /** Null when nothing is stored under [reference]; decrypt and keystore errors throw. */
+    /**
+     * Null only when nothing is stored under [reference]: no file and no AtomicFile backup.
+     * An unreadable file (permissions), bad size, decrypt or keystore errors throw.
+     */
     @Synchronized fun resolve(reference: String): ByteArray? {
+        val target = file(reference)
         val encrypted = try {
-            file(reference).readFully()
-        } catch (_: FileNotFoundException) {
+            target.readFully()
+        } catch (error: FileNotFoundException) {
+            if (target.baseFile.exists() || File(target.baseFile.path + ".bak").exists()) throw error
             return null
         }
         check(encrypted.size in 29..8220)
@@ -65,30 +70,51 @@ class CredentialStore(context: Context, private val alias: String = "agent.crede
         return cipher.doFinal(encrypted, 12, encrypted.size - 12)
     }
     /**
-     * Scheme token (when the value starts with "<scheme> " followed by more text, the same
-     * rule as Rust's `net::authorization_value`) and UTF-8 byte length; null if absent.
+     * Describes the stored value without returning it; null if absent. Works on the bytes so
+     * no unzeroable copy of the secret is made; only the scheme bytes become a String.
+     * - scheme: the first word when the value is "<scheme> <more>", the same rule as Rust's
+     *   `net::authorization_value`; otherwise null and Rust adds "Bearer ".
+     * - length: UTF-8 byte length of the stored value.
+     * - sendable: every byte is visible ASCII, space or tab, with no leading or trailing
+     *   whitespace. Stricter than Rust on purpose: it flags pasted newlines and spaces.
      */
     @Synchronized fun describe(reference: String): Map<String, Any?>? {
         val value = resolve(reference) ?: return null
         try {
-            val text = String(value, Charsets.UTF_8)
-            val space = text.indexOf(' ')
-            val scheme = if (space > 0 && space < text.length - 1 && isScheme(text.substring(0, space))) {
-                text.substring(0, space)
+            val space = value.indexOf(SPACE)
+            val scheme = if (space > 0 && space < value.size - 1 && isScheme(value, space)) {
+                String(value, 0, space, Charsets.US_ASCII)
             } else {
                 null
             }
-            return mapOf("scheme" to scheme, "length" to value.size)
+            return mapOf("scheme" to scheme, "length" to value.size, "sendable" to isSendable(value))
         } finally {
             value.fill(0)
         }
     }
-    private fun isScheme(token: String): Boolean =
-        token.first().let { it in 'A'..'Z' || it in 'a'..'z' } &&
-            token.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it in "!#$%&'*+.^_`|~-" }
+    private fun isScheme(value: ByteArray, end: Int): Boolean {
+        val first = value[0].toInt()
+        if (first !in 'A'.code..'Z'.code && first !in 'a'.code..'z'.code) return false
+        for (i in 0 until end) {
+            val b = value[i].toInt()
+            val ok = b in 'A'.code..'Z'.code || b in 'a'.code..'z'.code || b in '0'.code..'9'.code ||
+                (b in 0x21..0x7E && b.toChar() in TCHAR_SYMBOLS)
+            if (!ok) return false
+        }
+        return true
+    }
+    private fun isSendable(value: ByteArray): Boolean =
+        value.isNotEmpty() && value.first() != SPACE && value.first() != TAB &&
+            value.last() != SPACE && value.last() != TAB &&
+            value.all { it == SPACE || it == TAB || it.toInt() in 0x21..0x7E }
     @Synchronized fun delete(reference: String) {
         val target = file(reference)
         target.delete()
         check(!target.baseFile.exists())
+    }
+    private companion object {
+        const val SPACE: Byte = 0x20
+        const val TAB: Byte = 0x09
+        const val TCHAR_SYMBOLS = "!#$%&'*+.^_`|~-"
     }
 }

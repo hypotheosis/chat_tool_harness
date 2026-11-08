@@ -632,3 +632,103 @@ async fn export_with_missing_credential_is_credential_missing_across_bridge_path
     );
     app.close().await.unwrap();
 }
+
+#[tokio::test]
+async fn chat_turn_with_missing_credential_fails_as_credential_missing() {
+    let dir = tempfile::tempdir().unwrap();
+    let stopped = Arc::new(tokio::sync::Notify::new());
+    let notice = stopped.clone();
+    // Missing reaches Rust through `Credentials`, the provider net.rs resolves.
+    let app = Application::open(
+        dir.path().to_string_lossy().into_owned(),
+        |_| Box::pin(async { CredentialReply::Missing }),
+        move |active| {
+            let notice = notice.clone();
+            Box::pin(async move {
+                if !active.active {
+                    notice.notify_one();
+                }
+                PlatformReply::Ok
+            })
+        },
+    )
+    .await
+    .unwrap();
+    let endpoint = core::EndpointId::new();
+    let profile = core::ProfileId::new();
+    app.repository
+        .save_endpoint(core::EndpointConfig {
+            id: endpoint,
+            name: "e".into(),
+            base_url: "https://never-contact.invalid/v1".into(),
+            model: "m".into(),
+            context_tokens: 4096,
+            max_output_tokens: 128,
+            temperature: 0.0,
+            allow_http: false,
+            credential: Some(core::CredentialRef::new()),
+        })
+        .unwrap();
+    app.repository
+        .save_profile(core::Profile {
+            id: profile,
+            name: "p".into(),
+            endpoint_id: endpoint,
+            server_ids: vec![],
+            mode: core::ProfileMode::ChatOnly,
+            instructions: String::new(),
+            limits: core::RunLimits::default(),
+        })
+        .unwrap();
+    let conversation = app.repository.create_conversation(profile).unwrap();
+    let run = app
+        .command(AppCommand::StartTurn {
+            conversation_id: conversation.0.to_string(),
+            text: "hello".into(),
+        })
+        .await
+        .unwrap()
+        .id
+        .unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(5), stopped.notified())
+        .await
+        .expect("run settles");
+
+    // Stored run: the persisted failure carries the code and credential detail.
+    let id = run.clone();
+    let raw: Option<String> = app
+        .repository
+        .with_connection(move |conn| {
+            conn.query_row("SELECT failure FROM runs WHERE id=?1", [id], |r| r.get(0))
+                .map_err(|_| CoreError::Storage)
+        })
+        .unwrap();
+    let raw: serde_json::Value = serde_json::from_str(&raw.expect("stored failure")).unwrap();
+    assert_eq!(
+        raw["code"],
+        serde_json::to_value(CoreError::CredentialMissing).unwrap()
+    );
+    assert_eq!(
+        raw["detail"]["target"],
+        serde_json::to_value(crate::failure::FailureTarget::Credential).unwrap()
+    );
+    assert_eq!(
+        raw["detail"]["step"],
+        serde_json::to_value(crate::failure::FailureStep::ResolveCredential).unwrap()
+    );
+
+    // Snapshot DTO.
+    let snapshot = app.snapshot().await.unwrap();
+    let dto = snapshot
+        .runs
+        .iter()
+        .find(|r| r.id == run)
+        .expect("run in snapshot");
+    assert_eq!(dto.state, RunState::Failed);
+    assert_eq!(dto.failure_code, Some(CoreError::CredentialMissing));
+    let detail = dto.failure_detail.as_ref().expect("failure detail");
+    assert_eq!(detail.target_kind, "credential");
+    assert_eq!(detail.target_name, None);
+    assert_eq!(detail.step, "resolveCredential");
+    app.close().await.unwrap();
+}

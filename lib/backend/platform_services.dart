@@ -8,7 +8,11 @@ import 'engine_lifecycle.dart';
 
 /// What the device reports about a stored credential; never the secret.
 class CredentialSummary {
-  const CredentialSummary({this.scheme, required this.length});
+  const CredentialSummary({
+    this.scheme,
+    required this.length,
+    required this.sendable,
+  });
 
   /// Auth scheme the stored value starts with, or null when `Bearer` is added.
   final String? scheme;
@@ -16,10 +20,20 @@ class CredentialSummary {
   /// Stored value length in UTF-8 bytes.
   final int length;
 
-  /// What will be sent for an Authorization header.
-  String get authorizationPreview => scheme != null
-      ? '$scheme ••• ($length chars)'
-      : 'Bearer ••• (${length + 7} chars, Bearer added)';
+  /// Whether every byte is visible ASCII, space or tab and the value has no
+  /// leading or trailing whitespace. False usually means a paste picked up a
+  /// newline or space; servers may then reject the key.
+  final bool sendable;
+
+  /// The Authorization header that will be sent, with the secret's length.
+  String get authorizationPreview {
+    final header = scheme != null
+        ? 'Authorization: $scheme ••• ($length chars)'
+        : 'Authorization: Bearer ••• ($length chars; Bearer added)';
+    return sendable
+        ? header
+        : '$header. Contains spaces or invisible characters';
+  }
 }
 
 class PlatformServices {
@@ -46,20 +60,36 @@ class PlatformServices {
   static Future<void> deleteCredential(String reference) =>
       credentials.invokeMethod<void>('delete', {'reference': reference});
 
-  /// Null when no credential is stored under [reference]; decryption and
-  /// keystore failures throw.
+  /// Describes the credential stored under [reference] without reading it
+  /// into Dart; null when nothing is stored there.
+  ///
+  /// Throws [BackendFailure] with [FailureCode.authentication] when the
+  /// device cannot read the credential (corrupt or unreadable file, lost
+  /// keystore key; the user must re-enter it), and with
+  /// [FailureCode.protocol] when the platform reply is malformed.
   static Future<CredentialSummary?> describeCredential(String reference) async {
-    final reply = await credentials.invokeMapMethod<String, Object?>(
-      'describe',
-      {'reference': reference},
-    );
+    final Map<String, Object?>? reply;
+    try {
+      reply = await credentials.invokeMapMethod<String, Object?>('describe', {
+        'reference': reference,
+      });
+    } on PlatformException {
+      throw const BackendFailure(FailureCode.authentication);
+    }
     if (reply == null) return null;
     final length = reply['length'];
     final scheme = reply['scheme'];
-    if (length is! int || (scheme != null && scheme is! String)) {
-      throw const BackendFailure(FailureCode.authentication);
+    final sendable = reply['sendable'];
+    if (length is! int ||
+        sendable is! bool ||
+        (scheme != null && scheme is! String)) {
+      throw const BackendFailure(FailureCode.protocol);
     }
-    return CredentialSummary(scheme: scheme as String?, length: length);
+    return CredentialSummary(
+      scheme: scheme as String?,
+      length: length,
+      sendable: sendable,
+    );
   }
 
   factory PlatformServices.android({

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:chat_tool_harness/main.dart' as app;
+import 'authorization_parity_cases.dart';
 
 const credentials = MethodChannel('chat_tool_harness/credentials');
 void main() {
@@ -138,45 +139,63 @@ void main() {
   ) async {
     const ref = 'a92677ad-3f0c-4ca5-b10a-c4fcd9bf4131';
     addTearDown(() => PlatformServices.deleteCredential(ref));
-    await PlatformServices.putCredential(ref, 'Bearer okf_example');
-    final d = await PlatformServices.describeCredential(ref);
-    expect(d, isNotNull);
-    expect(d!.scheme, 'Bearer');
-    expect(d.length, 'Bearer okf_example'.length);
-    await PlatformServices.putCredential(ref, 'plainkey');
-    final bare = await PlatformServices.describeCredential(ref);
-    expect(bare!.scheme, isNull);
-    expect(bare.length, 8);
-    // Same rule as Rust's authorization_value: a trailing space or a
-    // non-token first word is not a scheme.
-    await PlatformServices.putCredential(ref, 'Bearer ');
-    expect((await PlatformServices.describeCredential(ref))!.scheme, isNull);
-    await PlatformServices.putCredential(ref, '1abc def');
-    expect((await PlatformServices.describeCredential(ref))!.scheme, isNull);
-    await PlatformServices.putCredential(ref, 'Token: x');
-    expect((await PlatformServices.describeCredential(ref))!.scheme, isNull);
+    // Same table Rust's net_authorization_value_rule checks.
+    for (final c in authorizationParityCases) {
+      await PlatformServices.putCredential(ref, c.value);
+      final d = await PlatformServices.describeCredential(ref);
+      final label = jsonEncode(c.value);
+      expect(d, isNotNull, reason: label);
+      expect(d!.scheme, c.scheme, reason: label);
+      expect(d.length, utf8.encode(c.value).length, reason: label);
+      expect(d.sendable, c.sendable, reason: label);
+    }
     await PlatformServices.deleteCredential(ref);
     expect(await PlatformServices.describeCredential(ref), isNull);
   });
-  testWidgets('a corrupted credential is a failure, not missing', (
+  testWidgets('a corrupted or unreadable credential is a failure, not missing', (
     tester,
   ) async {
     const ref = 'b92677ad-3f0c-4ca5-b10a-c4fcd9bf4131';
     addTearDown(() => PlatformServices.deleteCredential(ref));
-    await PlatformServices.putCredential(ref, 'test-only-corrupt');
     // CredentialStore keeps ciphertext in Context.noBackupFilesDir/credentials.
+    // On stock Android, Flutter's Directory.systemTemp is Context.cacheDir
+    // (<dataDir>/cache) and noBackupFilesDir is <dataDir>/no_backup, so the
+    // file sits at systemTemp.parent/no_backup (applicationDataDir relies on
+    // the same layout). The existsSync check fails loudly if a device differs.
     final file = File(
       '${Directory.systemTemp.parent.path}/no_backup/credentials/$ref',
     );
+    Future<void> expectFailure(String why) async {
+      await expectLater(
+        PlatformServices.android().resolveCredential(ref),
+        throwsA(isA<PlatformException>()),
+        reason: why,
+      );
+      await expectLater(
+        PlatformServices.describeCredential(ref),
+        throwsA(
+          isA<BackendFailure>().having(
+            (e) => e.code,
+            'code',
+            FailureCode.authentication,
+          ),
+        ),
+        reason: why,
+      );
+    }
+
+    await PlatformServices.putCredential(ref, 'test-only-corrupt');
     expect(file.existsSync(), isTrue);
+    // Right size, wrong bytes: GCM authentication fails.
     await file.writeAsBytes(List<int>.filled(40, 7), flush: true);
-    await expectLater(
-      PlatformServices.android().resolveCredential(ref),
-      throwsA(isA<PlatformException>()),
-    );
-    await expectLater(
-      PlatformServices.describeCredential(ref),
-      throwsA(isA<PlatformException>()),
-    );
+    await expectFailure('garbage ciphertext');
+    // Shorter than IV + tag + 1 byte (29): the size check fails.
+    await file.writeAsBytes(List<int>.filled(10, 7), flush: true);
+    await expectFailure('truncated file');
+    // Present but unreadable: FileNotFoundException must not mean missing.
+    await PlatformServices.putCredential(ref, 'test-only-unreadable');
+    final chmod = await Process.run('chmod', ['000', file.path]);
+    expect(chmod.exitCode, 0, reason: '${chmod.stderr}');
+    await expectFailure('unreadable file');
   });
 }
