@@ -766,9 +766,11 @@ async fn execute(inner: Arc<Inner>, execution: Arc<Execution>, cancel: Cancellat
     let detail = crate::failure::take().filter(|_| result.is_err());
     let error = match result {
         Err(CoreError::Authentication)
-            if detail
-                .as_ref()
-                .is_some_and(|d| d.target == crate::failure::FailureTarget::Credential) =>
+            if detail.as_ref().is_some_and(|d| {
+                // MCP collapses CredentialMissing into Authentication; only the
+                // reasonless Credential note marks an absent credential.
+                d.target == crate::failure::FailureTarget::Credential && d.reason.is_none()
+            }) =>
         {
             Err(CoreError::CredentialMissing)
         }
@@ -814,7 +816,9 @@ async fn execute(inner: Arc<Inner>, execution: Arc<Execution>, cancel: Cancellat
         };
         let total = active.total();
         let _ = inner
-            .persist(move |repo| state::settle(&repo, run, uncertain, Some(error), None, total))
+            .persist(move |repo| {
+                state::settle_keeping_failure(&repo, run, uncertain, Some(error), total)
+            })
             .await;
     }
     let _ = active.save(&inner, run).await;
@@ -1038,6 +1042,9 @@ async fn work(
                     if status == AttemptState::OutcomeUnknown {
                         return Err(CoreError::Conflict);
                     }
+                    // The run continues past this tool failure; drop its note so it
+                    // cannot describe a later, unrelated failure.
+                    let _ = crate::failure::take();
                 }
             }
             continue;

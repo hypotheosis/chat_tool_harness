@@ -1529,11 +1529,155 @@ async fn legacy_plain_failure_string_loads_as_reason() {
         })
         .unwrap();
     let stored = state::load(&f.repo, run).unwrap().failure.unwrap();
-    assert_eq!(stored.code, CoreError::Protocol);
+    assert_eq!(stored.code, CoreError::Authentication);
     assert_eq!(
         stored.detail.reason.as_deref(),
         Some("core authentication failure")
     );
+    f.sql("UPDATE runs SET failure='something else'").await;
+    let stored = state::load(&f.repo, run).unwrap().failure.unwrap();
+    assert_eq!(stored.code, CoreError::Protocol);
+    assert_eq!(stored.detail.reason.as_deref(), Some("something else"));
+}
+
+fn noted_401() -> crate::failure::FailureDetail {
+    crate::failure::FailureDetail {
+        target: crate::failure::FailureTarget::Inference {
+            name: "fake".into(),
+        },
+        step: crate::failure::FailureStep::ChatRequest,
+        url: None,
+        status: Some(401),
+        reason: Some("unknown API key".into()),
+    }
+}
+
+async fn raw_run(f: &Fixture, run: RunId) -> (String, Option<String>) {
+    let repo = f.repo.clone();
+    db(move || {
+        repo.with_connection(move |conn| {
+            conn.query_row(
+                "SELECT state,failure FROM runs WHERE id=?1",
+                [run.0.to_string()],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .map_err(|_| CoreError::Storage)
+        })
+    })
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn failed_run_settles_when_snapshot_cannot_name_endpoint() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let request = f.request().await;
+    f.sql("UPDATE conversation_snapshots SET payload='{'").await;
+    request.finish(Err(CoreError::Authentication));
+    f.idle().await;
+    let (state, failure) = raw_run(&f, run).await;
+    assert_eq!(state, "Failed");
+    let stored: state::StoredFailure = serde_json::from_str(&failure.unwrap()).unwrap();
+    assert_eq!(stored.code, CoreError::Authentication);
+    assert_eq!(
+        stored.detail.target,
+        crate::failure::FailureTarget::Inference {
+            name: String::new()
+        }
+    );
+}
+
+#[tokio::test]
+async fn absorbed_tool_failure_note_is_not_attached_to_later_failure() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let binding = f.waiting(run).await;
+    f.approve(run, binding).await;
+    let call = f.calls.recv().await.unwrap();
+    *call.note.lock().unwrap() = Some(crate::failure::FailureDetail {
+        target: crate::failure::FailureTarget::McpServer { name: "mcp".into() },
+        step: crate::failure::FailureStep::CallTool,
+        url: None,
+        status: Some(401),
+        reason: Some("bad token".into()),
+    });
+    call.reply.send(Err(McpError::Authentication)).unwrap();
+    f.request().await.finish(Err(CoreError::Limit));
+    let data = f.settled(run).await;
+    assert_eq!(data.attempts[0].state, AttemptState::Failed);
+    let stored = data.failure.unwrap();
+    assert_eq!(stored.code, CoreError::Limit);
+    assert_eq!(
+        stored.detail.target,
+        crate::failure::FailureTarget::Inference {
+            name: "model".into()
+        }
+    );
+    assert_eq!(stored.detail.status, None);
+}
+
+#[tokio::test]
+async fn credential_lookup_failure_note_does_not_promote() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    f.request().await.finish_noted(
+        Err(CoreError::Authentication),
+        crate::failure::FailureDetail {
+            target: crate::failure::FailureTarget::Credential,
+            step: crate::failure::FailureStep::ResolveCredential,
+            url: None,
+            status: None,
+            reason: Some("credential lookup failed".into()),
+        },
+    );
+    let stored = f.settled(run).await.failure.unwrap();
+    assert_eq!(stored.code, CoreError::Authentication);
+    assert_eq!(
+        stored.detail.target,
+        crate::failure::FailureTarget::Credential
+    );
+}
+
+#[tokio::test]
+async fn cancelled_run_does_not_keep_noted_detail() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    f.request()
+        .await
+        .finish_noted(Err(CoreError::Cancelled), noted_401());
+    let data = f.settled(run).await;
+    assert_eq!(data.state, RunState::Cancelled);
+    let stored = data.failure.unwrap();
+    assert_eq!(stored.code, CoreError::Cancelled);
+    assert_eq!(stored.detail.status, None);
+    assert_eq!(
+        stored.detail.reason.as_deref(),
+        Some("core operation cancelled")
+    );
+}
+
+#[tokio::test]
+async fn host_release_failure_keeps_original_failure_detail() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let request = f.request().await;
+    f.host.release_pending.store(true, Ordering::SeqCst);
+    request.finish_noted(Err(CoreError::Authentication), noted_401());
+    for _ in 0..10000 {
+        if f.host.stops.load(Ordering::SeqCst) > 0 {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), 1);
+    f.clock.advance(Duration::from_secs(2));
+    let data = f.settled(run).await;
+    assert_eq!(data.state, RunState::Paused);
+    let stored = data.failure.unwrap();
+    assert_eq!(stored.code, CoreError::Authentication);
+    assert_eq!(stored.detail.status, Some(401));
+    assert_eq!(stored.detail.reason.as_deref(), Some("unknown API key"));
 }
 
 #[tokio::test]
@@ -1959,6 +2103,8 @@ struct CallRequest {
     call: ToolCall,
     cancel: Cancellation,
     reply: oneshot::Sender<Result<ToolOutcome, McpError>>,
+    /// Noted by the fake call future, in the run's task, after `reply` arrives.
+    note: Arc<std::sync::Mutex<Option<crate::failure::FailureDetail>>>,
 }
 struct FakeMcp {
     clock: Arc<FakeClock>,
@@ -2040,11 +2186,13 @@ impl McpConnection for Connection {
         cancel: Cancellation,
     ) -> Pin<Box<dyn Future<Output = Result<ToolOutcome, McpError>> + Send + '_>> {
         let (reply, rx) = oneshot::channel();
+        let note = Arc::new(std::sync::Mutex::new(None));
         self.calls
             .send(CallRequest {
                 call,
                 cancel: cancel.clone(),
                 reply,
+                note: note.clone(),
             })
             .unwrap();
         Box::pin(async move {
@@ -2053,7 +2201,11 @@ impl McpConnection for Connection {
             }
             // Deliberately ignores cancel: coordinator must fence polling at its handoff.
             self.writes.fetch_add(1, Ordering::SeqCst);
-            rx.await.map_err(|_| McpError::OutcomeUnknown)?
+            let result = rx.await.map_err(|_| McpError::OutcomeUnknown)?;
+            if let Some(detail) = note.lock().unwrap().take() {
+                crate::failure::note(detail);
+            }
+            result
         })
     }
     fn close(

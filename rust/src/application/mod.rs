@@ -28,6 +28,7 @@ fn credential_value(reply: CredentialReply) -> CoreResult<SecretValue> {
     match reply {
         CredentialReply::Value(value) => Ok(SecretValue::new(value)),
         CredentialReply::Missing => {
+            // No reason: run settlement reads a reasonless Credential note as "missing".
             crate::failure::note(crate::failure::FailureDetail {
                 target: crate::failure::FailureTarget::Credential,
                 step: crate::failure::FailureStep::ResolveCredential,
@@ -37,7 +38,16 @@ fn credential_value(reply: CredentialReply) -> CoreResult<SecretValue> {
             });
             Err(CoreError::CredentialMissing)
         }
-        CredentialReply::Failed(_) => Err(CoreError::Authentication),
+        CredentialReply::Failed(_) => {
+            crate::failure::note(crate::failure::FailureDetail {
+                target: crate::failure::FailureTarget::Credential,
+                step: crate::failure::FailureStep::ResolveCredential,
+                url: None,
+                status: None,
+                reason: Some("credential lookup failed".into()),
+            });
+            Err(CoreError::Authentication)
+        }
     }
 }
 fn platform_result(reply: PlatformReply) -> CoreResult<()> {

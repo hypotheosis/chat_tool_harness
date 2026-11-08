@@ -44,6 +44,26 @@ pub enum CoreError {
     Conflict,
 }
 
+impl CoreError {
+    /// Every variant; `all_lists_every_variant` keeps it complete.
+    pub const ALL: [Self; 14] = [
+        Self::InvalidInput,
+        Self::Configuration,
+        Self::Authentication,
+        Self::CredentialMissing,
+        Self::RateLimited,
+        Self::ToolUnsupported,
+        Self::DiscoveryUnavailable,
+        Self::ContextLength,
+        Self::UnavailableTransport,
+        Self::Protocol,
+        Self::Limit,
+        Self::Storage,
+        Self::Cancelled,
+        Self::Conflict,
+    ];
+}
+
 impl std::fmt::Display for CoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let message = match self {
@@ -69,3 +89,32 @@ impl std::fmt::Display for CoreError {
 }
 impl std::error::Error for CoreError {}
 pub type CoreResult<T> = Result<T, CoreError>;
+
+#[cfg(test)]
+mod tests {
+    use super::CoreError;
+
+    #[test]
+    fn all_lists_every_variant() {
+        // Adding a variant breaks this match; add it to `ALL` too.
+        let index = |e: &CoreError| match e {
+            CoreError::InvalidInput => 0,
+            CoreError::Configuration => 1,
+            CoreError::Authentication => 2,
+            CoreError::CredentialMissing => 3,
+            CoreError::RateLimited => 4,
+            CoreError::ToolUnsupported => 5,
+            CoreError::DiscoveryUnavailable => 6,
+            CoreError::ContextLength => 7,
+            CoreError::UnavailableTransport => 8,
+            CoreError::Protocol => 9,
+            CoreError::Limit => 10,
+            CoreError::Storage => 11,
+            CoreError::Cancelled => 12,
+            CoreError::Conflict => 13,
+        };
+        for (i, e) in CoreError::ALL.iter().enumerate() {
+            assert_eq!(index(e), i);
+        }
+    }
+}

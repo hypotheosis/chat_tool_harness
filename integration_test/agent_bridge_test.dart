@@ -87,18 +87,20 @@ void main() {
           snapshot.conversations.single.profile.inferenceDestination!,
         ),
       );
-      for (final command in <AppCommand>[
-        DiscoverModels(endpoint),
-        ProbeEndpoint(endpoint),
-        DiscoverServer(profile, server),
+      // Inference diagnostics report the missing credential itself; MCP
+      // diagnostics still collapse it into authentication.
+      for (final (command, code) in <(AppCommand, FailureCode)>[
+        (DiscoverModels(endpoint), FailureCode.credentialMissing),
+        (ProbeEndpoint(endpoint), FailureCode.credentialMissing),
+        (DiscoverServer(profile, server), FailureCode.authentication),
       ]) {
         await expectLater(
           backend.execute(command),
           throwsA(
             isA<BackendFailure>().having(
               (e) => e.code,
-              'missing credential is authentication, not unsupported',
-              FailureCode.authentication,
+              'missing credential is a credential failure, not unsupported',
+              code,
             ),
           ),
         );

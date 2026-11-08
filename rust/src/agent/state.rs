@@ -17,7 +17,10 @@ impl StoredFailure {
     /// plain `CoreError` display text and keep it as the reason.
     fn parse(stored: String) -> Self {
         serde_json::from_str(&stored).unwrap_or_else(|_| Self {
-            code: CoreError::Protocol,
+            code: CoreError::ALL
+                .into_iter()
+                .find(|code| code.to_string() == stored)
+                .unwrap_or(CoreError::Protocol),
             detail: FailureDetail {
                 target: FailureTarget::Inference {
                     name: String::new(),
@@ -294,25 +297,61 @@ pub fn settle(
     detail: Option<FailureDetail>,
     total: u64,
 ) -> CoreResult<()> {
+    settle_with(repo, run, status, error, detail, total, false)
+}
+/// Settles like [`settle`] but keeps a failure already stored for the run.
+pub fn settle_keeping_failure(
+    repo: &Repository,
+    run: RunId,
+    status: RunState,
+    error: Option<CoreError>,
+    total: u64,
+) -> CoreResult<()> {
+    settle_with(repo, run, status, error, None, total, true)
+}
+fn settle_with(
+    repo: &Repository,
+    run: RunId,
+    status: RunState,
+    error: Option<CoreError>,
+    detail: Option<FailureDetail>,
+    total: u64,
+    keep_existing: bool,
+) -> CoreResult<()> {
     repo.with_connection(move |conn| {
         let tx = conn.transaction().map_err(sql_error)?;
+        let (conversation, previous): (String, String) = tx
+            .query_row(
+                "SELECT conversation_id,state FROM runs WHERE id=?1",
+                [run.0.to_string()],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .map_err(sql_error)?;
+        // A stop is not a diagnosable failure; keep only the code-based fallback.
+        let stopped =
+            previous == "Cancelled" || matches!(status, RunState::Cancelled | RunState::Interrupted);
+        let detail = detail.filter(|_| !stopped);
         let failure = match error {
             None => None,
             Some(code) => {
                 let detail = match detail {
                     Some(detail) => detail,
                     None => {
-                        let snapshot: String = tx
+                        // Best effort: an unreadable snapshot must not block settlement.
+                        let name = tx
                             .query_row(
                                 "SELECT s.payload FROM runs r JOIN conversation_snapshots s ON s.conversation_id=r.conversation_id AND s.revision=r.snapshot_revision WHERE r.id=?1",
                                 [run.0.to_string()],
-                                |r| r.get(0),
+                                |r| r.get::<_, String>(0),
                             )
-                            .map_err(sql_error)?;
+                            .optional()
+                            .ok()
+                            .flatten()
+                            .and_then(|p| parse::<ProfileSnapshot>(&p).ok())
+                            .map(|s| s.endpoint.name)
+                            .unwrap_or_default();
                         FailureDetail {
-                            target: FailureTarget::Inference {
-                                name: parse::<ProfileSnapshot>(&snapshot)?.endpoint.name,
-                            },
+                            target: FailureTarget::Inference { name },
                             step: FailureStep::Request,
                             url: None,
                             status: None,
@@ -327,13 +366,6 @@ pub fn settle(
                 Some(json(&StoredFailure { code, detail })?)
             }
         };
-        let (conversation, previous): (String, String) = tx
-            .query_row(
-                "SELECT conversation_id,state FROM runs WHERE id=?1",
-                [run.0.to_string()],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .map_err(sql_error)?;
         let status = if previous == "Cancelled" {
             previous
         } else {
@@ -345,7 +377,11 @@ pub fn settle(
         )
         .map_err(sql_error)?;
         tx.execute(
-            "UPDATE runs SET state=?1,failure=?2,active_ms=max(active_ms,?3) WHERE id=?4",
+            if keep_existing {
+                "UPDATE runs SET state=?1,failure=COALESCE(failure,?2),active_ms=max(active_ms,?3) WHERE id=?4"
+            } else {
+                "UPDATE runs SET state=?1,failure=?2,active_ms=max(active_ms,?3) WHERE id=?4"
+            },
             params![
                 status,
                 failure,

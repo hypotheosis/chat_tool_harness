@@ -394,7 +394,9 @@ async fn credential_missing_reply_maps_to_credential_missing() {
     })
     .await;
     assert_eq!(result, Some(CoreError::Authentication));
-    assert!(detail.is_none());
+    let detail = detail.expect("lookup failure note");
+    assert_eq!(detail.target, crate::failure::FailureTarget::Credential);
+    assert_eq!(detail.reason.as_deref(), Some("credential lookup failed"));
 }
 
 #[test]
