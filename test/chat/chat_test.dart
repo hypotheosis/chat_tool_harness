@@ -291,8 +291,10 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byType(EndpointScreen), findsOneWidget);
     await t.pageBack();
-    // Returning refreshes the chat; let the stream cancellation it awaits
-    // complete outside fake time.
+    // Returning refreshes the chat, which awaits the fake event stream's
+    // cancel future. That future is Zone.root's `_nullFuture`, whose
+    // microtask FakeAsync does not run until the test yields to real async.
+    // This is a test artifact, not a production hang.
     await t.runAsync(() => Future<void>.delayed(Duration.zero));
     await t.pumpAndSettle();
     expect(inCard('r', find.text('Open Endpoint settings')), findsNothing);
@@ -326,63 +328,86 @@ void main() {
     await t.pumpAndSettle();
     expect(b.commands.whereType<ResumeRun>().single.runId, 'r');
   });
-  testWidgets('only the latest run gets a full card; earlier runs collapse', (
+  testWidgets('older paused and interrupted runs keep their full cards', (
     t,
   ) async {
     final b = UiBackend()
-      ..current = AppSnapshot(
-        conversations: [
-          Conversation(
-            id: 'c',
-            profile: profileSnapshot,
-            originAcknowledged: true,
-            summaries: const [],
-            messages: const [
-              Message(id: 'm', role: 'user', content: 'first', calls: []),
-              Message(id: 'm2', role: 'user', content: 'second', calls: []),
-              Message(id: 'm3', role: 'user', content: 'third', calls: []),
-            ],
-          ),
-        ],
-        runs: [
-          turnRun(id: 'old', code: FailureCode.rateLimited),
-          turnRun(
-            id: 'unknown',
-            code: FailureCode.conflict,
-            inputMessageId: 'm2',
-            attempts: run(state: AttemptState.outcomeUnknown).attempts,
-          ),
-          turnRun(
-            id: 'new',
-            code: FailureCode.rateLimited,
-            inputMessageId: 'm3',
-          ),
-        ],
-      );
-    await pumpChat(t, b);
-    final rate = failureMessage(const BackendFailure(FailureCode.rateLimited));
-    expect(inCard('old', find.text('Run failed: $rate')), findsOneWidget);
-    expect(
-      inCard('old', find.byWidgetPredicate((w) => w is ButtonStyleButton)),
-      findsOneWidget,
-    );
-    expect(inCard('old', find.text('Details')), findsOneWidget);
-    expect(
-      inCard(
-        'unknown',
-        find.text(
-          "Run failed: A tool call's outcome is unknown; check the remote system before continuing.",
+      ..runs = [
+        turnRun(id: 'paused', state: RunState.paused),
+        turnRun(
+          id: 'unknown',
+          state: RunState.interrupted,
+          attempts: run(state: AttemptState.outcomeUnknown).attempts,
         ),
-      ),
-      findsOneWidget,
-    );
-    expect(inCard('unknown', find.byType(FilledButton)), findsNothing);
-    expect(find.text('Retry'), findsOneWidget);
-    expect(inCard('new', find.text('Retry')), findsOneWidget);
-    await t.tap(inCard('old', find.text('Details')));
+        turnRun(id: 'new', code: FailureCode.rateLimited),
+      ];
+    await pumpChat(t, b);
+    expect(find.byKey(const Key('resume-paused')), findsOneWidget);
+    expect(find.byKey(const Key('stop-unknown')), findsOneWidget);
+    await t.tap(find.byKey(const Key('resume-paused')));
     await t.pumpAndSettle();
-    expect(find.byKey(const Key('run-details-old')), findsOneWidget);
+    expect(b.commands.whereType<ResumeRun>().single.runId, 'paused');
   });
+  testWidgets(
+    'only the latest failed run gets a full card; older failed runs collapse',
+    (t) async {
+      final b = UiBackend()
+        ..current = AppSnapshot(
+          conversations: [
+            Conversation(
+              id: 'c',
+              profile: profileSnapshot,
+              originAcknowledged: true,
+              summaries: const [],
+              messages: const [
+                Message(id: 'm', role: 'user', content: 'first', calls: []),
+                Message(id: 'm2', role: 'user', content: 'second', calls: []),
+                Message(id: 'm3', role: 'user', content: 'third', calls: []),
+              ],
+            ),
+          ],
+          runs: [
+            turnRun(id: 'old', code: FailureCode.rateLimited),
+            turnRun(
+              id: 'unknown',
+              code: FailureCode.conflict,
+              inputMessageId: 'm2',
+              attempts: run(state: AttemptState.outcomeUnknown).attempts,
+            ),
+            turnRun(
+              id: 'new',
+              code: FailureCode.rateLimited,
+              inputMessageId: 'm3',
+            ),
+          ],
+        );
+      await pumpChat(t, b);
+      final rate = failureMessage(
+        const BackendFailure(FailureCode.rateLimited),
+      );
+      expect(inCard('old', find.text('Run failed: $rate')), findsOneWidget);
+      expect(
+        inCard('old', find.byWidgetPredicate((w) => w is ButtonStyleButton)),
+        findsOneWidget,
+      );
+      expect(inCard('old', find.text('Details')), findsOneWidget);
+      expect(
+        inCard(
+          'unknown',
+          find.text(
+            "Run failed: A tool call's outcome is unknown; check the remote system before continuing.",
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(inCard('unknown', find.byType(FilledButton)), findsNothing);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(inCard('new', find.text('Retry')), findsOneWidget);
+      await t.tap(inCard('old', find.text('Details')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('run-details-old')), findsOneWidget);
+    },
+  );
   testWidgets('a failed summary run sits last and Retry reopens the chooser', (
     t,
   ) async {

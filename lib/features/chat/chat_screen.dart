@@ -288,16 +288,18 @@ class _ChatScreenState extends State<ChatScreen> {
   };
 
   /// A run's tool calls and its status: a compact row while it works, one
-  /// card when it failed or paused, nothing once it succeeded. Only the
-  /// conversation's latest run gets a full card with an action; earlier
-  /// runs collapse to one muted line.
+  /// card when it failed or paused, nothing once it succeeded. Every paused
+  /// or interrupted run keeps its full card and action, since several can
+  /// be unfinished at once; an ended (failed) run collapses to one muted
+  /// line unless it is the conversation's latest run.
   Widget? runView(Run run, Conversation c, Map<String, RunIssue?> issues) {
     if (run.state == RunState.completed || run.state == RunState.cancelled) {
       return null;
     }
     final issue = issues[run.id];
-    final latest = state.runs.lastOrNull?.id == run.id;
-    final action = latest ? issue?.action : null;
+    final collapsed =
+        run.state == RunState.failed && state.runs.lastOrNull?.id != run.id;
+    final action = collapsed ? null : issue?.action;
     final busy = state.loading;
     return Column(
       key: ValueKey('run-${run.id}'),
@@ -310,7 +312,7 @@ class _ChatScreenState extends State<ChatScreen> {
           RunCard(
             run: run,
             issue: issue,
-            compact: !latest,
+            compact: collapsed,
             actionLabel: action == null ? null : actionLabel(action, run),
             actionKey: Key(switch (action) {
               RunAction.resume => 'resume-${run.id}',
@@ -442,12 +444,13 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget bottom(Conversation c, Map<String, RunIssue?> issues) {
     final origin = c.profile.inferenceOrigin;
     final unacknowledged = origin != null && !c.originAcknowledged;
-    // The latest run's card already offers Allow when it asks for this origin.
-    final latest = state.runs.lastOrNull;
-    final runAsks =
-        latest != null &&
-        latest.profile.inferenceOrigin == origin &&
-        issues[latest.id]?.action == RunAction.allow;
+    // A run card already offers Allow when it asks for this origin (Allow
+    // only comes from paused or interrupted runs, which never collapse).
+    final runAsks = state.runs.any(
+      (r) =>
+          r.profile.inferenceOrigin == origin &&
+          issues[r.id]?.action == RunAction.allow,
+    );
     return SafeArea(
       top: false,
       child: ConstrainedBox(

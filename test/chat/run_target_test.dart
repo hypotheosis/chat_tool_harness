@@ -62,7 +62,7 @@ Future<void> tapKey(WidgetTester t, String key) async {
 void main() {
   for (final state in [RunState.paused, RunState.interrupted]) {
     testWidgets(
-      'R1 older $state A collapses while new work B asks for its origin',
+      'R1 explicit $state A resumes A while new work B asks for its origin',
       (t) async {
         final b = UiBackend()
           ..current = AppSnapshot(
@@ -99,9 +99,10 @@ void main() {
           b.commands.whereType<SummarizeContext>().single.selection.messageIds,
           ['m'],
         );
-        // A is older than B, so it collapses to one line without an action.
-        expect(find.byKey(const Key('resume-A')), findsNothing);
         expect(b.commands.whereType<ResumeRun>(), isEmpty);
+        // A is older than B but unfinished, so it keeps its full card.
+        await tapKey(t, 'resume-A');
+        expect(b.commands.whereType<ResumeRun>().single.runId, 'A');
       },
     );
   }
@@ -187,12 +188,12 @@ void main() {
       );
       expect(find.byKey(const Key('resume-A')), findsNothing);
       expect(find.text('Resume'), findsNothing);
-      // The older run keeps its unknown-outcome warning, with no action.
       expect(
         find.textContaining("A tool call's outcome is unknown"),
         findsOneWidget,
       );
-      expect(find.byKey(const Key('stop-A')), findsNothing);
+      // The one action left is Stop, which still confirms first.
+      expect(find.byKey(const Key('stop-A')), findsOneWidget);
       expect(b.commands.whereType<ResumeRun>(), isEmpty);
     });
   }
