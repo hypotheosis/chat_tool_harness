@@ -206,6 +206,17 @@ pub fn load(repo: &Repository, run: RunId) -> CoreResult<RunData> {
         Ok(RunData { context:parse(&context)?, id:run, conversation, profile:parse(&profile)?, state:state(&status)?, inference_count:u32::try_from(inference_count).map_err(|_|CoreError::Storage)?,attempt_count:u32::try_from(attempt_count).map_err(|_|CoreError::Storage)?,active_ms:u64::try_from(active_ms).map_err(|_|CoreError::Storage)?,messages,attempts,partial_text,failure:failure.map(StoredFailure::parse) })
     })
 }
+/// Points a resumable run at its conversation's current snapshot revision.
+pub fn rebind_to_current(repo: &Repository, run: RunId) -> CoreResult<()> {
+    repo.with_connection(move |conn| {
+        conn.execute(
+            "UPDATE runs SET snapshot_revision=(SELECT c.current_revision FROM conversations c WHERE c.id=runs.conversation_id) WHERE id=?1",
+            [run.0.to_string()],
+        )
+        .map_err(sql_error)?;
+        Ok(())
+    })
+}
 pub fn transition(
     repo: &Repository,
     run: RunId,

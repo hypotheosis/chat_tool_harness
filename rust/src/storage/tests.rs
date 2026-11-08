@@ -416,3 +416,116 @@ fn worker_shutdown_survives_clones_and_reopen() {
         conversation
     );
 }
+
+fn current_revision(
+    repository: &Repository,
+    conversation: crate::model::core::ConversationId,
+) -> i64 {
+    repository
+        .with_connection(move |connection| {
+            Ok(connection
+                .query_row(
+                    "SELECT current_revision FROM conversations WHERE id=?1",
+                    [conversation.0.to_string()],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("current revision"))
+        })
+        .expect("connection")
+}
+
+#[test]
+fn refresh_profile_adds_revision_only_when_settings_change() {
+    let dir = tempdir().expect("temporary directory");
+    let repository = Repository::open(&dir.path().join("core.db")).expect("open db");
+    let endpoint_id = EndpointId::new();
+    let mut config = endpoint(endpoint_id);
+    repository.save_endpoint(config.clone()).expect("endpoint");
+    let profile_id = ProfileId::new();
+    repository
+        .save_profile(profile(profile_id, endpoint_id))
+        .expect("profile");
+    let conversation = repository
+        .create_conversation(profile_id)
+        .expect("conversation");
+    assert!(!repository.refresh_profile(conversation).expect("unchanged"));
+    assert_eq!(current_revision(&repository, conversation), 1);
+    config.base_url = "https://example.com/v1".into();
+    repository.save_endpoint(config).expect("edited endpoint");
+    assert!(repository.refresh_profile(conversation).expect("changed"));
+    assert_eq!(current_revision(&repository, conversation), 2);
+    assert!(!repository.refresh_profile(conversation).expect("settled"));
+    assert_eq!(current_revision(&repository, conversation), 2);
+    let snapshot = repository
+        .conversation_profile_revision(conversation, 2)
+        .expect("new revision");
+    assert_eq!(snapshot.endpoint.base_url, "https://example.com/v1");
+    assert_eq!(snapshot.revision, 2);
+    let old = repository
+        .conversation_profile_revision(conversation, 1)
+        .expect("old revision");
+    assert_eq!(old.endpoint.base_url, "https://example.test");
+}
+
+#[test]
+fn refresh_profile_reports_deleted_profile_as_configuration() {
+    let dir = tempdir().expect("temporary directory");
+    let repository = Repository::open(&dir.path().join("core.db")).expect("open db");
+    let profile_id = setup(&repository);
+    let conversation = repository
+        .create_conversation(profile_id)
+        .expect("conversation");
+    repository
+        .with_connection(move |connection| {
+            connection
+                .execute_batch("PRAGMA foreign_keys=OFF;")
+                .expect("pragma");
+            connection
+                .execute(
+                    "DELETE FROM profile_servers WHERE profile_id=?1",
+                    [profile_id.0.to_string()],
+                )
+                .expect("links");
+            connection
+                .execute(
+                    "DELETE FROM profiles WHERE id=?1",
+                    [profile_id.0.to_string()],
+                )
+                .expect("delete profile");
+            connection
+                .execute_batch("PRAGMA foreign_keys=ON;")
+                .expect("pragma");
+            Ok(())
+        })
+        .expect("connection");
+    let (result, detail) = refresh_in_failure_scope(conversation, &repository);
+    assert_eq!(result, Err(crate::error::CoreError::Configuration));
+    let detail = detail.expect("failure note");
+    assert_eq!(
+        detail.target,
+        crate::failure::FailureTarget::Profile {
+            name: "profile".into()
+        }
+    );
+    assert_eq!(detail.step, crate::failure::FailureStep::RefreshProfile);
+    assert_eq!(
+        detail.reason.as_deref(),
+        Some("profile, endpoint or server no longer exists")
+    );
+    assert_eq!(current_revision(&repository, conversation), 1);
+}
+
+fn refresh_in_failure_scope(
+    conversation: crate::model::core::ConversationId,
+    repository: &Repository,
+) -> (
+    crate::error::CoreResult<bool>,
+    Option<crate::failure::FailureDetail>,
+) {
+    tokio::runtime::Builder::new_current_thread()
+        .build()
+        .expect("runtime")
+        .block_on(crate::failure::scope(async {
+            repository.refresh_profile(conversation)
+        }))
+}

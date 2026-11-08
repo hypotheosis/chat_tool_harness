@@ -364,7 +364,7 @@ async fn summary_context_budget_and_cancel_preserve_sources_and_partial_text() {
         message_ids: vec![before.messages[0].id],
         summary_ids: vec![],
     };
-    f.sql("UPDATE conversation_snapshots SET payload=json_set(payload,'$.endpoint.context_tokens',32)").await;
+    f.set_context_tokens(32);
     let over = f
         .coordinator
         .summarize_context(f.conversation, selection.clone())
@@ -379,7 +379,7 @@ async fn summary_context_budget_and_cancel_preserve_sources_and_partial_text() {
         Some(ContextChoiceReason::WindowExceeded)
     );
     assert!(f.requests.try_recv().is_err());
-    f.sql("UPDATE conversation_snapshots SET payload=json_set(payload,'$.endpoint.context_tokens',1000000)").await;
+    f.set_context_tokens(1_000_000);
     let run = f
         .coordinator
         .summarize_context(f.conversation, selection)
@@ -589,9 +589,30 @@ async fn summary_disclosure_is_durable_exact_and_never_an_mcp_allow() {
         .unwrap();
     f.coordinator.shutdown().await.unwrap();
     f.reopen();
+    // Resume follows current settings: the run is rebound to the edited endpoint,
+    // whose destination has not been acknowledged yet.
+    f.coordinator.resume(run).await.unwrap();
+    f.idle().await;
+    assert_eq!(
+        f.data(run).await.context.usage.unwrap().reason,
+        Some(ContextChoiceReason::DisclosureRequired)
+    );
+    assert!(f.requests.try_recv().is_err());
+    assert_eq!(f.repo.run_profile_revision(run).unwrap(), 2);
+    let current = f.repo.conversation(f.conversation).unwrap().profile;
+    f.coordinator
+        .acknowledge_context_disclosure(
+            f.conversation,
+            context::DisclosureAcknowledgment {
+                snapshot_revision: current.revision,
+                destination: context::disclosure_destination(&current.endpoint).unwrap(),
+            },
+        )
+        .await
+        .unwrap();
     f.coordinator.resume(run).await.unwrap();
     let r = f.request().await;
-    assert_eq!(r.request.endpoint.base_url, original_url);
+    assert_eq!(r.request.endpoint.base_url, "https://other.test");
     assert!(r.request.tools.is_empty());
     r.finish(Ok(turn(vec![])));
     f.settled(run).await;
@@ -735,7 +756,7 @@ async fn summary_explicit_selection_partial_coverage_and_apply() {
     let snap = f.repo.conversation(f.conversation).unwrap();
     assert!(snap.summaries[0].partial_coverage);
     let id = snap.summaries[0].id;
-    f.sql("UPDATE conversation_snapshots SET payload=json_set(payload,'$.endpoint.context_tokens',32)").await;
+    f.set_context_tokens(32);
     let run = f.start().await;
     f.idle().await;
     assert_eq!(f.data(run).await.state, RunState::Paused);
@@ -769,8 +790,8 @@ async fn summary_explicit_selection_partial_coverage_and_apply() {
         )
         .await
         .unwrap();
-    // Restore this run's explicit endpoint window, without changing its context selection.
-    f.sql("UPDATE conversation_snapshots SET payload=json_set(payload,'$.endpoint.context_tokens',1000000)").await;
+    // Restore the endpoint window in settings; resume refreshes the run's snapshot without changing its context selection.
+    f.set_context_tokens(1_000_000);
     f.coordinator.resume(run).await.unwrap();
     let r = f.request().await;
     assert_eq!(f.live.load(Ordering::SeqCst), 1);
@@ -923,7 +944,7 @@ async fn summary_rejects_foreign_refs_and_hallucinated_tool_calls() {
 #[tokio::test]
 async fn over_budget_never_silently_drops_messages() {
     let mut f = Fixture::new();
-    f.sql("UPDATE conversation_snapshots SET payload=json_set(payload,'$.endpoint.context_tokens',32)").await;
+    f.set_context_tokens(32);
     let run = f.start().await;
     // Waiting for slot release, not a request: over-budget input must never reach inference.
     f.idle().await;
@@ -2658,6 +2679,18 @@ impl Fixture {
         )
         .unwrap();
     }
+    /// Edits the endpoint's context window in settings; the next turn, summary
+    /// or resume refreshes the conversation snapshot from it.
+    fn set_context_tokens(&self, tokens: u32) {
+        let mut endpoint = self
+            .repo
+            .conversation(self.conversation)
+            .unwrap()
+            .profile
+            .endpoint;
+        endpoint.context_tokens = tokens;
+        self.repo.save_endpoint(endpoint).unwrap();
+    }
     async fn sql(&self, sql: &str) {
         let sql = sql.to_owned();
         let repo = self.repo.clone();
@@ -2902,4 +2935,90 @@ async fn partial_fragments_are_batched_and_error_tail_flushed() {
         .filter(|(_, _, s)| s.ends_with(":partial"))
         .count();
     assert!(writes <= 2, "{writes} partial SQL writes for 100 bytes");
+}
+
+fn current_conversation_revision(f: &Fixture) -> i64 {
+    let conversation = f.conversation;
+    f.repo
+        .with_connection(move |c| {
+            Ok(c.query_row(
+                "SELECT current_revision FROM conversations WHERE id=?1",
+                [conversation.0.to_string()],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap())
+        })
+        .unwrap()
+}
+
+#[tokio::test]
+async fn resume_rebinds_paused_run_to_refreshed_settings() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    f.request()
+        .await
+        .finish(Err(CoreError::UnavailableTransport));
+    assert_eq!(f.settled(run).await.state, RunState::Paused);
+    let mut endpoint = f
+        .repo
+        .conversation(f.conversation)
+        .unwrap()
+        .profile
+        .endpoint;
+    endpoint.base_url = "https://example.com/v1".into();
+    f.repo.save_endpoint(endpoint).unwrap();
+    f.coordinator.resume(run).await.unwrap();
+    let request = f.request().await;
+    assert_eq!(request.request.endpoint.base_url, "https://example.com/v1");
+    request.finish(Ok(turn(vec![])));
+    assert_eq!(f.settled(run).await.state, RunState::Completed);
+    assert_eq!(current_conversation_revision(&f), 2);
+    assert_eq!(f.repo.run_profile_revision(run).unwrap(), 2);
+}
+
+#[tokio::test]
+async fn new_turn_uses_edited_settings_and_unchanged_settings_add_no_revision() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    f.request().await.finish(Ok(turn(vec![])));
+    f.settled(run).await;
+    assert_eq!(current_conversation_revision(&f), 1);
+    let mut endpoint = f
+        .repo
+        .conversation(f.conversation)
+        .unwrap()
+        .profile
+        .endpoint;
+    endpoint.base_url = "https://example.com/v1".into();
+    f.repo.save_endpoint(endpoint).unwrap();
+    let run = f.start().await;
+    let request = f.request().await;
+    assert_eq!(request.request.endpoint.base_url, "https://example.com/v1");
+    request.finish(Ok(turn(vec![])));
+    f.settled(run).await;
+    assert_eq!(f.repo.run_profile_revision(run).unwrap(), 2);
+    let run = f.start().await;
+    f.request().await.finish(Ok(turn(vec![])));
+    f.settled(run).await;
+    assert_eq!(current_conversation_revision(&f), 2);
+    assert_eq!(f.repo.run_profile_revision(run).unwrap(), 2);
+}
+
+#[tokio::test]
+async fn turn_fails_with_configuration_when_profile_was_deleted() {
+    let f = Fixture::new();
+    let profile = f.profile;
+    f.sql(&format!(
+        "PRAGMA foreign_keys=OFF; DELETE FROM profile_servers WHERE profile_id='{0}'; DELETE FROM profiles WHERE id='{0}'; PRAGMA foreign_keys=ON;",
+        profile.0
+    ))
+    .await;
+    assert_eq!(
+        f.coordinator
+            .start_turn(f.conversation, "do it".into())
+            .await,
+        Err(CoreError::Configuration)
+    );
+    assert!(f.coordinator.snapshot().await.unwrap().runs.is_empty());
+    assert_eq!(current_conversation_revision(&f), 1);
 }

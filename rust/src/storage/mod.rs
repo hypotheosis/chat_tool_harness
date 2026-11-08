@@ -238,6 +238,51 @@ impl Repository {
             Ok(())
         })
     }
+    /// Rebuilds the conversation's profile snapshot from current settings and
+    /// records a new revision only if anything changed. Returns whether it did.
+    /// A deleted profile, endpoint or server fails with `Configuration` and
+    /// notes a `RefreshProfile` failure detail in the caller's failure scope.
+    pub fn refresh_profile(&self, conversation: ConversationId) -> CoreResult<bool> {
+        let outcome = self.with_connection(move |connection| {
+            let transaction = connection.transaction().map_err(|_| CoreError::Storage)?;
+            let (current, payload): (i64, String) = transaction
+                .query_row(
+                    "SELECT c.current_revision, s.payload FROM conversations c JOIN conversation_snapshots s ON s.conversation_id=c.id AND s.revision=c.current_revision WHERE c.id=?1",
+                    params![id(conversation)],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .optional()
+                .map_err(|_| CoreError::Storage)?
+                .ok_or(CoreError::Conflict)?;
+            let existing: ProfileSnapshot = from_json(&payload)?;
+            let mut fresh = match profile_snapshot(&transaction, existing.profile_id) {
+                Ok(fresh) => fresh,
+                Err(CoreError::Conflict) => return Ok(Err(existing.name)),
+                Err(error) => return Err(error),
+            };
+            fresh.revision = existing.revision;
+            if fresh == existing {
+                return Ok(Ok(false));
+            }
+            let revision = current.checked_add(1).ok_or(CoreError::Limit)?;
+            fresh.revision = revision;
+            transaction.execute("INSERT INTO conversation_snapshots(conversation_id, revision, payload) VALUES(?1, ?2, ?3)", params![id(conversation), revision, json(&fresh)?]).map_err(|_| CoreError::Storage)?;
+            transaction.execute("UPDATE conversations SET current_revision=?1 WHERE id=?2", params![revision, id(conversation)]).map_err(|_| CoreError::Storage)?;
+            transaction.commit().map_err(|_| CoreError::Storage)?;
+            Ok(Ok(true))
+        })?;
+        // Note on the calling thread: the SQLite worker thread has no failure scope.
+        outcome.map_err(|name| {
+            crate::failure::note(crate::failure::FailureDetail {
+                target: crate::failure::FailureTarget::Profile { name },
+                step: crate::failure::FailureStep::RefreshProfile,
+                url: None,
+                status: None,
+                reason: Some("profile, endpoint or server no longer exists".into()),
+            });
+            CoreError::Configuration
+        })
+    }
     pub fn conversation_profile_revision(
         &self,
         conversation: ConversationId,

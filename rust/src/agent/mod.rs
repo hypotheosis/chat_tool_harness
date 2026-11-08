@@ -303,6 +303,7 @@ impl Coordinator {
                 return Err(CoreError::Conflict);
             }
             self.launch(&mut slot, run, move |repo| {
+                repo.refresh_profile(conversation)?;
                 state::start(&repo, run, conversation, text)
             })
         };
@@ -327,6 +328,7 @@ impl Coordinator {
                 return Err(CoreError::Conflict);
             }
             self.launch(&mut slot, run, move |repo| {
+                repo.refresh_profile(conversation)?;
                 state::start_summary(&repo, run, conversation, selection)
             })
         };
@@ -510,6 +512,10 @@ impl Coordinator {
                 }) {
                     return Err(CoreError::Conflict);
                 }
+                // Fixed settings (URL, credential) apply to the resumed run; the
+                // guards above still keep unknown-outcome attempts from replaying.
+                repo.refresh_profile(data.conversation)?;
+                state::rebind_to_current(&repo, run)?;
                 state::transition(&repo, run, &[data.state], RunState::Running, 0)
             })
         };
