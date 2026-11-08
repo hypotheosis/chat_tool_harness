@@ -340,7 +340,7 @@ Background: `send` (endpoint requests) maps 401/403 → `Authentication`, other 
         assert_eq!(authorization_value("Bearer abc"), "Bearer abc");
         assert_eq!(authorization_value("bearer abc"), "bearer abc");
         assert_eq!(authorization_value("Basic dXNlcg=="), "Basic dXNlcg==");
-        assert_eq!(authorization_value("okf_abc-def"), "Bearer okf_abc-def");
+        assert_eq!(authorization_value("tok_abc-def"), "Bearer tok_abc-def");
     }
 
     #[tokio::test]
@@ -403,7 +403,7 @@ Background: `send` (endpoint requests) maps 401/403 → `Authentication`, other 
     }
 ```
 
-Also add an MCP-header test next to the existing MCP request tests in `net.rs` (search for `secret_headers: vec![("Authorization".into(), CredentialRef::new())]` near line 406 and copy that test's server setup), asserting that a stored value `okf_abc` is sent as `authorization: bearer okf_abc`, a stored `Bearer okf_abc` is sent once, and a header named `X-Api-Key` with value `k1` is sent verbatim as `x-api-key: k1`.
+Also add an MCP-header test next to the existing MCP request tests in `net.rs` (search for `secret_headers: vec![("Authorization".into(), CredentialRef::new())]` near line 406 and copy that test's server setup), asserting that a stored value `tok_abc` is sent as `authorization: bearer tok_abc`, a stored `Bearer tok_abc` is sent once, and a header named `X-Api-Key` with value `k1` is sent verbatim as `x-api-key: k1`.
 
 - [ ] **Step 2: Run to confirm failure**
 
@@ -913,11 +913,11 @@ git commit -m "Carry failure detail across the bridge for commands and runs"
 ```dart
   testWidgets('describe reports scheme and length without the secret', (tester) async {
     const ref = 'describe-test-ref';
-    await PlatformServices.putCredential(ref, 'Bearer okf_example');
+    await PlatformServices.putCredential(ref, 'Bearer tok_example');
     final d = await PlatformServices.describeCredential(ref);
     expect(d, isNotNull);
     expect(d!.scheme, 'Bearer');
-    expect(d.length, 'Bearer okf_example'.length);
+    expect(d.length, 'Bearer tok_example'.length);
     await PlatformServices.putCredential(ref, 'plainkey');
     final bare = await PlatformServices.describeCredential(ref);
     expect(bare!.scheme, isNull);

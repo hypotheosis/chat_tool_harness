@@ -1069,7 +1069,7 @@ mod tests {
         assert_eq!(authorization_value("Bearer abc"), "Bearer abc");
         assert_eq!(authorization_value("bearer abc"), "bearer abc");
         assert_eq!(authorization_value("Basic dXNlcg=="), "Basic dXNlcg==");
-        assert_eq!(authorization_value("okf_abc-def"), "Bearer okf_abc-def");
+        assert_eq!(authorization_value("tok_abc-def"), "Bearer tok_abc-def");
         // Shared with the Android describe test (integration_test/
         // credential_lifecycle_test.dart) so both sides agree on the scheme.
         let cases: Vec<serde_json::Value> = serde_json::from_str(include_str!(
@@ -1357,8 +1357,8 @@ mod tests {
     #[tokio::test]
     async fn net_mcp_authorization_header_rule_and_other_headers_verbatim() {
         for (stored, expected) in [
-            ("okf_abc", "authorization: bearer okf_abc\r\n"),
-            ("Bearer okf_abc", "authorization: bearer okf_abc\r\n"),
+            ("tok_abc", "authorization: bearer tok_abc\r\n"),
+            ("Bearer tok_abc", "authorization: bearer tok_abc\r\n"),
         ] {
             for header_name in ["Authorization", "authorization"] {
                 let (addr, server) = one_shot("200 OK", "{}").await;

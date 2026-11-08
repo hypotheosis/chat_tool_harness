@@ -79,6 +79,9 @@ pub struct FailureDetail {
 }
 ```
 
+The detail URL keeps its path: it is the URL the user configured (plus the
+request suffix), so the user can compare it with their settings.
+
 - `reason` comes from the response body's JSON `error.message`, `error`
   (string) or `message`, read within the existing response limits; otherwise
   from the transport error class: `dns`, `connect`, `tls`, `timeout`, `body`.
@@ -95,9 +98,16 @@ pub struct FailureDetail {
   instead of `Authentication`. Amended: on Android a reference whose file is
   absent resolves to "missing"; decrypt, keystore and unreadable-file errors
   stay authentication failures. `AgentRun.failure` holds the sanitized
-  reason; `failure_code` and `failure_detail` carry the rest.
-- `runs.failure` stores the detail as JSON (old string values still read as a
-  reason-only detail). The bridge error carries `{ code, detail }`; Dart's
+  reason, or the code's text when there is none; `failure_code` and
+  `failure_detail` carry the rest. Amended: a credential-lookup note names the
+  endpoint or MCP server that holds the credential (network code re-targets
+  the `Credential` note at the holder), so the action opens that settings
+  screen.
+- `runs.failure` stores the code and, only when something noted the failure,
+  the detail as JSON. Amended: a failure nothing noted (for example a JSON-RPC
+  error, a validation conflict or a local limit) stores no detail rather than
+  a guessed target; the card shows the plain per-code text and opens the
+  profile. Old string values still read as that code without detail. The bridge error carries `{ code, detail }`; Dart's
   `BackendFailure` gains `detail`.
 - Connection tests (model discovery, MCP discovery) return the same detail.
 
@@ -196,8 +206,9 @@ navigation bar in edge-to-edge mode.
   changes; migration preserves acknowledgments; failure detail extraction from
   JSON bodies, truncation, control-char stripping and secret rejection; a
   regression test that a 401 reason survives to the run failure; credential
-  scheme rule cases (bare, `Bearer x`, `Basic x`, other header); defaults.
-- Widget tests with the fake backend: each settings screen shows an error after
+  scheme rule cases (bare, `Bearer x`, `Basic x`, other header).
+- Widget tests with the fake backend: new endpoint defaults; each settings
+  screen shows an error after
   a failed test (regression for silent failures); chat failed-run card shows the
   cause and correct action; disclosure card only for an unacknowledged origin;
   no revision text; last settings widget is above a simulated bottom inset.
