@@ -277,10 +277,15 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
                 )
                 .await?;
             if !response.status().is_success() {
-                let status = note_status(&self.server, &mut response, deadline, &cancel).await?;
-                if status == 404 && self.session_id.is_some() {
+                let status = response.status().as_u16();
+                // Session state changes first so a body-read cancellation cannot leave a dead session trusted.
+                let expired = status == 404 && self.session_id.is_some();
+                if expired {
                     self.invalidate().await?;
                     self.session_id = None;
+                }
+                note_status(&self.server, &mut response, deadline, &cancel).await?;
+                if expired {
                     self.initialize(deadline, &cancel).await?;
                     return Err(McpError::ExpiredSession);
                 }
@@ -659,21 +664,27 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
             return Err(McpError::Cancelled);
         }
         if self.session_id.is_some() {
-            let response = self
-                .net
-                .mcp_request(
-                    &self.server,
-                    Method::DELETE,
-                    None,
-                    Some(&self.version),
-                    self.session_id.as_deref(),
-                    deadline,
-                    &cancel,
-                )
-                .await?;
-            if !matches!(response.status().as_u16(), 200..=299 | 405) {
-                classify_status(&response, true)?;
-            }
+            // Teardown failures must not overwrite the caller's primary failure note.
+            let (result, _) = crate::failure::scope(async {
+                let response = self
+                    .net
+                    .mcp_request(
+                        &self.server,
+                        Method::DELETE,
+                        None,
+                        Some(&self.version),
+                        self.session_id.as_deref(),
+                        deadline,
+                        &cancel,
+                    )
+                    .await?;
+                if !matches!(response.status().as_u16(), 200..=299 | 405) {
+                    classify_status(&response, true)?;
+                }
+                McpResult::Ok(())
+            })
+            .await;
+            result?;
         }
         Ok(())
     }
@@ -3002,5 +3013,116 @@ mod tests {
         assert_eq!(detail.step, FailureStep::CallTool);
         assert_eq!(detail.status, Some(502));
         task.await.unwrap();
+    }
+    /// Serves initialize (with a session id) and its ack, then a stalled 404 for the next request.
+    async fn session_then_stalled_404() -> (
+        ServerConfig,
+        tokio::sync::oneshot::Sender<()>,
+        tokio::task::JoinHandle<()>,
+    ) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = ServerConfig {
+            id: ServerId::new(),
+            name: "fixture".into(),
+            url: format!("http://{addr}/mcp"),
+            allow_http: true,
+            secret_headers: vec![],
+        };
+        let (done_tx, done_rx) = tokio::sync::oneshot::channel::<()>();
+        let task = tokio::spawn(async move {
+            for (status, headers, body) in [
+                (
+                    200,
+                    "Content-Type: application/json\r\nMcp-Session-Id: sess-1\r\n",
+                    init(),
+                ),
+                (202, "", String::new()),
+            ] {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut buf = [0; 4096];
+                assert!(socket.read(&mut buf).await.unwrap() > 0);
+                socket.write_all(format!("HTTP/1.1 {status} OK\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+            }
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buf = [0; 4096];
+            assert!(socket.read(&mut buf).await.unwrap() > 0);
+            socket
+                .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 50\r\n\r\n")
+                .await
+                .unwrap();
+            let _ = done_rx.await;
+        });
+        (server, done_tx, task)
+    }
+    #[tokio::test(start_paused = true)]
+    async fn list_404_invalidates_session_even_if_body_read_hits_deadline() {
+        let (server, done_tx, task) = session_then_stalled_404().await;
+        let mut session = McpClient::new(NoKey)
+            .unwrap()
+            .connect(
+                ProfileId(server.id.0),
+                server.clone(),
+                fixture_repository(&server),
+                deadline(),
+                Cancellation::new(),
+            )
+            .await
+            .unwrap();
+        assert!(session.session_id.is_some());
+        let short = Instant::now() + Duration::from_secs(1);
+        let result = session.list_tools(short, Cancellation::new()).await;
+        assert!(matches!(result, Err(McpError::Cancelled)));
+        assert!(session.session_id.is_none());
+        let call = ToolCall {
+            key: ToolKey {
+                profile_id: session.profile_id(),
+                server: ToolServer::Mcp(server.id),
+                name: "alpha".into(),
+            },
+            provider_call_id: "call".into(),
+            arguments_json: "{}".into(),
+        };
+        assert_eq!(
+            session
+                .call_tool(&call, deadline(), Cancellation::new())
+                .await,
+            Err(McpError::Conflict)
+        );
+        let _ = done_tx.send(());
+        task.await.unwrap();
+    }
+    #[tokio::test]
+    async fn close_failure_does_not_overwrite_outer_note() {
+        let (server, done_tx, task) = session_then_stalled_404().await;
+        let mut session = McpClient::new(NoKey)
+            .unwrap()
+            .connect(
+                ProfileId(server.id.0),
+                server.clone(),
+                fixture_repository(&server),
+                deadline(),
+                Cancellation::new(),
+            )
+            .await
+            .unwrap();
+        // Free the port so the DELETE is refused.
+        let _ = done_tx.send(());
+        task.abort();
+        let _ = task.await;
+        let original = failure::FailureDetail {
+            target: FailureTarget::Inference { name: "llm".into() },
+            step: FailureStep::ChatRequest,
+            url: None,
+            status: Some(401),
+            reason: Some("bad key".into()),
+        };
+        let (result, detail) = failure::scope(async {
+            failure::note(original.clone());
+            session.close(deadline(), Cancellation::new()).await
+        })
+        .await;
+        assert!(result.is_err());
+        assert_eq!(detail, Some(original));
     }
 }

@@ -1172,6 +1172,8 @@ mod tests {
         r.endpoint.context_tokens = u32::MAX;
         assert!(r.validate().is_err());
     }
+
+    // Failure-step tagging.
     struct NoKeyNoted;
     impl CredentialProvider for NoKeyNoted {
         fn resolve(
@@ -1191,7 +1193,12 @@ mod tests {
             let (mut socket, _) = listener.accept().await.unwrap();
             let mut buf = [0; 4096];
             let _ = socket.read(&mut buf).await.unwrap();
-            socket.write_all(format!("HTTP/1.1 {status} Error\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+            let head = format!(
+                "HTTP/1.1 {status} Error\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            socket.write_all(head.as_bytes()).await.unwrap();
+            socket.write_all(body.as_bytes()).await.unwrap();
         });
         (format!("http://{addr}/v1"), task)
     }
