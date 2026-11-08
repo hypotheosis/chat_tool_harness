@@ -631,27 +631,34 @@ pub fn acknowledge_disclosure(
     repo.with_connection(move |conn| {
         let tx = conn.transaction().map_err(sql_error)?;
         // Only an origin this conversation has actually been shown may be acknowledged.
-        let payloads: Vec<String> = {
+        // Newest revisions are checked first; an unreadable old revision is skipped
+        // rather than blocking acknowledgment of a readable one.
+        let shown = {
             let mut statement = tx
-                .prepare("SELECT payload FROM conversation_snapshots WHERE conversation_id=?1")
+                .prepare(
+                    "SELECT payload FROM conversation_snapshots WHERE conversation_id=?1 ORDER BY revision DESC",
+                )
                 .map_err(sql_error)?;
-            let rows = statement
-                .query_map([conversation.0.to_string()], |r| r.get(0))
+            let mut rows = statement
+                .query([conversation.0.to_string()])
                 .map_err(sql_error)?;
-            rows.collect::<Result<_, _>>().map_err(sql_error)?
-        };
-        let mut shown = false;
-        for payload in payloads {
-            let profile: ProfileSnapshot = parse(&payload)?;
-            if super::context::endpoint_origin(&profile.endpoint)
-                .ok()
-                .as_deref()
-                == Some(acknowledgment.origin.as_str())
-            {
-                shown = true;
-                break;
+            let mut shown = false;
+            while let Some(row) = rows.next().map_err(sql_error)? {
+                let payload: String = row.get(0).map_err(sql_error)?;
+                let Ok(profile) = parse::<ProfileSnapshot>(&payload) else {
+                    continue;
+                };
+                if super::context::endpoint_origin(&profile.endpoint)
+                    .ok()
+                    .as_deref()
+                    == Some(acknowledgment.origin.as_str())
+                {
+                    shown = true;
+                    break;
+                }
             }
-        }
+            shown
+        };
         if !shown {
             return Err(CoreError::InvalidInput);
         }

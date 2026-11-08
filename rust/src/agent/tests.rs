@@ -660,6 +660,43 @@ async fn summary_disclosure_is_durable_per_origin_and_never_an_mcp_allow() {
 }
 
 #[tokio::test]
+async fn disclosure_acknowledgment_skips_unreadable_old_revisions() {
+    let f = Fixture::new();
+    let mut endpoint = f
+        .repo
+        .conversation(f.conversation)
+        .unwrap()
+        .profile
+        .endpoint;
+    endpoint.base_url = "https://other.example.com/v1".into();
+    f.repo.save_endpoint(endpoint).unwrap();
+    f.repo.apply_profile(f.conversation, f.profile).unwrap();
+    f.sql(&format!(
+        "UPDATE conversation_snapshots SET payload='not json' WHERE conversation_id='{}' AND revision=1",
+        f.conversation.0
+    ))
+    .await;
+    let acknowledge = |origin: &str| {
+        f.coordinator.acknowledge_context_disclosure(
+            f.conversation,
+            context::DisclosureAcknowledgment {
+                origin: origin.into(),
+            },
+        )
+    };
+    assert_eq!(acknowledge("https://other.example.com").await, Ok(()));
+    // Only the unreadable revision used this origin, so nothing readable matches.
+    assert_eq!(
+        acknowledge("https://model.test").await,
+        Err(CoreError::InvalidInput)
+    );
+    assert_eq!(
+        acknowledge("https://never.example.com").await,
+        Err(CoreError::InvalidInput)
+    );
+}
+
+#[tokio::test]
 async fn disclosure_is_acknowledged_once_per_origin_across_conversations() {
     let f = Fixture::new();
     let reason = |snapshot: &ConversationSnapshot,
