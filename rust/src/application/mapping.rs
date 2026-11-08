@@ -73,6 +73,7 @@ impl From<core::ServerConfig> for AgentServerConfig {
                     credential: id.0.to_string(),
                 })
                 .collect(),
+            trusted: false,
         }
     }
 }
@@ -349,6 +350,22 @@ impl AgentFailure {
 impl From<CoreError> for AgentFailure {
     fn from(code: CoreError) -> Self {
         Self::new(code, None)
+    }
+}
+impl AgentCommandReply {
+    /// A reply carrying nothing beyond success.
+    pub(crate) fn empty() -> Self {
+        Self {
+            history: Vec::new(),
+            export_bundle: None,
+            id: None,
+            artifact: None,
+            models: Vec::new(),
+            tool_support: None,
+            discovered_tools: Vec::new(),
+            skipped_tools: Vec::new(),
+            discovered_rules: Vec::new(),
+        }
     }
 }
 #[cfg(test)]

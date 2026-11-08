@@ -7,6 +7,11 @@ pub(super) enum Diagnostic {
     Probe(String),
     Server(core::ProfileId, core::ServerId),
     Approve(core::ApprovalBinding),
+    Decide {
+        run: core::RunId,
+        approve: Vec<core::ApprovalBinding>,
+        deny: Vec<core::AttemptId>,
+    },
     Rule {
         key: core::ToolKey,
         schema: String,
@@ -69,17 +74,7 @@ pub(super) struct Operation {
 }
 impl Operation {
     async fn run(&self, command: Diagnostic) -> CoreResult<AgentCommandReply> {
-        let mut reply = AgentCommandReply {
-            history: Vec::new(),
-            export_bundle: None,
-            id: None,
-            artifact: None,
-            models: Vec::new(),
-            tool_support: None,
-            discovered_tools: Vec::new(),
-            skipped_tools: Vec::new(),
-            discovered_rules: Vec::new(),
-        };
+        let mut reply = AgentCommandReply::empty();
         match command {
             Diagnostic::Models(id) => {
                 let repo = self.repo.clone();
@@ -137,6 +132,48 @@ impl Operation {
                 };
                 let closed = self.close(&mut session).await;
                 approved?;
+                closed?;
+            }
+            Diagnostic::Decide { run, approve, deny } => {
+                // One discovery per server, kept open until every decision is stored.
+                let mut targets = Vec::new();
+                for binding in &approve {
+                    if let core::ToolServer::Mcp(server) = binding.key.server {
+                        let target = (binding.key.profile_id, server);
+                        if !targets.contains(&target) {
+                            targets.push(target);
+                        }
+                    }
+                }
+                let mut sessions = Vec::with_capacity(targets.len());
+                let mut discovered = Ok(());
+                for (profile, server) in targets {
+                    match self.discover(profile, server).await {
+                        Ok((session, _)) => sessions.push(session),
+                        Err(error) => {
+                            discovered = Err(error);
+                            break;
+                        }
+                    }
+                }
+                let decided = match discovered {
+                    Ok(()) if self.cancel.is_cancelled() => Err(CoreError::Cancelled),
+                    Ok(()) => {
+                        let repo = self.repo.clone();
+                        blocking(move || crate::agent::decide(&repo, run, approve, deny))
+                            .await
+                            .map(|_| ())
+                    }
+                    Err(error) => Err(error),
+                };
+                let mut closed = Ok(());
+                for mut session in sessions {
+                    let result = self.close(&mut session).await;
+                    if closed.is_ok() {
+                        closed = result;
+                    }
+                }
+                decided?;
                 closed?;
             }
             Diagnostic::Rule {

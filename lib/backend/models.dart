@@ -118,12 +118,18 @@ class ServerConfig {
     required this.url,
     required this.allowHttp,
     this.secretHeaders = const [],
+    this.trusted = false,
   });
   final String id;
   final String name;
   final String url;
   final bool allowHttp;
   final List<SecretHeader> secretHeaders;
+
+  /// Whether every tool of this server runs without asking (Block rules still
+  /// apply). Read from snapshots; saving a server never changes it, use
+  /// [SetServerTrust].
+  final bool trusted;
 }
 
 class SecretHeader {
@@ -581,6 +587,30 @@ class Approve extends AppCommand {
 class Deny extends AppCommand {
   const Deny(this.attemptId);
   final String attemptId;
+}
+
+/// Approves and denies pending calls of one run at once, then resumes it.
+/// A stale binding fails the whole command (conflict) and changes nothing;
+/// repeating a decision already in effect succeeds.
+class DecideApprovals extends AppCommand {
+  const DecideApprovals(
+    this.runId, {
+    this.approve = const [],
+    this.deny = const [],
+  });
+  final String runId;
+  final List<ApprovalBinding> approve;
+
+  /// Attempt ids to deny.
+  final List<String> deny;
+}
+
+/// Trusts (or stops trusting) every tool of an MCP server, app-wide, until
+/// its URL, HTTP setting or credential references change.
+class SetServerTrust extends AppCommand {
+  const SetServerTrust(this.serverId, {required this.trusted});
+  final String serverId;
+  final bool trusted;
 }
 
 class SummarizeContext extends AppCommand {

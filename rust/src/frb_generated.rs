@@ -1127,12 +1127,14 @@ impl SseDecode for crate::application::dto::AgentServerConfig {
         let mut var_allowHttp = <bool>::sse_decode(deserializer);
         let mut var_secretHeaders =
             <Vec<crate::application::dto::AgentSecretHeader>>::sse_decode(deserializer);
+        let mut var_trusted = <bool>::sse_decode(deserializer);
         return crate::application::dto::AgentServerConfig {
             id: var_id,
             name: var_name,
             url: var_url,
             allow_http: var_allowHttp,
             secret_headers: var_secretHeaders,
+            trusted: var_trusted,
         };
     }
 }
@@ -1376,6 +1378,25 @@ impl SseDecode for crate::application::dto::AppCommand {
                 };
             }
             24 => {
+                let mut var_runId = <String>::sse_decode(deserializer);
+                let mut var_approve =
+                    <Vec<crate::application::dto::AgentApprovalBinding>>::sse_decode(deserializer);
+                let mut var_deny = <Vec<String>>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::DecideApprovals {
+                    run_id: var_runId,
+                    approve: var_approve,
+                    deny: var_deny,
+                };
+            }
+            25 => {
+                let mut var_serverId = <String>::sse_decode(deserializer);
+                let mut var_trusted = <bool>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::SetServerTrust {
+                    server_id: var_serverId,
+                    trusted: var_trusted,
+                };
+            }
+            26 => {
                 let mut var_conversationId = <String>::sse_decode(deserializer);
                 let mut var_selection =
                     <crate::application::dto::AgentContextSelection>::sse_decode(deserializer);
@@ -1384,7 +1405,7 @@ impl SseDecode for crate::application::dto::AppCommand {
                     selection: var_selection,
                 };
             }
-            25 => {
+            27 => {
                 let mut var_runId = <String>::sse_decode(deserializer);
                 let mut var_selection =
                     <crate::application::dto::AgentContextSelection>::sse_decode(deserializer);
@@ -1393,7 +1414,7 @@ impl SseDecode for crate::application::dto::AppCommand {
                     selection: var_selection,
                 };
             }
-            26 => {
+            28 => {
                 let mut var_conversationId = <String>::sse_decode(deserializer);
                 let mut var_origin = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::AcknowledgeContextDisclosure {
@@ -1558,6 +1579,20 @@ impl SseDecode for Vec<String> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<String>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentApprovalBinding> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::application::dto::AgentApprovalBinding>::sse_decode(
+                deserializer,
+            ));
         }
         return ans_;
     }
@@ -2901,6 +2936,7 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentServerConfi
             self.url.into_into_dart().into_dart(),
             self.allow_http.into_into_dart().into_dart(),
             self.secret_headers.into_into_dart().into_dart(),
+            self.trusted.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -3160,17 +3196,34 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AppCommand {
             crate::application::dto::AppCommand::Deny { attempt_id } => {
                 [23.into_dart(), attempt_id.into_into_dart().into_dart()].into_dart()
             }
+            crate::application::dto::AppCommand::DecideApprovals {
+                run_id,
+                approve,
+                deny,
+            } => [
+                24.into_dart(),
+                run_id.into_into_dart().into_dart(),
+                approve.into_into_dart().into_dart(),
+                deny.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::application::dto::AppCommand::SetServerTrust { server_id, trusted } => [
+                25.into_dart(),
+                server_id.into_into_dart().into_dart(),
+                trusted.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
             crate::application::dto::AppCommand::SummarizeContext {
                 conversation_id,
                 selection,
             } => [
-                24.into_dart(),
+                26.into_dart(),
                 conversation_id.into_into_dart().into_dart(),
                 selection.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::application::dto::AppCommand::ApplyContextSelection { run_id, selection } => [
-                25.into_dart(),
+                27.into_dart(),
                 run_id.into_into_dart().into_dart(),
                 selection.into_into_dart().into_dart(),
             ]
@@ -3179,7 +3232,7 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AppCommand {
                 conversation_id,
                 origin,
             } => [
-                26.into_dart(),
+                28.into_dart(),
                 conversation_id.into_into_dart().into_dart(),
                 origin.into_into_dart().into_dart(),
             ]
@@ -4008,6 +4061,7 @@ impl SseEncode for crate::application::dto::AgentServerConfig {
             self.secret_headers,
             serializer,
         );
+        <bool>::sse_encode(self.trusted, serializer);
     }
 }
 
@@ -4202,16 +4256,33 @@ impl SseEncode for crate::application::dto::AppCommand {
                 <i32>::sse_encode(23, serializer);
                 <String>::sse_encode(attempt_id, serializer);
             }
+            crate::application::dto::AppCommand::DecideApprovals {
+                run_id,
+                approve,
+                deny,
+            } => {
+                <i32>::sse_encode(24, serializer);
+                <String>::sse_encode(run_id, serializer);
+                <Vec<crate::application::dto::AgentApprovalBinding>>::sse_encode(
+                    approve, serializer,
+                );
+                <Vec<String>>::sse_encode(deny, serializer);
+            }
+            crate::application::dto::AppCommand::SetServerTrust { server_id, trusted } => {
+                <i32>::sse_encode(25, serializer);
+                <String>::sse_encode(server_id, serializer);
+                <bool>::sse_encode(trusted, serializer);
+            }
             crate::application::dto::AppCommand::SummarizeContext {
                 conversation_id,
                 selection,
             } => {
-                <i32>::sse_encode(24, serializer);
+                <i32>::sse_encode(26, serializer);
                 <String>::sse_encode(conversation_id, serializer);
                 <crate::application::dto::AgentContextSelection>::sse_encode(selection, serializer);
             }
             crate::application::dto::AppCommand::ApplyContextSelection { run_id, selection } => {
-                <i32>::sse_encode(25, serializer);
+                <i32>::sse_encode(27, serializer);
                 <String>::sse_encode(run_id, serializer);
                 <crate::application::dto::AgentContextSelection>::sse_encode(selection, serializer);
             }
@@ -4219,7 +4290,7 @@ impl SseEncode for crate::application::dto::AppCommand {
                 conversation_id,
                 origin,
             } => {
-                <i32>::sse_encode(26, serializer);
+                <i32>::sse_encode(28, serializer);
                 <String>::sse_encode(conversation_id, serializer);
                 <String>::sse_encode(origin, serializer);
             }
@@ -4394,6 +4465,16 @@ impl SseEncode for Vec<String> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <String>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentApprovalBinding> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentApprovalBinding>::sse_encode(item, serializer);
         }
     }
 }

@@ -1,6 +1,6 @@
 pub mod context;
 mod state;
-pub(crate) use state::origin_acknowledged;
+pub(crate) use state::{already_decided, decide, origin_acknowledged, run_state, Decided};
 
 use crate::error::{CoreError, CoreResult};
 use crate::inference::{InferenceClient, InferenceEvent, InferenceRequest, InferenceTurn};
@@ -426,6 +426,19 @@ impl Coordinator {
         self.inner.admission()?;
         self.inner
             .persist(move |repo| permissions::approve(&repo, binding.attempt_id, &binding))
+            .await
+    }
+    /// Store approvals and denials for one run, all or nothing (see
+    /// `state::decide`). It does not resume the run.
+    pub async fn decide(
+        &self,
+        run: RunId,
+        approve: Vec<ApprovalBinding>,
+        deny: Vec<AttemptId>,
+    ) -> CoreResult<Decided> {
+        self.inner.admission()?;
+        self.inner
+            .persist(move |repo| state::decide(&repo, run, approve, deny))
             .await
     }
     pub async fn deny(&self, attempt: AttemptId) -> CoreResult<()> {
@@ -994,7 +1007,32 @@ async fn work(
                 })
                 .await?;
             match authorization {
-                Authorization::Ask(_) => return Ok(RunState::WaitingApproval),
+                Authorization::Ask(_) => {
+                    // Bind every later call that will also ask, so all of this
+                    // turn's decisions can be made at once. Binding never
+                    // changes an attempt's state or dispatches.
+                    let pending: Vec<_> = data
+                        .attempts
+                        .iter()
+                        .skip_while(|a| a.id != id)
+                        .skip(1)
+                        .filter(|a| a.state == AttemptState::Proposed && a.binding.is_none())
+                        .filter_map(|a| {
+                            let definition = definitions.get(&a.call.key)?.clone();
+                            Some((a.id, a.call.clone(), definition))
+                        })
+                        .collect();
+                    if !pending.is_empty() {
+                        inner
+                            .persist(move |repo| {
+                                pending.iter().try_for_each(|(id, call, definition)| {
+                                    permissions::prepare_approval(&repo, *id, call, definition)
+                                })
+                            })
+                            .await?;
+                    }
+                    return Ok(RunState::WaitingApproval);
+                }
                 Authorization::Block => {
                     inner
                         .persist(move |repo| {

@@ -744,41 +744,200 @@ pub fn result(
     active_ms: u64,
 ) -> CoreResult<()> {
     repo.with_connection(move |conn| {
-        let tx=conn.transaction().map_err(sql_error)?;
-        let (conversation,revision,status,call):(String,i64,String,String)=tx.query_row("SELECT r.conversation_id,r.snapshot_revision,a.state,a.call_json FROM attempts a JOIN runs r ON r.id=a.run_id WHERE a.id=?1 AND a.run_id=?2",params![attempt.0.to_string(),run.0.to_string()],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional().map_err(sql_error)?.ok_or(CoreError::Conflict)?;
-        let valid=matches!((status.as_str(),to),("Dispatching",AttemptState::Succeeded|AttemptState::Failed|AttemptState::OutcomeUnknown)|("Proposed",AttemptState::Denied));
-        if !valid {return Err(CoreError::Conflict);}
-        let conversation=ConversationId(uuid(conversation)?);
-        tx.execute("UPDATE attempts SET state=?1,result_json=?2 WHERE id=?3",params![format!("{to:?}"),content,attempt.0.to_string()]).map_err(sql_error)?;
-        if let Some(content)=content {let call:StoredCall=parse(&call)?;insert_message(&tx,conversation,revision,MessageId::new(),&StoredMessage {role:"tool".into(),content,calls:vec![],call_id:Some(call.provider_call_id),source_envelope:call.source_envelope})?;}
-        tx.execute("UPDATE runs SET active_ms=active_ms+?1 WHERE id=?2",params![i64::try_from(active_ms).map_err(|_|CoreError::Limit)?,run.0.to_string()]).map_err(sql_error)?;
-        event(&tx,conversation,&format!("attempt:{}:{to:?}",attempt.0))?;
+        let tx = conn.transaction().map_err(sql_error)?;
+        result_on(&tx, run, attempt, to, content, active_ms)?;
         tx.commit().map_err(sql_error)?;
         Ok(())
     })
 }
+fn result_on(
+    tx: &rusqlite::Transaction<'_>,
+    run: RunId,
+    attempt: AttemptId,
+    to: AttemptState,
+    content: Option<String>,
+    active_ms: u64,
+) -> CoreResult<()> {
+    let (conversation,revision,status,call):(String,i64,String,String)=tx.query_row("SELECT r.conversation_id,r.snapshot_revision,a.state,a.call_json FROM attempts a JOIN runs r ON r.id=a.run_id WHERE a.id=?1 AND a.run_id=?2",params![attempt.0.to_string(),run.0.to_string()],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional().map_err(sql_error)?.ok_or(CoreError::Conflict)?;
+    let valid = matches!(
+        (status.as_str(), to),
+        (
+            "Dispatching",
+            AttemptState::Succeeded | AttemptState::Failed | AttemptState::OutcomeUnknown
+        ) | ("Proposed", AttemptState::Denied)
+    );
+    if !valid {
+        return Err(CoreError::Conflict);
+    }
+    let conversation = ConversationId(uuid(conversation)?);
+    tx.execute(
+        "UPDATE attempts SET state=?1,result_json=?2 WHERE id=?3",
+        params![format!("{to:?}"), content, attempt.0.to_string()],
+    )
+    .map_err(sql_error)?;
+    if let Some(content) = content {
+        let call: StoredCall = parse(&call)?;
+        insert_message(
+            tx,
+            conversation,
+            revision,
+            MessageId::new(),
+            &StoredMessage {
+                role: "tool".into(),
+                content,
+                calls: vec![],
+                call_id: Some(call.provider_call_id),
+                source_envelope: call.source_envelope,
+            },
+        )?;
+    }
+    tx.execute(
+        "UPDATE runs SET active_ms=active_ms+?1 WHERE id=?2",
+        params![
+            i64::try_from(active_ms).map_err(|_| CoreError::Limit)?,
+            run.0.to_string()
+        ],
+    )
+    .map_err(sql_error)?;
+    event(tx, conversation, &format!("attempt:{}:{to:?}", attempt.0))?;
+    Ok(())
+}
+/// The run owning an attempt and the attempt's state, if the attempt exists.
+fn attempt_run_on(
+    conn: &rusqlite::Connection,
+    attempt: AttemptId,
+) -> CoreResult<Option<(RunId, AttemptState)>> {
+    conn.query_row(
+        "SELECT run_id,state FROM attempts WHERE id=?1",
+        [attempt.0.to_string()],
+        |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+    )
+    .optional()
+    .map_err(sql_error)?
+    .map(|(run, state)| Ok((RunId(uuid(run)?), attempt_state(&state)?)))
+    .transpose()
+}
+/// Deny a proposed attempt inside the caller's transaction. Denying an attempt
+/// that is already denied changes nothing; returns whether anything changed.
+fn deny_on(tx: &rusqlite::Transaction<'_>, run: RunId, attempt: AttemptId) -> CoreResult<bool> {
+    match attempt_run_on(tx, attempt)? {
+        Some((owner, AttemptState::Denied)) if owner == run => Ok(false),
+        Some((owner, _)) if owner == run => {
+            result_on(
+                tx,
+                run,
+                attempt,
+                AttemptState::Denied,
+                Some("Tool denied by user".into()),
+                0,
+            )?;
+            Ok(true)
+        }
+        _ => Err(CoreError::Conflict),
+    }
+}
 pub fn deny(repo: &Repository, attempt: AttemptId) -> CoreResult<RunId> {
-    let run = repo.with_connection(move |conn| {
-        let (run,): (String,) = conn
-            .query_row(
-                "SELECT run_id FROM attempts WHERE id=?1",
-                [attempt.0.to_string()],
-                |r| Ok((r.get(0)?,)),
-            )
-            .optional()
-            .map_err(sql_error)?
-            .ok_or(CoreError::Conflict)?;
-        Ok(RunId(uuid(run)?))
-    })?;
-    result(
-        repo,
-        run,
-        attempt,
-        AttemptState::Denied,
-        Some("Tool denied by user".into()),
-        0,
-    )?;
-    Ok(run)
+    repo.with_connection(move |conn| {
+        let tx = conn.transaction().map_err(sql_error)?;
+        let (run, _) = attempt_run_on(&tx, attempt)?.ok_or(CoreError::Conflict)?;
+        if deny_on(&tx, run, attempt)? {
+            tx.commit().map_err(sql_error)?;
+        }
+        Ok(run)
+    })
+}
+/// The outcome of storing several approval decisions for one run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Decided {
+    /// False when every decision was already in effect.
+    pub changed: bool,
+    /// The run's state after the decisions.
+    pub run_state: RunState,
+}
+fn check_decisions(approve: &[ApprovalBinding], deny: &[AttemptId]) -> CoreResult<()> {
+    let mut seen = std::collections::HashSet::new();
+    let ids = approve
+        .iter()
+        .map(|b| b.attempt_id)
+        .chain(deny.iter().copied());
+    if approve.is_empty() && deny.is_empty() || !ids.into_iter().all(|id| seen.insert(id)) {
+        return Err(CoreError::InvalidInput);
+    }
+    Ok(())
+}
+fn run_state_on(conn: &rusqlite::Connection, run: RunId) -> CoreResult<RunState> {
+    let status: String = conn
+        .query_row(
+            "SELECT state FROM runs WHERE id=?1",
+            [run.0.to_string()],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(sql_error)?
+        .ok_or(CoreError::Conflict)?;
+    state(&status)
+}
+/// A run's current state.
+pub fn run_state(repo: &Repository, run: RunId) -> CoreResult<RunState> {
+    repo.with_connection(move |conn| run_state_on(conn, run))
+}
+fn owned_by(conn: &rusqlite::Connection, run: RunId, attempt: AttemptId) -> CoreResult<()> {
+    match attempt_run_on(conn, attempt)? {
+        Some((owner, _)) if owner == run => Ok(()),
+        _ => Err(CoreError::Conflict),
+    }
+}
+/// Approve and deny attempts of one run in one transaction: any stale binding
+/// or foreign attempt fails the whole set and changes nothing. Approving MCP
+/// calls needs their definitions observed by a current discovery.
+pub fn decide(
+    repo: &Repository,
+    run: RunId,
+    approve: Vec<ApprovalBinding>,
+    deny: Vec<AttemptId>,
+) -> CoreResult<Decided> {
+    check_decisions(&approve, &deny)?;
+    repo.with_connection(move |conn| {
+        let tx = conn.transaction().map_err(sql_error)?;
+        let run_state = run_state_on(&tx, run)?;
+        let mut changed = false;
+        for binding in &approve {
+            owned_by(&tx, run, binding.attempt_id)?;
+            changed |= crate::permissions::approve_on(&tx, binding)?;
+        }
+        for attempt in &deny {
+            changed |= deny_on(&tx, run, *attempt)?;
+        }
+        if changed {
+            tx.commit().map_err(sql_error)?;
+        }
+        Ok(Decided { changed, run_state })
+    })
+}
+/// Whether every decision is already in effect, so no discovery is needed.
+pub fn already_decided(
+    repo: &Repository,
+    run: RunId,
+    approve: Vec<ApprovalBinding>,
+    deny: Vec<AttemptId>,
+) -> CoreResult<bool> {
+    check_decisions(&approve, &deny)?;
+    repo.with_connection(move |conn| {
+        for binding in &approve {
+            owned_by(conn, run, binding.attempt_id)?;
+            if !crate::permissions::already_approved_on(conn, binding)? {
+                return Ok(false);
+            }
+        }
+        for attempt in &deny {
+            match attempt_run_on(conn, *attempt)? {
+                Some((owner, AttemptState::Denied)) if owner == run => {}
+                Some((owner, _)) if owner == run => return Ok(false),
+                _ => return Err(CoreError::Conflict),
+            }
+        }
+        Ok(true)
+    })
 }
 pub fn events(repo: &Repository, after: u64) -> CoreResult<Vec<(u64, ConversationId, String)>> {
     repo.with_connection(move |conn| {

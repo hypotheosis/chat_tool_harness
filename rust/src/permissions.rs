@@ -465,6 +465,180 @@ pub(crate) fn validate_call(call: &ToolCall, definition: &ToolDefinition) -> Cor
     }
     Ok(())
 }
+/// The live policy for a call: a Block rule wins; an Allow rule bound to the
+/// current definition, or a trusted MCP server, allows; anything else asks.
+fn policy_on(
+    conn: &rusqlite::Connection,
+    key: &ToolKey,
+    expected: &str,
+    current_destination: &str,
+) -> CoreResult<PermissionRule> {
+    let (profile, server, name) = key_parts(key);
+    let rule: Option<(String, String)> = conn
+        .query_row(
+            "SELECT rule,definition_digest FROM tool_permission_rules WHERE profile_id=?1 AND server_key=?2 AND tool_name=?3",
+            params![profile, server, name],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()
+        .map_err(|_| CoreError::Storage)?;
+    Ok(match rule {
+        Some((value, _)) if value == "Block" => PermissionRule::Block,
+        Some((value, bound)) if value == "Allow" && bound == expected => PermissionRule::Allow,
+        _ => match key.server {
+            ToolServer::Mcp(id) if trusted_on(conn, id, current_destination)? => {
+                PermissionRule::Allow
+            }
+            _ => PermissionRule::Ask,
+        },
+    })
+}
+/// A server is trusted only while its stored digest matches its current destination.
+fn trusted_on(
+    conn: &rusqlite::Connection,
+    server: ServerId,
+    current_destination: &str,
+) -> CoreResult<bool> {
+    let stored: Option<String> = conn
+        .query_row(
+            "SELECT destination_digest FROM trusted_servers WHERE server_id=?1",
+            [server.0.to_string()],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|_| CoreError::Storage)?;
+    Ok(stored.as_deref() == Some(current_destination))
+}
+fn server_destination_on(conn: &rusqlite::Connection, server: ServerId) -> CoreResult<String> {
+    destination_on_connection(
+        conn,
+        &ToolKey {
+            profile_id: ProfileId(uuid::Uuid::nil()),
+            server: ToolServer::Mcp(server),
+            name: String::new(),
+        },
+    )
+}
+/// Trust (or stop trusting) every tool of one MCP server, app-wide, for its
+/// current destination. Needs no network.
+pub fn set_server_trust(repo: &Repository, server: ServerId, trusted: bool) -> CoreResult<()> {
+    repo.with_connection(move |conn| {
+        let tx = conn.transaction().map_err(|_| CoreError::Storage)?;
+        let destination = server_destination_on(&tx, server)?;
+        if trusted {
+            tx.execute(
+                "INSERT INTO trusted_servers(server_id,destination_digest) VALUES(?1,?2) ON CONFLICT(server_id) DO UPDATE SET destination_digest=excluded.destination_digest",
+                params![server.0.to_string(), destination],
+            )
+        } else {
+            tx.execute(
+                "DELETE FROM trusted_servers WHERE server_id=?1",
+                [server.0.to_string()],
+            )
+        }
+        .map_err(|_| CoreError::Storage)?;
+        tx.commit().map_err(|_| CoreError::Storage)
+    })
+}
+/// Whether a saved server is currently trusted (its destination is unchanged).
+pub fn server_trusted(repo: &Repository, server: ServerId) -> CoreResult<bool> {
+    repo.with_connection(move |conn| server_trusted_on(conn, server))
+}
+pub(crate) fn server_trusted_on(conn: &rusqlite::Connection, server: ServerId) -> CoreResult<bool> {
+    let destination = server_destination_on(conn, server)?;
+    trusted_on(conn, server, &destination)
+}
+/// Store an approval binding for a pending call that will need a decision.
+///
+/// Only a `Proposed` attempt of a running run, whose live policy is Ask and that
+/// has no binding yet, gets one. It never changes an attempt's state and never
+/// dispatches; calls that cannot be bound now (Allow, Block, invalid or stale)
+/// are left for the run loop, which reports them when it reaches them.
+pub fn prepare_approval(
+    repo: &Repository,
+    attempt_id: AttemptId,
+    call: &ToolCall,
+    definition: &ToolDefinition,
+) -> CoreResult<()> {
+    fn skip(error: CoreError) -> CoreResult<()> {
+        match error {
+            CoreError::Storage => Err(CoreError::Storage),
+            _ => Ok(()),
+        }
+    }
+    if let Err(error) = validate_call(call, definition) {
+        return skip(error);
+    }
+    let prepared = parse_json(&call.arguments_json).and_then(|args| {
+        let expected = trust(repo, definition)?;
+        let exact = binding(attempt_id, call, definition, expected.clone(), &args)?;
+        Ok((expected, exact))
+    });
+    let (expected, exact) = match prepared {
+        Ok(value) => value,
+        Err(error) => return skip(error),
+    };
+    let call_key = call.key.clone();
+    let destination_digest = definition.destination_digest.clone();
+    let stored = repo.with_connection(move |conn| {
+        let tx = conn.transaction().map_err(|_| CoreError::Storage)?;
+        let context = attempt_context(&tx, attempt_id, &call_key)?;
+        if context.run_state != "Running"
+            || context.state != "Proposed"
+            || context.stored.is_some()
+            || context.current_destination != destination_digest
+            || observed_on_connection(&tx, &call_key)?.as_deref() != Some(&expected)
+            || policy_on(&tx, &call_key, &expected, &context.current_destination)?
+                != PermissionRule::Ask
+        {
+            return Ok(());
+        }
+        tx.execute(
+            "UPDATE attempts SET approval_binding=?1 WHERE id=?2 AND state='Proposed' AND approval_binding IS NULL",
+            params![
+                serde_json::to_string(&exact).map_err(|_| CoreError::Storage)?,
+                attempt_id.0.to_string()
+            ],
+        )
+        .map_err(|_| CoreError::Storage)?;
+        tx.commit().map_err(|_| CoreError::Storage)
+    });
+    match stored {
+        Ok(()) => Ok(()),
+        Err(error) => skip(error),
+    }
+}
+struct AttemptContext {
+    state: String,
+    stored: Option<String>,
+    run_state: String,
+    current_destination: String,
+}
+/// Load an attempt with its run, and check the call belongs to the run's
+/// profile snapshot; returns the server's current destination digest.
+fn attempt_context(
+    conn: &rusqlite::Connection,
+    attempt_id: AttemptId,
+    call_key: &ToolKey,
+) -> CoreResult<AttemptContext> {
+    let (state,stored,run_profile,run_state):(String,Option<String>,String,String)=conn.query_row("SELECT a.state,a.approval_binding,s.payload,r.state FROM attempts a JOIN runs r ON r.id=a.run_id JOIN conversation_snapshots s ON s.conversation_id=r.conversation_id AND s.revision=r.snapshot_revision WHERE a.id=?1",[attempt_id.0.to_string()],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional().map_err(|_|CoreError::Storage)?.ok_or(CoreError::Conflict)?;
+    let snapshot: crate::model::core::ProfileSnapshot =
+        serde_json::from_str(&run_profile).map_err(|_| CoreError::Storage)?;
+    if snapshot.profile_id != call_key.profile_id {
+        return Err(CoreError::Conflict);
+    }
+    if let ToolServer::Mcp(id) = call_key.server {
+        if !snapshot.servers.iter().any(|config| config.id == id) {
+            return Err(CoreError::Conflict);
+        }
+    }
+    Ok(AttemptContext {
+        state,
+        stored,
+        run_state,
+        current_destination: destination_on_connection(conn, call_key)?,
+    })
+}
 pub fn authorize(
     repo: &Repository,
     attempt_id: AttemptId,
@@ -476,47 +650,76 @@ pub fn authorize(
     let args = parse_json(&call.arguments_json)?;
     let expected = trust(repo, definition)?;
     let exact = binding(attempt_id, call, definition, expected.clone(), &args)?;
-    let (profile, server, name) = key_parts(&call.key);
     let supplied = supplied.cloned();
     let destination_digest = definition.destination_digest.clone();
     let call_key = call.key.clone();
     repo.with_connection(move |conn| {
-        let transaction=conn.transaction().map_err(|_|CoreError::Storage)?;
-        let (state,stored,run_profile,run_state):(String,Option<String>,String,String)=transaction.query_row("SELECT a.state,a.approval_binding,s.payload,r.state FROM attempts a JOIN runs r ON r.id=a.run_id JOIN conversation_snapshots s ON s.conversation_id=r.conversation_id AND s.revision=r.snapshot_revision WHERE a.id=?1",[attempt_id.0.to_string()],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional().map_err(|_|CoreError::Storage)?.ok_or(CoreError::Conflict)?;
-        if run_state != "Running" { return Err(CoreError::Conflict); }
-        let observed_current = observed_on_connection(&transaction, &call_key)?.as_deref() == Some(&expected);
-        let snapshot: crate::model::core::ProfileSnapshot=serde_json::from_str(&run_profile).map_err(|_|CoreError::Storage)?;
-        if snapshot.profile_id.0.to_string()!=profile { return Err(CoreError::Conflict); }
-        if let ToolServer::Mcp(id) = call_key.server {
-            if !snapshot.servers.iter().any(|config| config.id == id) { return Err(CoreError::Conflict); }
+        let transaction = conn.transaction().map_err(|_| CoreError::Storage)?;
+        let AttemptContext {
+            state,
+            stored,
+            run_state,
+            current_destination,
+        } = attempt_context(&transaction, attempt_id, &call_key)?;
+        if run_state != "Running" {
+            return Err(CoreError::Conflict);
         }
-        let current_destination=match &call_server(&server) { Some(id)=>{
-            let payload:String=transaction.query_row("SELECT payload FROM servers WHERE id=?1",[id],|r|r.get(0)).optional().map_err(|_|CoreError::Storage)?.ok_or(CoreError::Configuration)?;
-            let config:crate::model::core::ServerConfig=serde_json::from_str(&payload).map_err(|_|CoreError::Storage)?;
-            mcp_destination_digest(&config)?
-        }, None=>digest(b"local-files:v1") };
-        if current_destination!=destination_digest { return Err(CoreError::Conflict); }
-        let rule:Option<(String,String)>=transaction.query_row("SELECT rule,definition_digest FROM tool_permission_rules WHERE profile_id=?1 AND server_key=?2 AND tool_name=?3",params![profile,server,name],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(|_|CoreError::Storage)?;
-        if !matches!(state.as_str(),"Proposed"|"Approved") { return Err(CoreError::Conflict); }
-        let policy=match rule { Some((value,_)) if value=="Block"=>PermissionRule::Block,Some((value,ref bound)) if value=="Allow" && bound==&expected=>PermissionRule::Allow,_=>PermissionRule::Ask };
-        if policy!=PermissionRule::Block && !observed_current { return Err(CoreError::Conflict); }
-        let result=if policy==PermissionRule::Block { Authorization::Block } else if state=="Approved" {
-            let old:ApprovalBinding=serde_json::from_str(&stored.ok_or(CoreError::Storage)?).map_err(|_|CoreError::Storage)?;
-            if supplied.as_ref()!=Some(&old) || old!=exact { return Err(CoreError::Conflict); }
-            transaction.execute("UPDATE attempts SET state='Dispatching' WHERE id=?1",[attempt_id.0.to_string()]).map_err(|_|CoreError::Storage)?;
+        let observed_current =
+            observed_on_connection(&transaction, &call_key)?.as_deref() == Some(&expected);
+        if current_destination != destination_digest {
+            return Err(CoreError::Conflict);
+        }
+        if !matches!(state.as_str(), "Proposed" | "Approved") {
+            return Err(CoreError::Conflict);
+        }
+        let policy = policy_on(&transaction, &call_key, &expected, &current_destination)?;
+        if policy != PermissionRule::Block && !observed_current {
+            return Err(CoreError::Conflict);
+        }
+        let result = if policy == PermissionRule::Block {
+            Authorization::Block
+        } else if state == "Approved" {
+            let old: ApprovalBinding = serde_json::from_str(&stored.ok_or(CoreError::Storage)?)
+                .map_err(|_| CoreError::Storage)?;
+            if supplied.as_ref() != Some(&old) || old != exact {
+                return Err(CoreError::Conflict);
+            }
+            transaction
+                .execute(
+                    "UPDATE attempts SET state='Dispatching' WHERE id=?1",
+                    [attempt_id.0.to_string()],
+                )
+                .map_err(|_| CoreError::Storage)?;
             Authorization::Allow
-        } else if stored.is_some() {
-            let old:ApprovalBinding=serde_json::from_str(&stored.ok_or(CoreError::Storage)?).map_err(|_|CoreError::Storage)?;
-            if old!=exact || supplied.as_ref()!=Some(&old) { return Err(CoreError::Conflict); }
+        } else if policy == PermissionRule::Allow {
+            // Allow (rule or trust) wins over a binding prepared while it asked.
+            transaction
+                .execute(
+                    "UPDATE attempts SET state='Dispatching' WHERE id=?1",
+                    [attempt_id.0.to_string()],
+                )
+                .map_err(|_| CoreError::Storage)?;
+            Authorization::Allow
+        } else if let Some(stored) = stored {
+            let old: ApprovalBinding =
+                serde_json::from_str(&stored).map_err(|_| CoreError::Storage)?;
+            if old != exact || supplied.as_ref() != Some(&old) {
+                return Err(CoreError::Conflict);
+            }
             Authorization::Ask(Box::new(old))
-        } else if policy==PermissionRule::Allow {
-            transaction.execute("UPDATE attempts SET state='Dispatching' WHERE id=?1",[attempt_id.0.to_string()]).map_err(|_|CoreError::Storage)?;
-            Authorization::Allow
         } else {
-            transaction.execute("UPDATE attempts SET approval_binding=?1 WHERE id=?2",params![serde_json::to_string(&exact).map_err(|_|CoreError::Storage)?,attempt_id.0.to_string()]).map_err(|_|CoreError::Storage)?;
+            transaction
+                .execute(
+                    "UPDATE attempts SET approval_binding=?1 WHERE id=?2",
+                    params![
+                        serde_json::to_string(&exact).map_err(|_| CoreError::Storage)?,
+                        attempt_id.0.to_string()
+                    ],
+                )
+                .map_err(|_| CoreError::Storage)?;
             Authorization::Ask(Box::new(exact))
         };
-        transaction.commit().map_err(|_|CoreError::Storage)?;
+        transaction.commit().map_err(|_| CoreError::Storage)?;
         Ok(result)
     })
 }
@@ -536,28 +739,113 @@ pub fn approve(
     }
     let supplied = binding.clone();
     repo.with_connection(move |conn| {
-        let transaction=conn.transaction().map_err(|_|CoreError::Storage)?;
-        let (state,stored,profile,run_state):(String,Option<String>,String,String)=transaction.query_row("SELECT a.state,a.approval_binding,s.payload,r.state FROM attempts a JOIN runs r ON r.id=a.run_id JOIN conversation_snapshots s ON s.conversation_id=r.conversation_id AND s.revision=r.snapshot_revision WHERE a.id=?1",[attempt_id.0.to_string()],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional().map_err(|_|CoreError::Storage)?.ok_or(CoreError::Conflict)?;
-        if !matches!(run_state.as_str(), "Running" | "WaitingApproval") { return Err(CoreError::Conflict); }
-        require_observed(&transaction, &supplied.key, &supplied.definition_digest)?;
-        if state!="Proposed" || stored.as_deref().and_then(|s|serde_json::from_str::<ApprovalBinding>(s).ok()).as_ref()!=Some(&supplied) { return Err(CoreError::Conflict); }
-        let snapshot:crate::model::core::ProfileSnapshot=serde_json::from_str(&profile).map_err(|_|CoreError::Storage)?;
-        let (profile_id,server,name)=key_parts(&supplied.key);
-        if snapshot.profile_id.0.to_string()!=profile_id { return Err(CoreError::Conflict); }
-        if let ToolServer::Mcp(id) = supplied.key.server {
-            if !snapshot.servers.iter().any(|config| config.id == id) { return Err(CoreError::Conflict); }
+        let transaction = conn.transaction().map_err(|_| CoreError::Storage)?;
+        if approve_on(&transaction, &supplied)? {
+            transaction.commit().map_err(|_| CoreError::Storage)?;
         }
-        let current_destination=if let Some(id)=call_server(&server) {
-            let payload:String=transaction.query_row("SELECT payload FROM servers WHERE id=?1",[id],|r|r.get(0)).optional().map_err(|_|CoreError::Storage)?.ok_or(CoreError::Configuration)?;
-            let config:crate::model::core::ServerConfig=serde_json::from_str(&payload).map_err(|_|CoreError::Storage)?;
-            mcp_destination_digest(&config)?
-        } else { digest(b"local-files:v1") };
-        if current_destination!=supplied.destination_digest || value_digest(&parse_json(&supplied.schema_json)?)?!=supplied_schema_digest(&supplied)? || digest(format!("{}:{}",supplied_schema_digest(&supplied)?,current_destination).as_bytes())!=supplied.definition_digest || value_digest(&parse_json(&supplied.arguments_json)?)?!=supplied.arguments_digest { return Err(CoreError::Conflict); }
-        let rule:Option<String>=transaction.query_row("SELECT rule FROM tool_permission_rules WHERE profile_id=?1 AND server_key=?2 AND tool_name=?3",params![profile_id,server,name],|r|r.get(0)).optional().map_err(|_|CoreError::Storage)?;
-        if rule.as_deref()==Some("Block") { return Err(CoreError::Conflict); }
-        transaction.execute("UPDATE attempts SET state='Approved' WHERE id=?1",[attempt_id.0.to_string()]).map_err(|_|CoreError::Storage)?;
-        transaction.commit().map_err(|_|CoreError::Storage)
+        Ok(())
     })
+}
+/// Whether an attempt is already approved with exactly this binding.
+pub fn already_approved(repo: &Repository, binding: &ApprovalBinding) -> CoreResult<bool> {
+    let binding = binding.clone();
+    repo.with_connection(move |conn| already_approved_on(conn, &binding))
+}
+/// Whether an attempt is already approved with exactly this binding.
+pub(crate) fn already_approved_on(
+    conn: &rusqlite::Connection,
+    binding: &ApprovalBinding,
+) -> CoreResult<bool> {
+    let row: Option<(String, Option<String>)> = conn
+        .query_row(
+            "SELECT state,approval_binding FROM attempts WHERE id=?1",
+            [binding.attempt_id.0.to_string()],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()
+        .map_err(|_| CoreError::Storage)?;
+    Ok(matches!(row, Some((state, Some(stored)))
+        if state == "Approved"
+            && serde_json::from_str::<ApprovalBinding>(&stored).ok().as_ref() == Some(binding)))
+}
+/// Approve one attempt inside the caller's transaction. Returns whether it
+/// changed anything: repeating an approval with the same binding is a no-op,
+/// even after the approval's MCP session (and its observations) closed.
+pub(crate) fn approve_on(
+    transaction: &rusqlite::Connection,
+    supplied: &ApprovalBinding,
+) -> CoreResult<bool> {
+    let attempt_id = supplied.attempt_id;
+    if already_approved_on(transaction, supplied)? {
+        return Ok(false);
+    }
+    {
+        let (state,stored,profile,run_state):(String,Option<String>,String,String)=transaction.query_row("SELECT a.state,a.approval_binding,s.payload,r.state FROM attempts a JOIN runs r ON r.id=a.run_id JOIN conversation_snapshots s ON s.conversation_id=r.conversation_id AND s.revision=r.snapshot_revision WHERE a.id=?1",[attempt_id.0.to_string()],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional().map_err(|_|CoreError::Storage)?.ok_or(CoreError::Conflict)?;
+        if !matches!(run_state.as_str(), "Running" | "WaitingApproval") {
+            return Err(CoreError::Conflict);
+        }
+        require_observed(transaction, &supplied.key, &supplied.definition_digest)?;
+        if state != "Proposed"
+            || stored
+                .as_deref()
+                .and_then(|s| serde_json::from_str::<ApprovalBinding>(s).ok())
+                .as_ref()
+                != Some(supplied)
+        {
+            return Err(CoreError::Conflict);
+        }
+        let snapshot: crate::model::core::ProfileSnapshot =
+            serde_json::from_str(&profile).map_err(|_| CoreError::Storage)?;
+        let (profile_id, server, name) = key_parts(&supplied.key);
+        if snapshot.profile_id.0.to_string() != profile_id {
+            return Err(CoreError::Conflict);
+        }
+        if let ToolServer::Mcp(id) = supplied.key.server {
+            if !snapshot.servers.iter().any(|config| config.id == id) {
+                return Err(CoreError::Conflict);
+            }
+        }
+        let current_destination = if let Some(id) = call_server(&server) {
+            let payload: String = transaction
+                .query_row("SELECT payload FROM servers WHERE id=?1", [id], |r| {
+                    r.get(0)
+                })
+                .optional()
+                .map_err(|_| CoreError::Storage)?
+                .ok_or(CoreError::Configuration)?;
+            let config: crate::model::core::ServerConfig =
+                serde_json::from_str(&payload).map_err(|_| CoreError::Storage)?;
+            mcp_destination_digest(&config)?
+        } else {
+            digest(b"local-files:v1")
+        };
+        if current_destination != supplied.destination_digest
+            || value_digest(&parse_json(&supplied.schema_json)?)?
+                != supplied_schema_digest(supplied)?
+            || digest(
+                format!(
+                    "{}:{}",
+                    supplied_schema_digest(supplied)?,
+                    current_destination
+                )
+                .as_bytes(),
+            ) != supplied.definition_digest
+            || value_digest(&parse_json(&supplied.arguments_json)?)? != supplied.arguments_digest
+        {
+            return Err(CoreError::Conflict);
+        }
+        let rule:Option<String>=transaction.query_row("SELECT rule FROM tool_permission_rules WHERE profile_id=?1 AND server_key=?2 AND tool_name=?3",params![profile_id,server,name],|r|r.get(0)).optional().map_err(|_|CoreError::Storage)?;
+        if rule.as_deref() == Some("Block") {
+            return Err(CoreError::Conflict);
+        }
+        transaction
+            .execute(
+                "UPDATE attempts SET state='Approved' WHERE id=?1",
+                [attempt_id.0.to_string()],
+            )
+            .map_err(|_| CoreError::Storage)?;
+        Ok(true)
+    }
 }
 
 #[cfg(test)]
@@ -1572,5 +1860,220 @@ mod tests {
         let mut d = f.definition();
         d.schema_digest = "forged".into();
         assert!(authorize(&f.repo, f.attempt, &f.call(), &d, None).is_err());
+    }
+
+    fn attempt_row(repo: &Repository, attempt: AttemptId) -> (String, Option<String>) {
+        repo.with_connection(move |conn| {
+            conn.query_row(
+                "SELECT state,approval_binding FROM attempts WHERE id=?1",
+                [attempt.0.to_string()],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .map_err(|_| CoreError::Storage)
+        })
+        .unwrap()
+    }
+    fn server_config(
+        f: &Fixture,
+        url: &str,
+        headers: Vec<(String, CredentialRef)>,
+    ) -> ServerConfig {
+        ServerConfig {
+            id: f.server,
+            name: "server".into(),
+            url: url.into(),
+            allow_http: false,
+            secret_headers: headers,
+        }
+    }
+    #[test]
+    fn trusted_server_allows_new_tool_without_asking() {
+        let f = Fixture::new();
+        let d = f.definition();
+        set_server_trust(&f.repo, f.server, true).unwrap();
+        assert!(server_trusted(&f.repo, f.server).unwrap());
+        assert_eq!(
+            authorize(&f.repo, f.attempt, &f.call(), &d, None).unwrap(),
+            Authorization::Allow
+        );
+        assert_eq!(attempt_row(&f.repo, f.attempt).0, "Dispatching");
+    }
+    #[test]
+    fn trusted_server_allows_changed_schema_and_overrides_ask_rule() {
+        let f = Fixture::new();
+        let d = f.definition();
+        set_rule(&f.repo, &d, PermissionRule::Ask).unwrap();
+        set_server_trust(&f.repo, f.server, true).unwrap();
+        let changed = ToolDefinition::from_discovery(
+            &f.repo,
+            d.key.clone(),
+            r#"{"type":"object","properties":{"path":{"type":"string"}}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            authorize(&f.repo, f.attempt, &f.call(), &changed, None).unwrap(),
+            Authorization::Allow
+        );
+    }
+    #[test]
+    fn trust_still_requires_current_observation_and_valid_arguments() {
+        let f = Fixture::new();
+        let d = f.definition();
+        set_server_trust(&f.repo, f.server, true).unwrap();
+        let mut bad = f.call();
+        bad.arguments_json = r#"{"path":1}"#.into();
+        assert!(authorize(&f.repo, f.attempt, &bad, &d, None).is_err());
+        invalidate_mcp_discovery(&f.repo, f.profile, f.server).unwrap();
+        assert!(authorize(&f.repo, f.attempt, &f.call(), &d, None).is_err());
+        assert_eq!(attempt_row(&f.repo, f.attempt).0, "Proposed");
+    }
+    #[test]
+    fn trust_ends_when_url_changes() {
+        let f = Fixture::new();
+        set_server_trust(&f.repo, f.server, true).unwrap();
+        f.repo
+            .save_server(server_config(&f, "https://other.example.test/mcp", vec![]))
+            .unwrap();
+        assert!(!server_trusted(&f.repo, f.server).unwrap());
+        let d = f.definition();
+        assert!(matches!(
+            authorize(&f.repo, f.attempt, &f.call(), &d, None).unwrap(),
+            Authorization::Ask(_)
+        ));
+    }
+    #[test]
+    fn trust_ends_when_a_credential_reference_changes() {
+        let f = Fixture::new();
+        let header = vec![("authorization".to_owned(), CredentialRef::new())];
+        f.repo
+            .save_server(server_config(&f, "https://server.test/mcp", header))
+            .unwrap();
+        set_server_trust(&f.repo, f.server, true).unwrap();
+        assert!(server_trusted(&f.repo, f.server).unwrap());
+        let replaced = vec![("authorization".to_owned(), CredentialRef::new())];
+        f.repo
+            .save_server(server_config(&f, "https://server.test/mcp", replaced))
+            .unwrap();
+        assert!(!server_trusted(&f.repo, f.server).unwrap());
+        let d = f.definition();
+        assert!(matches!(
+            authorize(&f.repo, f.attempt, &f.call(), &d, None).unwrap(),
+            Authorization::Ask(_)
+        ));
+        // Saving trust again binds it to the new destination.
+        set_server_trust(&f.repo, f.server, true).unwrap();
+        assert!(server_trusted(&f.repo, f.server).unwrap());
+    }
+    #[test]
+    fn untrusting_removes_trust_and_unknown_server_is_rejected() {
+        let f = Fixture::new();
+        set_server_trust(&f.repo, f.server, true).unwrap();
+        set_server_trust(&f.repo, f.server, false).unwrap();
+        assert!(!server_trusted(&f.repo, f.server).unwrap());
+        set_server_trust(&f.repo, f.server, false).unwrap();
+        assert!(matches!(
+            set_server_trust(&f.repo, ServerId::new(), true),
+            Err(CoreError::Configuration)
+        ));
+    }
+    #[test]
+    fn block_beats_trust() {
+        let f = Fixture::new();
+        let d = f.definition();
+        set_rule(&f.repo, &d, PermissionRule::Block).unwrap();
+        set_server_trust(&f.repo, f.server, true).unwrap();
+        assert_eq!(
+            authorize(&f.repo, f.attempt, &f.call(), &d, None).unwrap(),
+            Authorization::Block
+        );
+    }
+    #[test]
+    fn trust_never_covers_local_files() {
+        let f = Fixture::new();
+        set_server_trust(&f.repo, f.server, true).unwrap();
+        let d = ToolDefinition::from_discovery(
+            &f.repo,
+            ToolKey {
+                profile_id: f.profile,
+                server: ToolServer::LocalFiles,
+                name: "read".into(),
+            },
+            SCHEMA,
+        )
+        .unwrap();
+        let call = ToolCall {
+            key: d.key.clone(),
+            ..f.call()
+        };
+        assert!(matches!(
+            authorize(&f.repo, f.attempt, &call, &d, None).unwrap(),
+            Authorization::Ask(_)
+        ));
+    }
+    #[test]
+    fn allow_dispatches_proposed_attempt_despite_stored_binding() {
+        let mut f = Fixture::new();
+        let d = f.definition();
+        let b = ask(authorize(&f.repo, f.attempt, &f.call(), &d, None).unwrap());
+        set_server_trust(&f.repo, f.server, true).unwrap();
+        assert_eq!(
+            authorize(&f.repo, f.attempt, &f.call(), &d, Some(&b)).unwrap(),
+            Authorization::Allow
+        );
+        set_server_trust(&f.repo, f.server, false).unwrap();
+        f.next_attempt();
+        let b = ask(authorize(&f.repo, f.attempt, &f.call(), &d, None).unwrap());
+        set_rule(&f.repo, &d, PermissionRule::Allow).unwrap();
+        assert_eq!(
+            authorize(&f.repo, f.attempt, &f.call(), &d, Some(&b)).unwrap(),
+            Authorization::Allow
+        );
+    }
+    #[test]
+    fn repeated_approval_is_idempotent_even_after_session_closes() {
+        let f = Fixture::new();
+        let d = f.definition();
+        let b = ask(authorize(&f.repo, f.attempt, &f.call(), &d, None).unwrap());
+        approve(&f.repo, f.attempt, &b).unwrap();
+        invalidate_mcp_discovery(&f.repo, f.profile, f.server).unwrap();
+        approve(&f.repo, f.attempt, &b).unwrap();
+        assert_eq!(attempt_row(&f.repo, f.attempt).0, "Approved");
+        let mut other = b.clone();
+        other.arguments_json = r#"{"path":"b"}"#.into();
+        assert!(approve(&f.repo, f.attempt, &other).is_err());
+    }
+    #[test]
+    fn prepare_stores_binding_without_changing_state() {
+        let f = Fixture::new();
+        let d = f.definition();
+        prepare_approval(&f.repo, f.attempt, &f.call(), &d).unwrap();
+        let (state, stored) = attempt_row(&f.repo, f.attempt);
+        assert_eq!(state, "Proposed");
+        let stored: ApprovalBinding = serde_json::from_str(&stored.unwrap()).unwrap();
+        assert_eq!(stored.attempt_id, f.attempt);
+        // Preparing again keeps the same binding; authorize asks with it.
+        prepare_approval(&f.repo, f.attempt, &f.call(), &d).unwrap();
+        assert_eq!(
+            ask(authorize(&f.repo, f.attempt, &f.call(), &d, Some(&stored)).unwrap()),
+            stored
+        );
+        assert_eq!(attempt_row(&f.repo, f.attempt).0, "Proposed");
+    }
+    #[test]
+    fn prepare_leaves_allowed_blocked_and_invalid_calls_unbound() {
+        let mut f = Fixture::new();
+        let d = f.definition();
+        set_rule(&f.repo, &d, PermissionRule::Allow).unwrap();
+        prepare_approval(&f.repo, f.attempt, &f.call(), &d).unwrap();
+        assert_eq!(attempt_row(&f.repo, f.attempt), ("Proposed".into(), None));
+        set_rule(&f.repo, &d, PermissionRule::Block).unwrap();
+        prepare_approval(&f.repo, f.attempt, &f.call(), &d).unwrap();
+        assert_eq!(attempt_row(&f.repo, f.attempt), ("Proposed".into(), None));
+        f.next_attempt();
+        set_rule(&f.repo, &d, PermissionRule::Ask).unwrap();
+        let mut bad = f.call();
+        bad.arguments_json = r#"{"path":1}"#.into();
+        prepare_approval(&f.repo, f.attempt, &bad, &d).unwrap();
+        assert_eq!(attempt_row(&f.repo, f.attempt), ("Proposed".into(), None));
     }
 }

@@ -139,6 +139,7 @@ async fn mcp_diagnostic_only_initializes_and_lists_linked_server() {
             url,
             allow_http: true,
             secret_headers: vec![],
+            trusted: false,
         },
     })
     .await

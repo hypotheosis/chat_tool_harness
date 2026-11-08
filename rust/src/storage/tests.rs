@@ -129,7 +129,7 @@ fn v1_upgrade_preserves_records_and_does_not_trust_legacy_rules() {
     raw.execute("INSERT INTO permission_rules(id,profile_id,payload) VALUES('legacy','old-profile','{\"rule\":\"Allow\"}')", []).unwrap();
     drop(raw);
     let repo = Repository::open(&path).unwrap();
-    assert_eq!(repo.schema_version_for_test().unwrap(), 7);
+    assert_eq!(repo.schema_version_for_test().unwrap(), 8);
     let raw = Connection::open(&path).unwrap();
     let count: i64 = raw
         .query_row(
@@ -246,7 +246,47 @@ fn migration_v7_copies_acknowledgments_as_origins() {
     let version: i64 = raw
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 7);
+    assert_eq!(version, 8);
+}
+
+#[test]
+fn migration_v8_adds_empty_trusted_servers_keyed_by_server() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("core.db");
+    let mut raw = Connection::open(&path).unwrap();
+    super::migrations::migrate_v7_for_test(&mut raw).unwrap();
+    raw.execute_batch(
+        "PRAGMA foreign_keys=ON; INSERT INTO servers(id,payload) VALUES('kept','{}');",
+    )
+    .unwrap();
+    super::migrations::apply(&mut raw).unwrap();
+    let version: i64 = raw
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 8);
+    let rows: i64 = raw
+        .query_row("SELECT count(*) FROM trusted_servers", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(rows, 0);
+    raw.execute(
+        "INSERT INTO trusted_servers(server_id,destination_digest) VALUES('kept','d')",
+        [],
+    )
+    .unwrap();
+    // One row per server, and only for servers that exist.
+    assert!(raw
+        .execute(
+            "INSERT INTO trusted_servers(server_id,destination_digest) VALUES('kept','e')",
+            [],
+        )
+        .is_err());
+    assert!(raw
+        .execute(
+            "INSERT INTO trusted_servers(server_id,destination_digest) VALUES('missing','d')",
+            [],
+        )
+        .is_err());
+    super::migrations::apply(&mut raw).unwrap();
 }
 
 #[test]
@@ -262,7 +302,7 @@ fn current_migration_is_noop() {
         repository
             .schema_version_for_test()
             .expect("schema version"),
-        7
+        8
     );
     drop(repository);
     let reopened = Repository::open(&path).expect("current version opens");

@@ -395,6 +395,11 @@ impl Application {
             }
             AppCommand::Approve { binding } => {
                 let binding: core::ApprovalBinding = binding.try_into()?;
+                let check = binding.clone();
+                // A repeated approval needs no rediscovery (its session may be gone).
+                if blocking(move || crate::permissions::already_approved(&repo, &check)).await? {
+                    return Ok(AgentCommandReply::empty());
+                }
                 if matches!(binding.key.server, core::ToolServer::Mcp(_)) {
                     return self.diagnostic(Diagnostic::Approve(binding)).await;
                 }
@@ -404,6 +409,29 @@ impl Application {
             AppCommand::Deny { attempt_id } => {
                 self.coordinator
                     .deny(core::AttemptId(uuid(&attempt_id)?))
+                    .await?;
+                None
+            }
+            AppCommand::DecideApprovals {
+                run_id,
+                approve,
+                deny,
+            } => {
+                let approve = approve
+                    .into_iter()
+                    .map(TryInto::try_into)
+                    .collect::<CoreResult<Vec<core::ApprovalBinding>>>()?;
+                let deny = deny
+                    .iter()
+                    .map(|id| uuid(id).map(core::AttemptId))
+                    .collect::<CoreResult<Vec<_>>>()?;
+                self.decide_approvals(core::RunId(uuid(&run_id)?), approve, deny)
+                    .await?;
+                None
+            }
+            AppCommand::SetServerTrust { server_id, trusted } => {
+                let server = core::ServerId(uuid(&server_id)?);
+                blocking(move || crate::permissions::set_server_trust(&repo, server, trusted))
                     .await?;
                 None
             }
@@ -450,6 +478,43 @@ impl Application {
             discovered_tools: Vec::new(),
             skipped_tools: Vec::new(),
         })
+    }
+    /// Store every decision (one discovery per MCP server being approved, one
+    /// transaction for all decisions), then resume the run once. The
+    /// diagnostic lease is released before the resume.
+    async fn decide_approvals(
+        &self,
+        run: core::RunId,
+        approve: Vec<core::ApprovalBinding>,
+        deny: Vec<core::AttemptId>,
+    ) -> CoreResult<()> {
+        let repo = self.repository.clone();
+        let (check_approve, check_deny) = (approve.clone(), deny.clone());
+        let repeated =
+            blocking(move || crate::agent::already_decided(&repo, run, check_approve, check_deny))
+                .await?;
+        if repeated {
+            // Nothing to store; resume only a run that is not already going.
+            let repo = self.repository.clone();
+            let current = blocking(move || crate::agent::run_state(&repo, run)).await?;
+            if !matches!(
+                current,
+                core::RunState::WaitingApproval
+                    | core::RunState::Paused
+                    | core::RunState::Interrupted
+            ) {
+                return Ok(());
+            }
+        } else if approve
+            .iter()
+            .any(|b| matches!(b.key.server, core::ToolServer::Mcp(_)))
+        {
+            self.diagnostic(Diagnostic::Decide { run, approve, deny })
+                .await?;
+        } else {
+            self.coordinator.decide(run, approve, deny).await?;
+        }
+        self.coordinator.resume(run).await
     }
     pub async fn snapshot(&self) -> CoreResult<AgentAppSnapshot> {
         let closed = self.gate.read().await;
@@ -619,7 +684,15 @@ fn configuration_snapshot(repo: &Repository) -> CoreResult<ConfigSnapshot> {
             rows.map(|r|serde_json::from_str(&r.map_err(|_|CoreError::Storage)?).map_err(|_|CoreError::Storage)).collect()
         }
         let endpoints=values::<core::EndpointConfig>(conn,"SELECT payload FROM endpoints ORDER BY rowid")?.into_iter().map(Into::into).collect();
-        let servers=values::<core::ServerConfig>(conn,"SELECT payload FROM servers ORDER BY rowid")?.into_iter().map(Into::into).collect();
+        let servers=values::<core::ServerConfig>(conn,"SELECT payload FROM servers ORDER BY rowid")?.into_iter().map(|config| {
+            // A server whose saved settings no longer form a valid destination is not trusted.
+            let trusted = match crate::permissions::server_trusted_on(conn, config.id) {
+                Ok(trusted) => trusted,
+                Err(CoreError::InvalidInput) => false,
+                Err(error) => return Err(error),
+            };
+            Ok(AgentServerConfig { trusted, ..config.into() })
+        }).collect::<CoreResult<Vec<_>>>()?;
         let profiles=values::<core::Profile>(conn,"SELECT payload FROM profiles ORDER BY rowid")?.into_iter().map(Into::into).collect();
         let mut stmt=conn.prepare("SELECT id FROM conversations ORDER BY rowid").map_err(|_|CoreError::Storage)?;
         let ids=stmt.query_map([],|r|r.get::<_,String>(0)).map_err(|_|CoreError::Storage)?.map(|r|r.map_err(|_|CoreError::Storage)).collect::<CoreResult<Vec<_>>>()?;

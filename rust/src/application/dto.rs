@@ -21,6 +21,10 @@ pub struct AgentServerConfig {
     pub url: String,
     pub allow_http: bool,
     pub secret_headers: Vec<AgentSecretHeader>,
+    /// Whether every tool of this server runs without asking (Block rules
+    /// still apply). Computed for the app snapshot's server list; ignored by
+    /// `SaveServer` (use `SetServerTrust`) and false in run profile snapshots.
+    pub trusted: bool,
 }
 #[derive(Debug, Clone)]
 pub struct AgentSecretHeader {
@@ -322,6 +326,20 @@ pub enum AppCommand {
     },
     Deny {
         attempt_id: String,
+    },
+    /// Approve and deny attempts of one run at once, then resume it. Any stale
+    /// binding fails the whole command and changes nothing; repeating a
+    /// decision already in effect is not an error.
+    DecideApprovals {
+        run_id: String,
+        approve: Vec<AgentApprovalBinding>,
+        deny: Vec<String>,
+    },
+    /// Trust (or stop trusting) every tool of an MCP server for its current
+    /// URL, HTTP setting and credential references. Needs no network.
+    SetServerTrust {
+        server_id: String,
+        trusted: bool,
     },
     SummarizeContext {
         conversation_id: String,

@@ -191,6 +191,15 @@ FailureDetail _fromFailureDetail(g.AgentFailureDetail v) => FailureDetail(
   reason: v.reason,
 );
 
+/// The bridge command for [command].
+@visibleForTesting
+g.AppCommand bridgeCommand(AppCommand command) => _command(command);
+
+/// The app model for a bridge server configuration.
+@visibleForTesting
+ServerConfig serverFromBridge(g.AgentServerConfig server) =>
+    _fromServerConfig(server);
+
 g.AppCommand _command(AppCommand command) => switch (command) {
   DiscoverModels() => g.AppCommand.discoverModels(
     endpointId: command.endpointId,
@@ -271,6 +280,15 @@ g.AppCommand _command(AppCommand command) => switch (command) {
     binding: _toApprovalBinding(command.binding),
   ),
   Deny() => g.AppCommand.deny(attemptId: command.attemptId),
+  DecideApprovals() => g.AppCommand.decideApprovals(
+    runId: command.runId,
+    approve: command.approve.map(_toApprovalBinding).toList(),
+    deny: command.deny,
+  ),
+  SetServerTrust() => g.AppCommand.setServerTrust(
+    serverId: command.serverId,
+    trusted: command.trusted,
+  ),
   SummarizeContext() => g.AppCommand.summarizeContext(
     conversationId: command.conversationId,
     selection: _toContextSelection(command.selection),
@@ -318,6 +336,7 @@ ServerConfig _fromServerConfig(g.AgentServerConfig v) => ServerConfig(
   url: v.url,
   allowHttp: v.allowHttp,
   secretHeaders: v.secretHeaders.map((v) => _fromSecretHeader(v)).toList(),
+  trusted: v.trusted,
 );
 g.AgentServerConfig _toServerConfig(ServerConfig v) => g.AgentServerConfig(
   id: v.id,
@@ -325,6 +344,7 @@ g.AgentServerConfig _toServerConfig(ServerConfig v) => g.AgentServerConfig(
   url: v.url,
   allowHttp: v.allowHttp,
   secretHeaders: v.secretHeaders.map((v) => _toSecretHeader(v)).toList(),
+  trusted: v.trusted,
 );
 
 SecretHeader _fromSecretHeader(g.AgentSecretHeader v) =>

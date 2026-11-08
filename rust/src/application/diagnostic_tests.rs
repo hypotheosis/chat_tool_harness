@@ -704,3 +704,250 @@ async fn mcp_error_reason_redacts_short_header_secret() {
     assert_eq!(reason, "key ••• is not valid");
     f.app.close().await.unwrap();
 }
+
+/// The `write` tool's alias as offered to the model in an inference request.
+fn write_alias(inference: &Request) -> String {
+    inference.body["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| !t["function"]["parameters"]["properties"]["marker"].is_null())
+        .unwrap()["function"]["name"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+fn stream(chunk: Value) -> String {
+    format!("data: {chunk}\n\ndata: [DONE]\n\n")
+}
+fn tool_calls(alias: &str, ids: &[&str]) -> String {
+    let calls: Vec<_> = ids
+        .iter()
+        .enumerate()
+        .map(|(index, id)| json!({"index":index,"id":id,"type":"function","function":{"name":alias,"arguments":format!("{{\"marker\":\"{id}\"}}")}}))
+        .collect();
+    stream(json!({"choices":[{"delta":{"tool_calls":calls},"finish_reason":"tool_calls"}]}))
+}
+fn final_text() -> String {
+    stream(json!({"choices":[{"delta":{"content":"done"},"finish_reason":"stop"}]}))
+}
+impl AppFixture {
+    async fn run(&self, run: &str) -> AgentRun {
+        self.app
+            .snapshot()
+            .await
+            .unwrap()
+            .runs
+            .into_iter()
+            .find(|r| r.id == run)
+            .unwrap()
+    }
+    /// Starts a turn whose model asks for one `write` call per id, and waits
+    /// until the run is waiting for approval.
+    async fn waiting(&self, wire: &mut Wire, ids: &[&str]) -> (String, AgentRun) {
+        let run = self.app.command(self.start()).await.unwrap().id.unwrap();
+        wire.initialize(false).await;
+        wire.list().await.rpc(tools(), false);
+        let inference = wire.next().await;
+        let alias = write_alias(&inference);
+        inference.respond(200, "text/event-stream", "", tool_calls(&alias, ids));
+        self.stopped.notified().await;
+        let data = self.run(&run).await;
+        assert_eq!(data.state, core::RunState::WaitingApproval);
+        (run, data)
+    }
+}
+async fn answer_call(wire: &mut Wire, marker: &str) {
+    let call = wire.next().await;
+    assert_eq!(call.body["method"], "tools/call");
+    assert_eq!(call.body["params"]["arguments"]["marker"], marker);
+    call.rpc(
+        json!({"content":[{"type":"text","text":"ok"}],"isError":false}),
+        false,
+    );
+}
+
+#[tokio::test]
+async fn decide_approvals_discovers_once_then_resumes_and_runs_every_call() {
+    let mut wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    let (run, data) = f.waiting(&mut wire, &["one", "two"]).await;
+    let bindings: Vec<_> = data
+        .attempts
+        .iter()
+        .map(|a| a.binding.clone().expect("every pending call is bound"))
+        .collect();
+    assert_eq!(bindings.len(), 2);
+
+    // A stale binding fails the whole command after one discovery; nothing changes.
+    let mut stale = bindings.clone();
+    stale[1].arguments_json = r#"{"marker":"other"}"#.into();
+    let app = f.app.clone();
+    let command = AppCommand::DecideApprovals {
+        run_id: run.clone(),
+        approve: stale,
+        deny: vec![],
+    };
+    let decision = tokio::spawn(async move { app.command(command).await });
+    wire.initialize(false).await;
+    wire.list().await.rpc(tools(), false);
+    assert!(matches!(decision.await.unwrap(), Err(CoreError::Conflict)));
+    let data = f.run(&run).await;
+    assert_eq!(data.state, core::RunState::WaitingApproval);
+    assert!(data
+        .attempts
+        .iter()
+        .all(|a| a.state == core::AttemptState::Proposed));
+
+    let app = f.app.clone();
+    let command = AppCommand::DecideApprovals {
+        run_id: run.clone(),
+        approve: bindings,
+        deny: vec![],
+    };
+    let decision = tokio::spawn(async move { app.command(command).await });
+    // One discovery for the server, then the resumed run's own session.
+    wire.initialize(false).await;
+    wire.list().await.rpc(tools(), false);
+    wire.initialize(false).await;
+    wire.list().await.rpc(tools(), false);
+    answer_call(&mut wire, "one").await;
+    answer_call(&mut wire, "two").await;
+    let inference = wire.next().await;
+    assert!(inference.method.starts_with("POST /chat/completions "));
+    inference.respond(200, "text/event-stream", "", final_text());
+    decision.await.unwrap().unwrap();
+    f.stopped.notified().await;
+    let data = f.run(&run).await;
+    assert_eq!(data.state, core::RunState::Completed);
+    assert!(data
+        .attempts
+        .iter()
+        .all(|a| a.state == core::AttemptState::Succeeded));
+    assert!(wire.requests.try_recv().is_err());
+    f.app.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn repeated_decide_approvals_needs_no_discovery_and_resumes() {
+    let mut wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    let (run, data) = f.waiting(&mut wire, &["one", "two"]).await;
+    let first = data.attempts[0].binding.clone().unwrap();
+    let second = data.attempts[1].id.clone();
+    // Store the decisions without resuming, as if the app closed before resume.
+    let app = f.app.clone();
+    let command = AppCommand::Approve {
+        binding: first.clone(),
+    };
+    let approval = tokio::spawn(async move { app.command(command).await });
+    wire.initialize(false).await;
+    wire.list().await.rpc(tools(), false);
+    approval.await.unwrap().unwrap();
+    // A repeated Approve is not stale even though its session is gone.
+    f.app
+        .command(AppCommand::Approve {
+            binding: first.clone(),
+        })
+        .await
+        .unwrap();
+    for _ in 0..2 {
+        f.app
+            .command(AppCommand::Deny {
+                attempt_id: second.clone(),
+            })
+            .await
+            .unwrap();
+    }
+    let app = f.app.clone();
+    let command = AppCommand::DecideApprovals {
+        run_id: run.clone(),
+        approve: vec![first],
+        deny: vec![second],
+    };
+    let decision = tokio::spawn(async move { app.command(command).await });
+    // The first request is the resumed run's own session, not a discovery.
+    wire.initialize(false).await;
+    wire.list().await.rpc(tools(), false);
+    answer_call(&mut wire, "one").await;
+    let inference = wire.next().await;
+    inference.respond(200, "text/event-stream", "", final_text());
+    decision.await.unwrap().unwrap();
+    f.stopped.notified().await;
+    let data = f.run(&run).await;
+    assert_eq!(data.state, core::RunState::Completed);
+    assert_eq!(data.attempts[0].state, core::AttemptState::Succeeded);
+    assert_eq!(data.attempts[1].state, core::AttemptState::Denied);
+    f.app.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn trusted_server_runs_calls_without_asking_until_its_url_changes() {
+    let mut wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    let server = |snapshot: &AgentAppSnapshot| {
+        snapshot
+            .servers
+            .iter()
+            .find(|s| s.id == f.server)
+            .unwrap()
+            .clone()
+    };
+    assert!(!server(&f.app.snapshot().await.unwrap()).trusted);
+    f.app
+        .command(AppCommand::SetServerTrust {
+            server_id: f.server.clone(),
+            trusted: true,
+        })
+        .await
+        .unwrap();
+    let mut saved = server(&f.app.snapshot().await.unwrap());
+    assert!(saved.trusted);
+    // Saving unchanged settings keeps trust, whatever `trusted` says.
+    saved.trusted = false;
+    f.app
+        .command(AppCommand::SaveServer {
+            server: saved.clone(),
+        })
+        .await
+        .unwrap();
+    assert!(server(&f.app.snapshot().await.unwrap()).trusted);
+
+    let run = f.app.command(f.start()).await.unwrap().id.unwrap();
+    wire.initialize(false).await;
+    wire.list().await.rpc(tools(), false);
+    let inference = wire.next().await;
+    let alias = write_alias(&inference);
+    inference.respond(200, "text/event-stream", "", tool_calls(&alias, &["one"]));
+    answer_call(&mut wire, "one").await;
+    wire.next()
+        .await
+        .respond(200, "text/event-stream", "", final_text());
+    f.stopped.notified().await;
+    assert_eq!(f.run(&run).await.state, core::RunState::Completed);
+
+    // A different URL silently ends trust.
+    saved.url = format!("{}/other", saved.url);
+    f.app
+        .command(AppCommand::SaveServer { server: saved })
+        .await
+        .unwrap();
+    assert!(!server(&f.app.snapshot().await.unwrap()).trusted);
+    f.app
+        .command(AppCommand::SetServerTrust {
+            server_id: f.server.clone(),
+            trusted: false,
+        })
+        .await
+        .unwrap();
+    assert!(matches!(
+        f.app
+            .command(AppCommand::SetServerTrust {
+                server_id: uuid::Uuid::new_v4().to_string(),
+                trusted: true,
+            })
+            .await,
+        Err(CoreError::Configuration)
+    ));
+    f.app.close().await.unwrap();
+}

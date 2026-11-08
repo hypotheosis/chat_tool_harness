@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Error as SqlError, Result as SqlResult};
 
-const VERSION: i64 = 7;
+const VERSION: i64 = 8;
 
 pub fn apply(connection: &mut Connection) -> SqlResult<()> {
     let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
@@ -28,7 +28,16 @@ pub fn apply(connection: &mut Connection) -> SqlResult<()> {
     if version < 7 {
         migrate_v7(connection)?;
     }
+    if version < 8 {
+        migrate_v8(connection)?;
+    }
     Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn migrate_v7_for_test(connection: &mut Connection) -> SqlResult<()> {
+    migrate_v6_for_test(connection)?;
+    migrate_v7(connection)
 }
 
 #[cfg(test)]
@@ -53,6 +62,19 @@ pub(crate) fn migrate_v1_for_test(connection: &mut Connection) -> SqlResult<()> 
 #[cfg(test)]
 pub(crate) fn migrate_v2_for_test(connection: &mut Connection) -> SqlResult<()> {
     migrate_v2(connection)
+}
+
+fn migrate_v8(connection: &mut Connection) -> SqlResult<()> {
+    let tx = connection.transaction()?;
+    // Server trust is app-wide and bound to the destination it was granted for.
+    tx.execute_batch(
+        "CREATE TABLE trusted_servers (
+            server_id TEXT PRIMARY KEY REFERENCES servers(id),
+            destination_digest TEXT NOT NULL
+        );
+        PRAGMA user_version = 8;",
+    )?;
+    tx.commit()
 }
 
 fn migrate_v7(connection: &mut Connection) -> SqlResult<()> {

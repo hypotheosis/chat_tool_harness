@@ -139,4 +139,52 @@ void main() {
     await owner.close();
     expect(fake.closed, isTrue);
   });
+
+  test('decide_approvals_and_server_trust_map_to_bridge_commands', () {
+    const binding = ApprovalBinding(
+      attemptId: 'a1',
+      key: ToolKey(profileId: 'p', serverId: 's', name: 'write'),
+      providerCallId: 'call-1',
+      definitionDigest: 'def',
+      argumentsDigest: 'args',
+      argumentsJson: '{}',
+      schemaJson: '{"type":"object"}',
+      destinationDigest: 'dest',
+    );
+    final decide = bridgeCommand(
+      const DecideApprovals('r', approve: [binding], deny: ['a2']),
+    );
+    expect(decide, isA<g.AppCommand_DecideApprovals>());
+    decide as g.AppCommand_DecideApprovals;
+    expect(decide.runId, 'r');
+    expect(decide.approve.single.attemptId, 'a1');
+    expect(decide.approve.single.key.serverId, 's');
+    expect(decide.approve.single.argumentsJson, '{}');
+    expect(decide.deny, ['a2']);
+    final trust = bridgeCommand(const SetServerTrust('s', trusted: true));
+    expect(trust, isA<g.AppCommand_SetServerTrust>());
+    trust as g.AppCommand_SetServerTrust;
+    expect(trust.serverId, 's');
+    expect(trust.trusted, isTrue);
+  });
+
+  test('server_trust_is_read_from_bridge_snapshots', () {
+    g.AgentServerConfig bridged({required bool trusted}) => g.AgentServerConfig(
+      id: 's',
+      name: 'server',
+      url: 'https://example.test/mcp',
+      allowHttp: false,
+      secretHeaders: const [],
+      trusted: trusted,
+    );
+    expect(serverFromBridge(bridged(trusted: true)).trusted, isTrue);
+    expect(serverFromBridge(bridged(trusted: false)).trusted, isFalse);
+    const unsaved = ServerConfig(
+      id: 's',
+      name: 'server',
+      url: 'https://example.test/mcp',
+      allowHttp: false,
+    );
+    expect(unsaved.trusted, isFalse);
+  });
 }

@@ -2004,6 +2004,102 @@ async fn restart_preserves_unconsumed_approval_but_requires_explicit_resume() {
     assert_eq!(f.writes.load(Ordering::SeqCst), 1);
 }
 #[tokio::test]
+async fn every_pending_ask_call_gets_a_binding_without_changing_state() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let request = f.request().await;
+    request.finish(Ok(turn(vec![f.tool_call("first"), f.tool_call("second")])));
+    let data = f.settled(run).await;
+    assert_eq!(data.state, RunState::WaitingApproval);
+    for (attempt, id) in data.attempts.iter().zip(["first", "second"]) {
+        assert_eq!(attempt.state, AttemptState::Proposed);
+        let binding = attempt.binding.as_ref().expect("binding prepared");
+        assert_eq!(binding.attempt_id, attempt.id);
+        assert_eq!(binding.provider_call_id, id);
+    }
+    assert_eq!(f.writes.load(Ordering::SeqCst), 0);
+    assert!(f.calls.try_recv().is_err());
+}
+#[tokio::test]
+async fn decide_is_all_or_nothing() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let request = f.request().await;
+    request.finish(Ok(turn(vec![f.tool_call("first"), f.tool_call("second")])));
+    let data = f.settled(run).await;
+    let first = data.attempts[0].binding.clone().unwrap();
+    let mut stale = data.attempts[1].binding.clone().unwrap();
+    stale.arguments_json = r#"{"changed":true}"#.into();
+    assert_eq!(
+        f.coordinator
+            .decide(run, vec![first.clone(), stale], vec![])
+            .await,
+        Err(CoreError::Conflict)
+    );
+    assert_eq!(
+        f.coordinator
+            .decide(run, vec![first.clone()], vec![AttemptId::new()])
+            .await,
+        Err(CoreError::Conflict)
+    );
+    assert_eq!(
+        f.coordinator
+            .decide(run, vec![first.clone()], vec![first.attempt_id])
+            .await,
+        Err(CoreError::InvalidInput)
+    );
+    assert_eq!(
+        f.coordinator.decide(run, vec![], vec![]).await,
+        Err(CoreError::InvalidInput)
+    );
+    assert_eq!(
+        f.coordinator
+            .decide(RunId::new(), vec![first], vec![])
+            .await,
+        Err(CoreError::Conflict)
+    );
+    let data = f.data(run).await;
+    assert!(data
+        .attempts
+        .iter()
+        .all(|a| a.state == AttemptState::Proposed));
+}
+#[tokio::test]
+async fn repeated_decisions_are_idempotent_and_resume_dispatches_once() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let request = f.request().await;
+    request.finish(Ok(turn(vec![f.tool_call("first"), f.tool_call("second")])));
+    let data = f.settled(run).await;
+    let first = data.attempts[0].binding.clone().unwrap();
+    let second = data.attempts[1].id;
+    let decided = f
+        .coordinator
+        .decide(run, vec![first.clone()], vec![second])
+        .await
+        .unwrap();
+    assert!(decided.changed);
+    assert_eq!(decided.run_state, RunState::WaitingApproval);
+    let repeated = f
+        .coordinator
+        .decide(run, vec![first.clone()], vec![second])
+        .await
+        .unwrap();
+    assert!(!repeated.changed);
+    f.coordinator.deny(second).await.unwrap();
+    f.coordinator.approve(first).await.unwrap();
+    let data = f.data(run).await;
+    assert_eq!(data.attempts[0].state, AttemptState::Approved);
+    assert_eq!(data.attempts[1].state, AttemptState::Denied);
+    f.coordinator.resume(run).await.unwrap();
+    let call = f.calls.recv().await.unwrap();
+    assert_eq!(call.call.provider_call_id, "first");
+    call.reply.send(Ok(outcome(false, 2))).unwrap();
+    f.request().await.finish(Ok(turn(vec![])));
+    assert_eq!(f.settled(run).await.state, RunState::Completed);
+    assert_eq!(f.writes.load(Ordering::SeqCst), 1);
+}
+#[tokio::test]
 async fn stop_and_approval_race_has_no_dispatch() {
     let mut f = Fixture::new();
     let run = f.start().await;

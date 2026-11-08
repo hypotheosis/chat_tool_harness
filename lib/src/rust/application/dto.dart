@@ -905,12 +905,18 @@ class AgentServerConfig {
   final bool allowHttp;
   final List<AgentSecretHeader> secretHeaders;
 
+  /// Whether every tool of this server runs without asking (Block rules
+  /// still apply). Computed for the app snapshot's server list; ignored by
+  /// `SaveServer` (use `SetServerTrust`) and false in run profile snapshots.
+  final bool trusted;
+
   const AgentServerConfig({
     required this.id,
     required this.name,
     required this.url,
     required this.allowHttp,
     required this.secretHeaders,
+    required this.trusted,
   });
 
   @override
@@ -919,7 +925,8 @@ class AgentServerConfig {
       name.hashCode ^
       url.hashCode ^
       allowHttp.hashCode ^
-      secretHeaders.hashCode;
+      secretHeaders.hashCode ^
+      trusted.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -930,7 +937,8 @@ class AgentServerConfig {
           name == other.name &&
           url == other.url &&
           allowHttp == other.allowHttp &&
-          secretHeaders == other.secretHeaders;
+          secretHeaders == other.secretHeaders &&
+          trusted == other.trusted;
 }
 
 class AgentSkippedTool {
@@ -1122,6 +1130,22 @@ sealed class AppCommand with _$AppCommand {
   const factory AppCommand.approve({required AgentApprovalBinding binding}) =
       AppCommand_Approve;
   const factory AppCommand.deny({required String attemptId}) = AppCommand_Deny;
+
+  /// Approve and deny attempts of one run at once, then resume it. Any stale
+  /// binding fails the whole command and changes nothing; repeating a
+  /// decision already in effect is not an error.
+  const factory AppCommand.decideApprovals({
+    required String runId,
+    required List<AgentApprovalBinding> approve,
+    required List<String> deny,
+  }) = AppCommand_DecideApprovals;
+
+  /// Trust (or stop trusting) every tool of an MCP server for its current
+  /// URL, HTTP setting and credential references. Needs no network.
+  const factory AppCommand.setServerTrust({
+    required String serverId,
+    required bool trusted,
+  }) = AppCommand_SetServerTrust;
   const factory AppCommand.summarizeContext({
     required String conversationId,
     required AgentContextSelection selection,

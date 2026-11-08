@@ -989,14 +989,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AgentServerConfig dco_decode_agent_server_config(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return AgentServerConfig(
       id: dco_decode_String(arr[0]),
       name: dco_decode_String(arr[1]),
       url: dco_decode_String(arr[2]),
       allowHttp: dco_decode_bool(arr[3]),
       secretHeaders: dco_decode_list_agent_secret_header(arr[4]),
+      trusted: dco_decode_bool(arr[5]),
     );
   }
 
@@ -1160,16 +1161,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 23:
         return AppCommand_Deny(attemptId: dco_decode_String(raw[1]));
       case 24:
+        return AppCommand_DecideApprovals(
+          runId: dco_decode_String(raw[1]),
+          approve: dco_decode_list_agent_approval_binding(raw[2]),
+          deny: dco_decode_list_String(raw[3]),
+        );
+      case 25:
+        return AppCommand_SetServerTrust(
+          serverId: dco_decode_String(raw[1]),
+          trusted: dco_decode_bool(raw[2]),
+        );
+      case 26:
         return AppCommand_SummarizeContext(
           conversationId: dco_decode_String(raw[1]),
           selection: dco_decode_box_autoadd_agent_context_selection(raw[2]),
         );
-      case 25:
+      case 27:
         return AppCommand_ApplyContextSelection(
           runId: dco_decode_String(raw[1]),
           selection: dco_decode_box_autoadd_agent_context_selection(raw[2]),
         );
-      case 26:
+      case 28:
         return AppCommand_AcknowledgeContextDisclosure(
           conversationId: dco_decode_String(raw[1]),
           origin: dco_decode_String(raw[2]),
@@ -1399,6 +1411,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<String> dco_decode_list_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_String).toList();
+  }
+
+  @protected
+  List<AgentApprovalBinding> dco_decode_list_agent_approval_binding(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_agent_approval_binding)
+        .toList();
   }
 
   @protected
@@ -2363,12 +2385,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_url = sse_decode_String(deserializer);
     var var_allowHttp = sse_decode_bool(deserializer);
     var var_secretHeaders = sse_decode_list_agent_secret_header(deserializer);
+    var var_trusted = sse_decode_bool(deserializer);
     return AgentServerConfig(
       id: var_id,
       name: var_name,
       url: var_url,
       allowHttp: var_allowHttp,
       secretHeaders: var_secretHeaders,
+      trusted: var_trusted,
     );
   }
 
@@ -2569,6 +2593,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         var var_attemptId = sse_decode_String(deserializer);
         return AppCommand_Deny(attemptId: var_attemptId);
       case 24:
+        var var_runId = sse_decode_String(deserializer);
+        var var_approve = sse_decode_list_agent_approval_binding(deserializer);
+        var var_deny = sse_decode_list_String(deserializer);
+        return AppCommand_DecideApprovals(
+          runId: var_runId,
+          approve: var_approve,
+          deny: var_deny,
+        );
+      case 25:
+        var var_serverId = sse_decode_String(deserializer);
+        var var_trusted = sse_decode_bool(deserializer);
+        return AppCommand_SetServerTrust(
+          serverId: var_serverId,
+          trusted: var_trusted,
+        );
+      case 26:
         var var_conversationId = sse_decode_String(deserializer);
         var var_selection = sse_decode_box_autoadd_agent_context_selection(
           deserializer,
@@ -2577,7 +2617,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           conversationId: var_conversationId,
           selection: var_selection,
         );
-      case 25:
+      case 27:
         var var_runId = sse_decode_String(deserializer);
         var var_selection = sse_decode_box_autoadd_agent_context_selection(
           deserializer,
@@ -2586,7 +2626,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           runId: var_runId,
           selection: var_selection,
         );
-      case 26:
+      case 28:
         var var_conversationId = sse_decode_String(deserializer);
         var var_origin = sse_decode_String(deserializer);
         return AppCommand_AcknowledgeContextDisclosure(
@@ -2850,6 +2890,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <String>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AgentApprovalBinding> sse_decode_list_agent_approval_binding(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentApprovalBinding>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_approval_binding(deserializer));
     }
     return ans_;
   }
@@ -3902,6 +3956,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.url, serializer);
     sse_encode_bool(self.allowHttp, serializer);
     sse_encode_list_agent_secret_header(self.secretHeaders, serializer);
+    sse_encode_bool(self.trusted, serializer);
   }
 
   @protected
@@ -4082,25 +4137,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case AppCommand_Deny(attemptId: final attemptId):
         sse_encode_i_32(23, serializer);
         sse_encode_String(attemptId, serializer);
+      case AppCommand_DecideApprovals(
+        runId: final runId,
+        approve: final approve,
+        deny: final deny,
+      ):
+        sse_encode_i_32(24, serializer);
+        sse_encode_String(runId, serializer);
+        sse_encode_list_agent_approval_binding(approve, serializer);
+        sse_encode_list_String(deny, serializer);
+      case AppCommand_SetServerTrust(
+        serverId: final serverId,
+        trusted: final trusted,
+      ):
+        sse_encode_i_32(25, serializer);
+        sse_encode_String(serverId, serializer);
+        sse_encode_bool(trusted, serializer);
       case AppCommand_SummarizeContext(
         conversationId: final conversationId,
         selection: final selection,
       ):
-        sse_encode_i_32(24, serializer);
+        sse_encode_i_32(26, serializer);
         sse_encode_String(conversationId, serializer);
         sse_encode_box_autoadd_agent_context_selection(selection, serializer);
       case AppCommand_ApplyContextSelection(
         runId: final runId,
         selection: final selection,
       ):
-        sse_encode_i_32(25, serializer);
+        sse_encode_i_32(27, serializer);
         sse_encode_String(runId, serializer);
         sse_encode_box_autoadd_agent_context_selection(selection, serializer);
       case AppCommand_AcknowledgeContextDisclosure(
         conversationId: final conversationId,
         origin: final origin,
       ):
-        sse_encode_i_32(26, serializer);
+        sse_encode_i_32(28, serializer);
         sse_encode_String(conversationId, serializer);
         sse_encode_String(origin, serializer);
     }
@@ -4382,6 +4453,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_approval_binding(
+    List<AgentApprovalBinding> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_approval_binding(item, serializer);
     }
   }
 

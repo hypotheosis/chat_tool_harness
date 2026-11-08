@@ -274,6 +274,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> dco_decode_list_String(dynamic raw);
 
   @protected
+  List<AgentApprovalBinding> dco_decode_list_agent_approval_binding(
+    dynamic raw,
+  );
+
+  @protected
   List<AgentArtifact> dco_decode_list_agent_artifact(dynamic raw);
 
   @protected
@@ -734,6 +739,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<AgentApprovalBinding> sse_decode_list_agent_approval_binding(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<AgentArtifact> sse_decode_list_agent_artifact(
@@ -1315,6 +1325,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_agent_approval_binding(
+    List<AgentApprovalBinding> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_agent_artifact(
