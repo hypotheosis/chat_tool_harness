@@ -61,6 +61,16 @@ pub async fn scope<F: Future>(work: F) -> (F::Output, Option<FailureDetail>) {
     .await
 }
 
+/// Synchronous [`scope`] for blocking work (for example inside
+/// `spawn_blocking`, where async task-locals are absent): runs `work` with a
+/// fresh failure note and returns its output and the last note.
+pub fn sync_scope<T>(work: impl FnOnce() -> T) -> (T, Option<FailureDetail>) {
+    NOTE.sync_scope(RefCell::new(None), || {
+        let output = STEP.sync_scope(RefCell::new(None), work);
+        (output, take())
+    })
+}
+
 /// Takes the current note without leaving the scope.
 pub fn take() -> Option<FailureDetail> {
     NOTE.try_with(|n| n.borrow_mut().take()).ok().flatten()

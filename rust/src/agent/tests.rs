@@ -2624,7 +2624,7 @@ impl Fixture {
             .find(|r| r.id == run)
             .unwrap()
     }
-    async fn settled(&self, run: RunId) -> state::RunData {
+    async fn settled(&mut self, run: RunId) -> state::RunData {
         self.idle().await;
         let data = self.data(run).await;
         assert_ne!(data.state, RunState::Running, "run did not settle");
@@ -2639,13 +2639,21 @@ impl Fixture {
         self.coordinator.approve(binding).await.unwrap();
         self.coordinator.resume(run).await.unwrap();
     }
-    async fn idle(&self) {
+    /// Waits for the worker to finish; an inference request arriving meanwhile
+    /// fails the test instead of leaving the run (and the test) waiting forever.
+    async fn idle(&mut self) {
         let done = {
             let slot = self.coordinator.inner.running.lock().await;
             slot.as_ref().map(|running| running.done.clone())
         };
         if let Some(done) = done {
-            wait_done(done).await;
+            tokio::select! {
+                biased;
+                () = wait_done(done) => {}
+                Some(_) = self.requests.recv() => {
+                    panic!("unexpected inference request while waiting for idle")
+                }
+            }
         }
         assert!(
             self.coordinator.inner.running.lock().await.is_none(),
@@ -3004,21 +3012,146 @@ async fn new_turn_uses_edited_settings_and_unchanged_settings_add_no_revision() 
     assert_eq!(f.repo.run_profile_revision(run).unwrap(), 2);
 }
 
+fn delete_profile_sql(f: &Fixture) -> String {
+    format!(
+        "PRAGMA foreign_keys=OFF; DELETE FROM profile_servers WHERE profile_id='{0}'; DELETE FROM profiles WHERE id='{0}'; PRAGMA foreign_keys=ON;",
+        f.profile.0
+    )
+}
+
+fn assert_refresh_detail(detail: Option<crate::failure::FailureDetail>) {
+    let detail = detail.expect("refresh failure detail reaches the caller");
+    assert_eq!(
+        detail.target,
+        crate::failure::FailureTarget::Profile {
+            name: "profile".into()
+        }
+    );
+    assert_eq!(detail.step, crate::failure::FailureStep::RefreshProfile);
+    assert_eq!(
+        detail.reason.as_deref(),
+        Some("profile, endpoint or server no longer exists")
+    );
+}
+
+fn edit_endpoint_url(f: &Fixture) {
+    let mut endpoint = f
+        .repo
+        .conversation(f.conversation)
+        .unwrap()
+        .profile
+        .endpoint;
+    endpoint.base_url = "https://example.com/v1".into();
+    f.repo.save_endpoint(endpoint).unwrap();
+}
+
 #[tokio::test]
 async fn turn_fails_with_configuration_when_profile_was_deleted() {
     let f = Fixture::new();
-    let profile = f.profile;
-    f.sql(&format!(
-        "PRAGMA foreign_keys=OFF; DELETE FROM profile_servers WHERE profile_id='{0}'; DELETE FROM profiles WHERE id='{0}'; PRAGMA foreign_keys=ON;",
-        profile.0
-    ))
-    .await;
-    assert_eq!(
-        f.coordinator
-            .start_turn(f.conversation, "do it".into())
-            .await,
-        Err(CoreError::Configuration)
-    );
+    f.sql(&delete_profile_sql(&f)).await;
+    let (result, detail) =
+        crate::failure::scope(f.coordinator.start_turn(f.conversation, "do it".into())).await;
+    assert_eq!(result, Err(CoreError::Configuration));
+    assert_refresh_detail(detail);
     assert!(f.coordinator.snapshot().await.unwrap().runs.is_empty());
     assert_eq!(current_conversation_revision(&f), 1);
+}
+
+#[tokio::test]
+async fn summary_fails_with_configuration_detail_when_profile_was_deleted() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    f.request().await.finish(Ok(turn(vec![])));
+    f.settled(run).await;
+    let message = f.repo.conversation(f.conversation).unwrap().messages[0].id;
+    f.sql(&delete_profile_sql(&f)).await;
+    let (result, detail) = crate::failure::scope(f.coordinator.summarize_context(
+        f.conversation,
+        ContextSelection {
+            message_ids: vec![message],
+            summary_ids: vec![],
+        },
+    ))
+    .await;
+    assert_eq!(result, Err(CoreError::Configuration));
+    assert_refresh_detail(detail);
+    assert_eq!(f.coordinator.snapshot().await.unwrap().runs.len(), 1);
+    assert_eq!(current_conversation_revision(&f), 1);
+}
+
+#[tokio::test]
+async fn resume_fails_with_configuration_detail_when_profile_was_deleted() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    f.request()
+        .await
+        .finish(Err(CoreError::UnavailableTransport));
+    assert_eq!(f.settled(run).await.state, RunState::Paused);
+    f.sql(&delete_profile_sql(&f)).await;
+    let (result, detail) = crate::failure::scope(f.coordinator.resume(run)).await;
+    assert_eq!(result, Err(CoreError::Configuration));
+    assert_refresh_detail(detail);
+    assert_eq!(f.data(run).await.state, RunState::Paused);
+    assert_eq!(f.repo.run_profile_revision(run).unwrap(), 1);
+    assert!(f.requests.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn rejected_message_does_not_record_profile_revision() {
+    let f = Fixture::new();
+    edit_endpoint_url(&f);
+    for text in [
+        "   ".to_string(),
+        "x".repeat(crate::inference::MAX_TEXT_BYTES + 1),
+    ] {
+        assert_eq!(
+            f.coordinator.start_turn(f.conversation, text).await,
+            Err(CoreError::InvalidInput)
+        );
+    }
+    assert_eq!(current_conversation_revision(&f), 1);
+    assert!(f.coordinator.snapshot().await.unwrap().runs.is_empty());
+}
+
+#[tokio::test]
+async fn resume_after_concurrent_cancel_keeps_original_revision() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    f.request()
+        .await
+        .finish(Err(CoreError::UnavailableTransport));
+    assert_eq!(f.settled(run).await.state, RunState::Paused);
+    edit_endpoint_url(&f);
+    // Resume's refresh committed, then a cancel lands before the rebind.
+    assert!(f.repo.refresh_profile(f.conversation).unwrap());
+    state::cancel(&f.repo, run).unwrap();
+    assert_eq!(
+        state::resume_on_current(&f.repo, run, RunState::Paused),
+        Err(CoreError::Conflict)
+    );
+    assert_eq!(f.data(run).await.state, RunState::Cancelled);
+    assert_eq!(f.repo.run_profile_revision(run).unwrap(), 1);
+}
+
+#[tokio::test]
+async fn unknown_outcome_resume_after_settings_edit_is_refused_without_refresh() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let binding = f.waiting(run).await;
+    f.approve(run, binding).await;
+    let dispatched = f.calls.recv().await.expect("one controlled write");
+    f.coordinator
+        .platform_pause(run, f.host.generation())
+        .await
+        .unwrap();
+    drop(dispatched);
+    let data = f.settled(run).await;
+    assert_eq!(data.state, RunState::Paused);
+    assert_eq!(data.attempts[0].state, AttemptState::OutcomeUnknown);
+    edit_endpoint_url(&f);
+    assert_eq!(f.coordinator.resume(run).await, Err(CoreError::Conflict));
+    assert_eq!(current_conversation_revision(&f), 1);
+    assert_eq!(f.repo.run_profile_revision(run).unwrap(), 1);
+    assert!(f.requests.try_recv().is_err());
+    assert_eq!(f.writes.load(Ordering::SeqCst), 1);
 }

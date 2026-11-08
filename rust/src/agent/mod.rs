@@ -241,6 +241,23 @@ impl Inner {
     ) -> CoreResult<T> {
         let repo = self.repository.clone();
         let result = db(move || operation(repo)).await;
+        self.poison_on_storage(result)
+    }
+    /// Like `persist`, but captures a failure note made by the blocking
+    /// operation (async task-locals do not reach `spawn_blocking`).
+    async fn persist_noted<T: Send + 'static>(
+        &self,
+        operation: impl FnOnce(Repository) -> CoreResult<T> + Send + 'static,
+    ) -> (CoreResult<T>, Option<crate::failure::FailureDetail>) {
+        let repo = self.repository.clone();
+        let (result, detail) =
+            match db(move || Ok(crate::failure::sync_scope(move || operation(repo)))).await {
+                Ok(noted) => noted,
+                Err(error) => (Err(error), None),
+            };
+        (self.poison_on_storage(result), detail)
+    }
+    fn poison_on_storage<T>(&self, result: CoreResult<T>) -> CoreResult<T> {
         if matches!(result, Err(CoreError::Storage)) {
             self.poisoned
                 .store(true, std::sync::atomic::Ordering::Release);
@@ -303,11 +320,13 @@ impl Coordinator {
                 return Err(CoreError::Conflict);
             }
             self.launch(&mut slot, run, move |repo| {
+                // A rejected message must not record a new profile revision.
+                state::validate_turn_text(&text)?;
                 repo.refresh_profile(conversation)?;
                 state::start(&repo, run, conversation, text)
             })
         };
-        ready.await.map_err(|_| CoreError::Storage)??;
+        prepared(ready).await?;
         Ok(run)
     }
     pub async fn summarize_context(
@@ -332,7 +351,7 @@ impl Coordinator {
                 state::start_summary(&repo, run, conversation, selection)
             })
         };
-        ready.await.map_err(|_| CoreError::Storage)??;
+        prepared(ready).await?;
         Ok(run)
     }
     pub async fn apply_context_selection(
@@ -364,7 +383,7 @@ impl Coordinator {
         slot: &mut Option<Running>,
         run: RunId,
         prepare: impl FnOnce(Repository) -> CoreResult<()> + Send + 'static,
-    ) -> tokio::sync::oneshot::Receiver<CoreResult<()>> {
+    ) -> tokio::sync::oneshot::Receiver<Prepared> {
         let cancel = self.inner.owner.child_token();
         let child = cancel.clone();
         let (ready, receiver) = tokio::sync::oneshot::channel();
@@ -383,8 +402,8 @@ impl Coordinator {
             done: finished,
         });
         tokio::spawn(async move {
-            let prepared = inner.persist(prepare).await;
-            let success = prepared.is_ok();
+            let prepared = inner.persist_noted(prepare).await;
+            let success = prepared.0.is_ok();
             if !success {
                 let mut slot = inner.running.lock().await;
                 if slot
@@ -515,11 +534,10 @@ impl Coordinator {
                 // Fixed settings (URL, credential) apply to the resumed run; the
                 // guards above still keep unknown-outcome attempts from replaying.
                 repo.refresh_profile(data.conversation)?;
-                state::rebind_to_current(&repo, run)?;
-                state::transition(&repo, run, &[data.state], RunState::Running, 0)
+                state::resume_on_current(&repo, run, data.state)
             })
         };
-        ready.await.map_err(|_| CoreError::Storage)?
+        prepared(ready).await
     }
     pub async fn context_snapshot(
         &self,
@@ -558,6 +576,19 @@ impl Coordinator {
         }
         self.inner.cleanup_result()
     }
+}
+/// A launch's preparation result and the failure note it made, if any.
+type Prepared = (CoreResult<()>, Option<crate::failure::FailureDetail>);
+/// Awaits a launch's preparation and re-notes its failure detail in the
+/// caller's failure scope.
+async fn prepared(ready: tokio::sync::oneshot::Receiver<Prepared>) -> CoreResult<()> {
+    let (result, detail) = ready.await.map_err(|_| CoreError::Storage)?;
+    if result.is_err() {
+        if let Some(detail) = detail {
+            crate::failure::note(detail);
+        }
+    }
+    result
 }
 async fn wait_done(mut done: tokio::sync::watch::Receiver<bool>) {
     while !*done.borrow_and_update() {

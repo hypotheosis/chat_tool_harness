@@ -157,15 +157,20 @@ fn event(
     Ok(())
 }
 
+/// Rejects an empty or oversized user message.
+pub fn validate_turn_text(text: &str) -> CoreResult<()> {
+    if text.trim().is_empty() || text.len() > crate::inference::MAX_TEXT_BYTES {
+        return Err(CoreError::InvalidInput);
+    }
+    Ok(())
+}
 pub fn start(
     repo: &Repository,
     run: RunId,
     conversation: ConversationId,
     text: String,
 ) -> CoreResult<()> {
-    if text.trim().is_empty() || text.len() > crate::inference::MAX_TEXT_BYTES {
-        return Err(CoreError::InvalidInput);
-    }
+    validate_turn_text(&text)?;
     repo.with_connection(move |conn| {
         let tx = conn.transaction().map_err(sql_error)?;
         let revision: i64 = tx.query_row("SELECT current_revision FROM conversations WHERE id=?1", [conversation.0.to_string()], |r|r.get(0)).optional().map_err(sql_error)?.ok_or(CoreError::Conflict)?;
@@ -206,25 +211,18 @@ pub fn load(repo: &Repository, run: RunId) -> CoreResult<RunData> {
         Ok(RunData { context:parse(&context)?, id:run, conversation, profile:parse(&profile)?, state:state(&status)?, inference_count:u32::try_from(inference_count).map_err(|_|CoreError::Storage)?,attempt_count:u32::try_from(attempt_count).map_err(|_|CoreError::Storage)?,active_ms:u64::try_from(active_ms).map_err(|_|CoreError::Storage)?,messages,attempts,partial_text,failure:failure.map(StoredFailure::parse) })
     })
 }
-/// Points a resumable run at its conversation's current snapshot revision.
-pub fn rebind_to_current(repo: &Repository, run: RunId) -> CoreResult<()> {
-    repo.with_connection(move |conn| {
-        conn.execute(
-            "UPDATE runs SET snapshot_revision=(SELECT c.current_revision FROM conversations c WHERE c.id=runs.conversation_id) WHERE id=?1",
-            [run.0.to_string()],
-        )
-        .map_err(sql_error)?;
-        Ok(())
-    })
-}
-pub fn transition(
-    repo: &Repository,
-    run: RunId,
-    from: &[RunState],
-    to: RunState,
-    active_ms: u64,
-) -> CoreResult<()> {
-    let from: Vec<String> = from.iter().map(|v| format!("{v:?}")).collect();
+/// Moves a resumable run from `from` to Running and, in the same transaction,
+/// points it at its conversation's current snapshot revision. A run whose
+/// state changed meanwhile (for example a concurrent cancel) is a Conflict
+/// and keeps its revision.
+pub fn resume_on_current(repo: &Repository, run: RunId, from: RunState) -> CoreResult<()> {
+    if !matches!(
+        from,
+        RunState::WaitingApproval | RunState::Paused | RunState::Interrupted
+    ) {
+        return Err(CoreError::Conflict);
+    }
+    let from = format!("{from:?}");
     repo.with_connection(move |conn| {
         let tx = conn.transaction().map_err(sql_error)?;
         let (conversation, status): (String, String) = tx
@@ -236,22 +234,22 @@ pub fn transition(
             .optional()
             .map_err(sql_error)?
             .ok_or(CoreError::Conflict)?;
-        if !from.contains(&status) {
+        if status != from {
             return Err(CoreError::Conflict);
         }
-        tx.execute(
-            "UPDATE runs SET state=?1,active_ms=active_ms+?2 WHERE id=?3",
-            params![
-                format!("{to:?}"),
-                i64::try_from(active_ms).map_err(|_| CoreError::Limit)?,
-                run.0.to_string()
-            ],
-        )
-        .map_err(sql_error)?;
+        let changed = tx
+            .execute(
+                "UPDATE runs SET state='Running',snapshot_revision=(SELECT c.current_revision FROM conversations c WHERE c.id=runs.conversation_id) WHERE id=?1 AND state=?2",
+                params![run.0.to_string(), from],
+            )
+            .map_err(sql_error)?;
+        if changed != 1 {
+            return Err(CoreError::Conflict);
+        }
         event(
             &tx,
             ConversationId(uuid(conversation)?),
-            &format!("run:{}:{to:?}", run.0),
+            &format!("run:{}:Running", run.0),
         )?;
         tx.commit().map_err(sql_error)?;
         Ok(())
