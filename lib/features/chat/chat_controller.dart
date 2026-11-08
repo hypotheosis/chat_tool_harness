@@ -19,12 +19,28 @@ class ChatController extends ScreenController {
     await perform(StartTurn(conversationId, text));
   }
 
-  Future<void> approve(ApprovalBinding binding) async {
-    await perform(Approve(binding), approval: true);
+  /// Approves [approve] and denies [deny] (attempt ids) of run [runId] in one
+  /// command, which then resumes the run.
+  Future<void> decide(
+    String runId, {
+    List<ApprovalBinding> approve = const [],
+    List<String> deny = const [],
+  }) async {
+    await perform(
+      DecideApprovals(runId, approve: approve, deny: deny),
+      approval: true,
+    );
   }
 
-  Future<void> deny(String id) async {
-    await perform(Deny(id), approval: true);
+  /// Trusts [serverId], then approves [approve] of run [runId]; approves
+  /// nothing when trusting fails.
+  Future<void> trustAndApprove(
+    String runId,
+    String serverId,
+    List<ApprovalBinding> approve,
+  ) async {
+    final trusted = await perform(SetServerTrust(serverId, trusted: true));
+    if (trusted != null) await decide(runId, approve: approve);
   }
 
   Future<void> stop(String runId) async {

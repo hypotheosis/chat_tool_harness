@@ -80,6 +80,13 @@ class _ToolRulesScreenState extends State<ToolRulesScreen> {
     ]);
   }
 
+  /// Whether [rule]'s server is trusted, so its tools run without asking.
+  bool trustedServer(ToolRule rule) =>
+      state.snapshot?.servers.any(
+        (s) => s.id == rule.key.serverId && s.trusted,
+      ) ??
+      false;
+
   bool hasLive(ToolRule rule) =>
       state.snapshot?.rules.any((r) => identity(r) == identity(rule)) ?? false;
   void reconcileCache() {
@@ -201,6 +208,11 @@ class _ToolRulesScreenState extends State<ToolRulesScreen> {
                             ? 'Current core observation / effective policy'
                             : 'Cached diagnostic observation — not live permission. Applying a change requires fresh core validation/discovery.',
                       ),
+                      // Block rules still apply to a trusted server.
+                      if (trustedServer(rule))
+                        const Text(
+                          'Trusted server: all tools run without asking',
+                        ),
                       ExpansionTile(
                         title: const Text('Observed schema'),
                         children: [SelectableText(rule.schemaJson)],

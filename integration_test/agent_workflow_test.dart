@@ -178,13 +178,16 @@ void main() {
       );
       Future<void> approve(Run pending) async {
         await chat();
+        // The transcript card, `tool · server · state`.
         final tile = find.textContaining(
-          'Tool ${pending.attempts.single.call.key.name} •',
+          RegExp(
+            '^${pending.attempts.single.call.key.name} · .* · Needs approval\$',
+          ),
         );
         await tap(tile);
         expect(find.text('Requested arguments (immutable)'), findsOneWidget);
-        await tap(find.text('Approve exact arguments'));
-        await tap(find.byKey(Key('resume-${pending.id}')));
+        // Approve all decides every pending call and resumes the run.
+        await tap(find.byKey(Key('approve-all-${pending.id}')));
         await waitRun(
           (r) => r.id == pending.id && r.state == RunState.completed,
         );

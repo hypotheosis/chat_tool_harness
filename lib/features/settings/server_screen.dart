@@ -5,6 +5,10 @@ import '../../backend/models.dart';
 import '../result_banner.dart';
 import '../screen_controller.dart';
 
+/// What trusting [server] means, shown before and where trust is set.
+String trustExplanation(String server) =>
+    'Tools from $server will run without asking, including tools it adds later, until you turn this off in its settings or its URL or credentials change.';
+
 class ServerScreen extends StatefulWidget {
   const ServerScreen({super.key, required this.backend, this.server});
   final Backend backend;
@@ -42,6 +46,20 @@ class _ServerScreenState extends State<ServerScreen> {
     final linked = linkedProfiles;
     if (linked.any((p) => p.id == profileId)) return profileId;
     return linked.isEmpty ? null : linked.first.id;
+  }
+
+  /// The saved configuration of this server, current when loaded.
+  ServerConfig? get saved =>
+      state.snapshot?.servers.where((s) => s.id == id).firstOrNull ??
+      (id == widget.server?.id ? widget.server : null);
+
+  Future<void> setTrust(bool trusted) async {
+    final server = id;
+    if (server == null) return;
+    final reply = await state.perform(SetServerTrust(server, trusted: trusted));
+    if (reply != null && mounted) {
+      state.succeed(trusted ? 'Server trusted.' : 'Server no longer trusted.');
+    }
   }
 
   List<String> tools = [];
@@ -173,6 +191,14 @@ class _ServerScreenState extends State<ServerScreen> {
             FilledButton(
               onPressed: state.loading ? null : save,
               child: const Text('Save server'),
+            ),
+            SwitchListTile(
+              key: const Key('trust-server'),
+              title: const Text('Trust this server'),
+              subtitle: Text(trustExplanation(saved?.name ?? 'this server')),
+              value: saved?.trusted ?? false,
+              // Trust applies to the saved server; save a new one first.
+              onChanged: state.loading || saved == null ? null : setTrust,
             ),
             const Text(
               'Safe connectivity/discovery only. Select a saved profile that includes this server; save edits before testing.',

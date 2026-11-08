@@ -107,7 +107,7 @@ void main() {
     );
   }
   testWidgets(
-    'R2 older waiting A keeps bound approval resume and Stop after completed B',
+    'R2 older waiting A keeps its bound approval card and Stop after completed B',
     (t) async {
       final b = UiBackend()
         ..current = AppSnapshot(
@@ -128,35 +128,25 @@ void main() {
         ),
       );
       await t.pumpAndSettle();
-      await t.scrollUntilVisible(
-        find.text('Tool write • s • proposed'),
-        180,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await t.tap(find.text('Tool write • s • proposed'));
+      expect(find.byKey(const Key('approval-A')), findsOneWidget);
+      expect(find.byKey(const Key('approval-B')), findsNothing);
+      // A decision is pending, so the run row offers Stop but no Resume.
+      expect(find.byKey(const Key('resume-A')), findsNothing);
+      await t.ensureVisible(find.byKey(const Key('approve-all-A')));
       await t.pumpAndSettle();
-      await t.scrollUntilVisible(
-        find.text('Approve exact arguments'),
-        180,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await t.ensureVisible(find.text('Approve exact arguments'));
+      await t.tap(find.byKey(const Key('approve-all-A')));
       await t.pumpAndSettle();
-      await t.tap(find.text('Approve exact arguments'));
+      final approved = b.commands.whereType<DecideApprovals>().single;
+      expect(approved.runId, 'A');
+      expect(identical(approved.approve.single, binding), isTrue);
+      await t.tap(find.byKey(const Key('deny-a')));
       await t.pumpAndSettle();
-      expect(
-        identical(b.commands.whereType<Approve>().single.binding, binding),
-        isTrue,
-      );
-      await t.tap(find.text('Deny'));
-      await t.pumpAndSettle();
-      expect(b.commands.whereType<Deny>().single.attemptId, 'a');
-      await tapKey(t, 'resume-A');
-      expect(b.commands.whereType<ResumeRun>().single.runId, 'A');
+      expect(b.commands.whereType<DecideApprovals>().last.deny, ['a']);
       await tapKey(t, 'stop-A');
       await t.tap(find.byKey(const Key('confirm-stop')));
       await t.pumpAndSettle();
       expect(b.commands.whereType<CancelRun>().single.runId, 'A');
+      expect(b.commands.whereType<ResumeRun>(), isEmpty);
       expect(find.byKey(const Key('resume-B')), findsNothing);
     },
   );

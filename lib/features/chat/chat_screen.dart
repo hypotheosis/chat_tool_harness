@@ -8,6 +8,7 @@ import '../result_banner.dart';
 import '../screen_controller.dart';
 import '../settings/endpoint_screen.dart';
 import '../settings/server_screen.dart';
+import 'approval_card.dart';
 import 'chat_controller.dart';
 import 'run_card.dart';
 
@@ -335,10 +336,13 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: Text(
                     run.state == RunState.running
                         ? 'Working…'
-                        : 'Waiting for approval',
+                        : 'Waiting for your approval',
                   ),
                 ),
+                // The approval card decides pending calls and resumes; Resume
+                // is only for a run whose calls are all decided already.
                 if (run.state == RunState.waitingApproval &&
+                    pendingDecisions(run).isEmpty &&
                     !hasUnresolvedAttempt(run))
                   TextButton(
                     key: Key('resume-${run.id}'),
@@ -385,7 +389,7 @@ class _ChatScreenState extends State<ChatScreen> {
         flush();
         pending = runs;
       }
-      out.add(messageCard(m));
+      out.add(messageCard(m, c));
     }
     flush();
     pending = loose;
@@ -393,7 +397,67 @@ class _ChatScreenState extends State<ChatScreen> {
     return out;
   }
 
-  Widget messageCard(Message m) => Card(
+  /// The display name of [serverId] in [run].
+  String serverName(String? serverId, Run run) =>
+      serverLabel(serverId, run, state.snapshot);
+
+  /// The display name of [serverId] in [c]'s profile, else the current
+  /// configuration, else the id.
+  String conversationServerName(String? serverId, Conversation c) {
+    if (serverId == null) return 'Local files';
+    for (final s in [...c.profile.servers, ...?state.snapshot?.servers]) {
+      if (s.id == serverId) return s.name;
+    }
+    return serverId;
+  }
+
+  /// Asks before trusting [server]: trust covers tools it adds later.
+  Future<bool> confirmTrust(String server) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Always allow $server?'),
+          content: Text(trustExplanation(server)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              key: const Key('confirm-trust'),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Always allow'),
+            ),
+          ],
+        ),
+      ) ==
+      true;
+
+  /// The approval card of a run with calls that need a decision.
+  Widget approvalCard(Run run, List<Attempt> calls) {
+    final busy = state.loading;
+    final bindings = [for (final a in calls) a.binding!];
+    final sole = ApprovalCard.soleServer(calls);
+    return ApprovalCard(
+      runId: run.id,
+      calls: calls,
+      serverName: (id) => serverName(id, run),
+      onApproveAll: busy ? null : () => state.decide(run.id, approve: bindings),
+      onDenyAll: busy
+          ? null
+          : () => state.decide(run.id, deny: [for (final a in calls) a.id]),
+      onDeny: busy ? null : (a) => state.decide(run.id, deny: [a.id]),
+      onAlwaysAllow: busy || sole == null
+          ? null
+          : () async {
+              if (await confirmTrust(serverName(sole, run))) {
+                await state.trustAndApprove(run.id, sole, bindings);
+              }
+            },
+    );
+  }
+
+  Widget messageCard(Message m, Conversation c) => Card(
     child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -404,7 +468,7 @@ class _ChatScreenState extends State<ChatScreen> {
           for (final call in m.calls)
             ExpansionTile(
               title: Text(
-                '${call.key.serverId ?? 'Local files'} / ${call.key.name}',
+                '${call.key.name} · ${conversationServerName(call.key.serverId, c)}',
               ),
               children: [SelectableText(call.argumentsJson)],
             ),
@@ -461,6 +525,12 @@ class _ChatScreenState extends State<ChatScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               ResultBanner(state: state),
+              // Deciding resumes the run, so a run with a call whose outcome
+              // is unknown gets no approval card; Stop is all it offers.
+              for (final r in state.runs)
+                if (pendingDecisions(r) case final calls
+                    when calls.isNotEmpty && !hasUnresolvedAttempt(r))
+                  approvalCard(r, calls),
               if (unacknowledged && !runAsks)
                 Card(
                   key: const Key('disclosure'),
@@ -517,58 +587,45 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget attempt(Attempt a, Run run) => Card(
-    child: ExpansionTile(
-      title: Text(
-        'Tool ${a.call.key.name} • ${a.call.key.serverId ?? 'Local files'} • ${a.state.name}',
-      ),
-      subtitle: a.state == AttemptState.outcomeUnknown
-          ? const Text(
-              'Outcome unknown — never retry automatically. Reconcile remote state outside this run.',
-            )
-          : null,
-      childrenPadding: const EdgeInsets.all(12),
-      children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: SelectableText(
-            'Profile ${a.call.key.profileId}\nServer ${a.call.key.serverId ?? 'Local files'}\nTool ${a.call.key.name}\nAttempt ${a.id}',
-          ),
+  /// A transcript tool card: `tool · server · state`, with ids, destination
+  /// and arguments under its details. Decisions live in the approval card.
+  Widget attempt(Attempt a, Run run) {
+    final key = a.call.key;
+    return Card(
+      child: ExpansionTile(
+        title: Text(
+          '${key.name} · ${serverName(key.serverId, run)} · ${attemptStateLabel(a)}',
         ),
-        for (final server in run.profile.servers)
-          if (server.id == a.call.key.serverId)
-            SelectableText('Destination: ${server.url}'),
-        const Text('Requested arguments (immutable)'),
-        SizedBox(
-          height: 180,
-          child: SingleChildScrollView(
-            child: SelectableText(a.call.argumentsJson),
-          ),
-        ),
-        if (a.binding case final binding?) ...[
-          if (binding.argumentsJson != a.call.argumentsJson)
-            SelectableText(binding.argumentsJson),
-          if (a.state == AttemptState.proposed ||
-              a.state == AttemptState.approved)
-            Wrap(
-              spacing: 8,
-              children: [
-                FilledButton(
-                  onPressed: state.loading
-                      ? null
-                      : () => state.approve(binding),
-                  child: const Text('Approve exact arguments'),
-                ),
-                OutlinedButton(
-                  onPressed: state.loading ? null : () => state.deny(a.id),
-                  child: const Text('Deny'),
-                ),
-              ],
+        subtitle: a.state == AttemptState.outcomeUnknown
+            ? const Text(
+                'Outcome unknown — never retry automatically. Reconcile remote state outside this run.',
+              )
+            : null,
+        childrenPadding: const EdgeInsets.all(12),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SelectableText(
+              'Profile ${key.profileId}\nServer ${key.serverId ?? 'Local files'}\nTool ${key.name}\nAttempt ${a.id}',
             ),
+          ),
+          for (final server in run.profile.servers)
+            if (server.id == key.serverId)
+              SelectableText('Destination: ${server.url}'),
+          const Text('Requested arguments (immutable)'),
+          SizedBox(
+            height: 180,
+            child: SingleChildScrollView(
+              child: SelectableText(a.call.argumentsJson),
+            ),
+          ),
+          if (a.binding case final binding?)
+            if (binding.argumentsJson != a.call.argumentsJson)
+              SelectableText(binding.argumentsJson),
         ],
-      ],
-    ),
-  );
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(

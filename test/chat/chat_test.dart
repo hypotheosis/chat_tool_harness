@@ -818,26 +818,33 @@ void main() {
       ),
     );
     await t.pumpAndSettle();
+    // The approval card shows the exact bound arguments, pretty-printed.
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('approval-r')),
+        matching: find.text('{\n  "text": "exact immutable arguments"\n}'),
+      ),
+      findsOneWidget,
+    );
     await t.scrollUntilVisible(
-      find.text('Tool write • s • proposed'),
+      find.text('write · Server · Needs approval'),
       200,
       scrollable: find.byType(Scrollable).first,
     );
     await t.pumpAndSettle();
-    await t.tap(find.text('Tool write • s • proposed'));
+    await t.tap(find.text('write · Server · Needs approval'));
     await t.pumpAndSettle();
     expect(find.text(binding.argumentsJson), findsOneWidget);
     expect(find.text('Destination: https://example.test/mcp'), findsOneWidget);
-    await t.scrollUntilVisible(
-      find.text('Approve exact arguments'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await t.ensureVisible(find.byKey(const Key('approve-all-r')));
     await t.pumpAndSettle();
-    await t.tap(find.text('Approve exact arguments'));
+    await t.tap(find.byKey(const Key('approve-all-r')));
     await t.pumpAndSettle();
     expect(
-      identical(b.commands.whereType<Approve>().single.binding, binding),
+      identical(
+        b.commands.whereType<DecideApprovals>().single.approve.single,
+        binding,
+      ),
       isTrue,
     );
     expect(t.takeException(), isNull);
@@ -894,21 +901,9 @@ void main() {
       ),
     );
     await t.pumpAndSettle();
-    await t.scrollUntilVisible(
-      find.text('Tool write • s • proposed'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await t.ensureVisible(find.byKey(const Key('approve-all-r')));
     await t.pumpAndSettle();
-    await t.tap(find.text('Tool write • s • proposed'));
-    await t.pumpAndSettle();
-    await t.scrollUntilVisible(
-      find.text('Approve exact arguments'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await t.pumpAndSettle();
-    await t.tap(find.text('Approve exact arguments'));
+    await t.tap(find.byKey(const Key('approve-all-r')));
     await t.pumpAndSettle();
     expect(find.textContaining('stale approval'), findsOneWidget);
     await t.scrollUntilVisible(
@@ -946,12 +941,12 @@ void main() {
     );
     await t.pumpAndSettle();
     await t.scrollUntilVisible(
-      find.text('Tool write • s • proposed'),
+      find.text('write · Server · Needs approval'),
       200,
       scrollable: find.byType(Scrollable).first,
     );
     await t.pumpAndSettle();
-    await t.tap(find.text('Tool write • s • proposed'));
+    await t.tap(find.text('write · Server · Needs approval'));
     await t.pumpAndSettle();
     expect(find.text(args), findsOneWidget);
     expect(t.takeException(), isNull);
