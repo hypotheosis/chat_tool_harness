@@ -70,22 +70,30 @@ void main() {
         ),
       );
       final owner = (await backend.execute(CreateConversation(profile))).id!;
+      // A running run shows a spinner that never settles, so settle for a
+      // bounded number of frames instead of waiting for idle.
+      Future<void> settle() async {
+        for (var i = 0; i < 40; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+          if (!tester.binding.hasScheduledFrame) return;
+        }
+      }
+
       Future<void> screen(Widget widget) async {
         await tester.pumpWidget(MaterialApp(key: UniqueKey(), home: widget));
-        await tester.pumpAndSettle();
+        await settle();
       }
 
       Future<void> chat() async {
         await screen(ChatScreen(backend: backend, conversationId: owner));
-        for (
-          var i = 0;
-          i < 200 &&
-              find.text('Current profile model: fixture').evaluate().isEmpty;
-          i++
-        ) {
+        final model = find.descendant(
+          of: find.byKey(const Key('chat-header')),
+          matching: find.text('fixture'),
+        );
+        for (var i = 0; i < 200 && model.evaluate().isEmpty; i++) {
           await tester.pump(const Duration(milliseconds: 20));
         }
-        expect(find.text('Current profile model: fixture'), findsOneWidget);
+        expect(model, findsOneWidget);
       }
 
       Future<void> tap(Finder finder) async {
@@ -98,9 +106,9 @@ void main() {
           );
         }
         await tester.ensureVisible(finder);
-        await tester.pumpAndSettle();
+        await settle();
         await tester.tap(finder);
-        await tester.pumpAndSettle();
+        await settle();
       }
 
       Future<Run> waitRun(bool Function(Run) predicate) async {
@@ -133,7 +141,7 @@ void main() {
         await tester.ensureVisible(field);
         await tester.enterText(field, prompt);
         await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
-        await tester.pumpAndSettle();
+        await settle();
         await tap(find.text('Send'));
         return waitRun((r) => r.id != lastRun && predicate(r));
       }
@@ -257,6 +265,7 @@ void main() {
       ).invokeListMethod<dynamic>('notificationState');
       expect(jsonEncode(notifications), isNot(contains(_secret)));
       await tap(find.byKey(Key('stop-${run.id}')));
+      await tap(find.byKey(const Key('confirm-stop')));
       final stopped = await waitRun(
         (r) => r.id == run.id && r.state != RunState.running,
       );
@@ -272,6 +281,7 @@ void main() {
       await fixture.unknownWritten.future.timeout(const Duration(seconds: 10));
       await chat();
       await tap(find.byKey(Key('stop-${run.id}')));
+      await tap(find.byKey(const Key('confirm-stop')));
       final unknown = await waitRun(
         (r) => r.id == run.id && r.state != RunState.running,
       );

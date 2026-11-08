@@ -53,6 +53,8 @@ Future<void> tapKey(WidgetTester t, String key) async {
     180,
     scrollable: find.byType(Scrollable).first,
   );
+  await t.ensureVisible(find.byKey(Key(key)));
+  await t.pumpAndSettle();
   await t.tap(find.byKey(Key(key)));
   await t.pumpAndSettle();
 }
@@ -60,7 +62,7 @@ Future<void> tapKey(WidgetTester t, String key) async {
 void main() {
   for (final state in [RunState.paused, RunState.interrupted]) {
     testWidgets(
-      'R1 displayed disclosure matches explicit $state A versus new work B',
+      'R1 explicit $state A resumes A while new work B asks for its origin',
       (t) async {
         final b = UiBackend()
           ..current = AppSnapshot(
@@ -76,29 +78,18 @@ void main() {
           ),
         );
         await t.pumpAndSettle();
-        await tapKey(t, 'ack-A');
-        expect(
-          find.text(
-            'Run A disclosure\nOrigin: ${profileSnapshot.inferenceOrigin}',
-          ),
-          findsOneWidget,
-        );
-        var ack = b.commands.whereType<AcknowledgeContextDisclosure>().single;
-        expect(ack.origin, profileSnapshot.inferenceOrigin);
+        expect(find.byKey(const Key('run-card-A')), findsOneWidget);
+        expect(find.byKey(const Key('run-card-B')), findsNothing);
+        expect(find.text('Messages will be sent to new.test.'), findsOneWidget);
         await tapKey(t, 'ack-new-work');
         expect(
-          find.text(
-            'New turn / summary disclosure\nOrigin: ${profileB.inferenceOrigin}',
-          ),
-          findsOneWidget,
+          b.commands.whereType<AcknowledgeContextDisclosure>().single.origin,
+          profileB.inferenceOrigin,
         );
-        ack = b.commands.whereType<AcknowledgeContextDisclosure>().last;
-        expect(ack.origin, profileB.inferenceOrigin);
-        await tapKey(t, 'summary-context');
+        await t.tap(find.byTooltip('Summarize context'));
+        await t.pumpAndSettle();
         expect(
-          find.text(
-            'New summary disclosure\nOrigin: ${profileB.inferenceOrigin}',
-          ),
+          find.text('Selected content will be sent to new.test.'),
           findsOneWidget,
         );
         await t.tap(find.text('user: hello'));
@@ -109,11 +100,13 @@ void main() {
           ['m'],
         );
         expect(b.commands.whereType<ResumeRun>(), isEmpty);
+        await tapKey(t, 'resume-A');
+        expect(b.commands.whereType<ResumeRun>().single.runId, 'A');
       },
     );
   }
   testWidgets(
-    'R2 older waiting A keeps bound approval resume context and Stop after completed B',
+    'R2 older waiting A keeps bound approval resume and Stop after completed B',
     (t) async {
       final b = UiBackend()
         ..current = AppSnapshot(
@@ -146,6 +139,8 @@ void main() {
         180,
         scrollable: find.byType(Scrollable).first,
       );
+      await t.ensureVisible(find.text('Approve exact arguments'));
+      await t.pumpAndSettle();
       await t.tap(find.text('Approve exact arguments'));
       await t.pumpAndSettle();
       expect(
@@ -157,12 +152,9 @@ void main() {
       expect(b.commands.whereType<Deny>().single.attemptId, 'a');
       await tapKey(t, 'resume-A');
       expect(b.commands.whereType<ResumeRun>().single.runId, 'A');
-      await tapKey(t, 'context-A');
-      await t.tap(find.text('user: hello'));
-      await t.tap(find.text('Apply selection'));
-      await t.pumpAndSettle();
-      expect(b.commands.whereType<ApplyContextSelection>().single.runId, 'A');
       await tapKey(t, 'stop-A');
+      await t.tap(find.byKey(const Key('confirm-stop')));
+      await t.pumpAndSettle();
       expect(b.commands.whereType<CancelRun>().single.runId, 'A');
       expect(find.byKey(const Key('resume-B')), findsNothing);
     },
@@ -189,11 +181,14 @@ void main() {
       );
       await t.pumpAndSettle();
       await t.scrollUntilVisible(
-        find.text('Run A • interrupted'),
+        find.byKey(const Key('run-card-A')),
         180,
         scrollable: find.byType(Scrollable).first,
       );
       expect(find.byKey(const Key('resume-A')), findsNothing);
+      expect(find.text('Resume'), findsNothing);
+      // The one action left is Stop, which still confirms first.
+      expect(find.byKey(const Key('stop-A')), findsOneWidget);
       expect(b.commands.whereType<ResumeRun>(), isEmpty);
     });
   }

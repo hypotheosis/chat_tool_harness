@@ -35,18 +35,19 @@ class ChatController extends ScreenController {
     await perform(ResumeRun(runId));
   }
 
-  Future<void> applyProfile(String id) async {
-    await perform(ApplyProfile(conversationId, id));
-  }
+  /// Acknowledges disclosure for [origin]; true when the backend accepted it.
+  Future<bool> acknowledgeOrigin(String origin) async =>
+      await perform(AcknowledgeContextDisclosure(conversationId, origin)) !=
+      null;
 
-  Future<void> acknowledgeInferenceDisclosure(ProfileSnapshot profile) async {
-    final origin = profile.inferenceOrigin;
+  /// Acknowledges the paused run's own origin, then resumes it.
+  Future<void> allowAndResume(Run run) async {
+    final origin = run.profile.inferenceOrigin;
     if (origin == null) {
-      error = failureMessage(const BackendFailure(FailureCode.configuration));
-      changed();
+      reject(failureMessage(const BackendFailure(FailureCode.configuration)));
       return;
     }
-    await perform(AcknowledgeContextDisclosure(conversationId, origin));
+    if (await acknowledgeOrigin(origin)) await resume(run.id);
   }
 
   Future<void> select(String runId, ContextSelection selection) async {

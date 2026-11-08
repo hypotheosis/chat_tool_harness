@@ -107,6 +107,8 @@ pub struct RunData {
     pub partial_text: String,
     pub failure: Option<StoredFailure>,
     pub context: super::context::RunContext,
+    /// The user message that started a turn run; none for summary runs.
+    pub input_message_id: Option<String>,
 }
 fn sql_error(_: rusqlite::Error) -> CoreError {
     CoreError::Storage
@@ -195,7 +197,7 @@ fn insert_message(
 }
 pub fn load(repo: &Repository, run: RunId) -> CoreResult<RunData> {
     repo.with_connection(move |conn| {
-        let (conversation, revision, status, inference_count, attempt_count, active_ms,partial_text,failure): (String,i64,String,i64,i64,i64,String,Option<String>) = conn.query_row("SELECT conversation_id,snapshot_revision,state,inference_count,attempt_count,active_ms,partial_text,failure FROM runs WHERE id=?1",[run.0.to_string()],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?))).optional().map_err(sql_error)?.ok_or(CoreError::Conflict)?;
+        let (conversation, revision, status, inference_count, attempt_count, active_ms,partial_text,failure,input_message_id): (String,i64,String,i64,i64,i64,String,Option<String>,Option<String>) = conn.query_row("SELECT conversation_id,snapshot_revision,state,inference_count,attempt_count,active_ms,partial_text,failure,input_message_id FROM runs WHERE id=?1",[run.0.to_string()],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?,r.get(8)?))).optional().map_err(sql_error)?.ok_or(CoreError::Conflict)?;
         let conversation = ConversationId(uuid(conversation)?);
         let profile: String = conn.query_row("SELECT payload FROM conversation_snapshots WHERE conversation_id=?1 AND revision=?2", params![conversation.0.to_string(),revision],|r|r.get(0)).map_err(sql_error)?;
         let mut stmt = conn.prepare("SELECT payload FROM messages WHERE conversation_id=?1 AND ordinal >= (SELECT min(ordinal) FROM messages WHERE conversation_id=?1 AND id=(SELECT input_message_id FROM runs WHERE id=?2)) ORDER BY ordinal").map_err(sql_error)?;
@@ -208,7 +210,7 @@ pub fn load(repo: &Repository, run: RunId) -> CoreResult<RunData> {
             Ok(PendingAttempt { id:AttemptId(uuid(id)?),state:attempt_state(&status)?,call:parse::<StoredCall>(&call)?.call(),binding:binding.map(|v|parse(&v)).transpose()? })
         }).collect::<CoreResult<Vec<_>>>()?;
         let context:String=conn.query_row("SELECT context_json FROM runs WHERE id=?1",[run.0.to_string()],|r|r.get(0)).map_err(sql_error)?;
-        Ok(RunData { context:parse(&context)?, id:run, conversation, profile:parse(&profile)?, state:state(&status)?, inference_count:u32::try_from(inference_count).map_err(|_|CoreError::Storage)?,attempt_count:u32::try_from(attempt_count).map_err(|_|CoreError::Storage)?,active_ms:u64::try_from(active_ms).map_err(|_|CoreError::Storage)?,messages,attempts,partial_text,failure:failure.map(StoredFailure::parse) })
+        Ok(RunData { context:parse(&context)?, id:run, conversation, profile:parse(&profile)?, state:state(&status)?, inference_count:u32::try_from(inference_count).map_err(|_|CoreError::Storage)?,attempt_count:u32::try_from(attempt_count).map_err(|_|CoreError::Storage)?,active_ms:u64::try_from(active_ms).map_err(|_|CoreError::Storage)?,messages,attempts,partial_text,failure:failure.map(StoredFailure::parse),input_message_id })
     })
 }
 /// Moves a resumable run from `from` to Running and, in the same transaction,

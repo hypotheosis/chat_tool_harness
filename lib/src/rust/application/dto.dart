@@ -750,6 +750,9 @@ class AgentRun {
   final List<AgentAttempt> attempts;
   final AgentRunContext context;
 
+  /// The id of the user message that started a turn; none for summaries.
+  final String? inputMessageId;
+
   const AgentRun({
     required this.id,
     required this.conversationId,
@@ -764,6 +767,7 @@ class AgentRun {
     this.failureDetail,
     required this.attempts,
     required this.context,
+    this.inputMessageId,
   });
 
   @override
@@ -780,7 +784,8 @@ class AgentRun {
       failureCode.hashCode ^
       failureDetail.hashCode ^
       attempts.hashCode ^
-      context.hashCode;
+      context.hashCode ^
+      inputMessageId.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -799,7 +804,8 @@ class AgentRun {
           failureCode == other.failureCode &&
           failureDetail == other.failureDetail &&
           attempts == other.attempts &&
-          context == other.context;
+          context == other.context &&
+          inputMessageId == other.inputMessageId;
 }
 
 class AgentRunContext {

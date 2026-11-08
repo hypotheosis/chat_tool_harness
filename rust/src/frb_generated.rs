@@ -1046,6 +1046,7 @@ impl SseDecode for crate::application::dto::AgentRun {
         let mut var_attempts =
             <Vec<crate::application::dto::AgentAttempt>>::sse_decode(deserializer);
         let mut var_context = <crate::application::dto::AgentRunContext>::sse_decode(deserializer);
+        let mut var_inputMessageId = <Option<String>>::sse_decode(deserializer);
         return crate::application::dto::AgentRun {
             id: var_id,
             conversation_id: var_conversationId,
@@ -1060,6 +1061,7 @@ impl SseDecode for crate::application::dto::AgentRun {
             failure_detail: var_failureDetail,
             attempts: var_attempts,
             context: var_context,
+            input_message_id: var_inputMessageId,
         };
     }
 }
@@ -2776,6 +2778,7 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentRun {
             self.failure_detail.into_into_dart().into_dart(),
             self.attempts.into_into_dart().into_dart(),
             self.context.into_into_dart().into_dart(),
+            self.input_message_id.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -3900,6 +3903,7 @@ impl SseEncode for crate::application::dto::AgentRun {
         );
         <Vec<crate::application::dto::AgentAttempt>>::sse_encode(self.attempts, serializer);
         <crate::application::dto::AgentRunContext>::sse_encode(self.context, serializer);
+        <Option<String>>::sse_encode(self.input_message_id, serializer);
     }
 }
 

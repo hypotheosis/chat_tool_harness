@@ -42,6 +42,7 @@ const conversation = Conversation(
   profile: profileSnapshot,
   messages: [Message(id: 'm', role: 'user', content: 'hello', calls: [])],
   summaries: [],
+  originAcknowledged: true,
 );
 const binding = ApprovalBinding(
   attemptId: 'a',
@@ -92,6 +93,52 @@ Run run({
   ),
 );
 
+/// A turn run started by message `m`, in [state], with an optional failure
+/// and context choice.
+Run turnRun({
+  String id = 'r',
+  RunState state = RunState.failed,
+  FailureCode? code,
+  FailureDetail? detail,
+  ContextChoiceReason? reason,
+  ProfileSnapshot profile = profileSnapshot,
+  List<Attempt> attempts = const [],
+  String? inputMessageId = 'm',
+}) => Run(
+  id: id,
+  conversationId: 'c',
+  profile: profile,
+  state: state,
+  inferenceCount: 1,
+  attemptCount: attempts.length,
+  activeMs: 0,
+  partialText: '',
+  failure: detail?.reason,
+  failureCode: code,
+  failureDetail: detail,
+  attempts: attempts,
+  inputMessageId: inputMessageId,
+  context: RunContext(
+    purpose: ContextPurpose.turn,
+    usage: reason == null
+        ? null
+        : ContextUsage(
+            estimation: TokenEstimation.conservativeUtf8Bytes,
+            estimatedInputTokens: 50,
+            outputReserve: 512,
+            window: 4096,
+            rawBytes: 50,
+            rawBytesIsLowerBound: false,
+            reason: reason,
+          ),
+  ),
+);
+
+Run failedRun({required FailureCode code, FailureDetail? detail}) =>
+    turnRun(code: code, detail: detail);
+
+Run completedRun() => turnRun(state: RunState.completed);
+
 class UiBackend extends FakeBackend {
   UiBackend() {
     current = AppSnapshot(
@@ -110,6 +157,47 @@ class UiBackend extends FakeBackend {
     );
   }
   CommandReply reply = const CommandReply();
+
+  set runs(List<Run> value) => current = AppSnapshot(
+    sequence: current.sequence,
+    endpoints: current.endpoints,
+    servers: current.servers,
+    profiles: current.profiles,
+    conversations: current.conversations,
+    runs: value,
+    rules: current.rules,
+  );
+
+  /// Replaces conversation `c` with [profile] and acknowledgement [acknowledged].
+  void setConversation({
+    ProfileSnapshot profile = profileSnapshot,
+    bool acknowledged = true,
+  }) => current = AppSnapshot(
+    sequence: current.sequence,
+    endpoints: current.endpoints,
+    servers: current.servers,
+    profiles: current.profiles,
+    conversations: [
+      for (final c in current.conversations)
+        if (c.id == 'c')
+          Conversation(
+            id: c.id,
+            profile: profile,
+            messages: c.messages,
+            summaries: c.summaries,
+            originAcknowledged: acknowledged,
+          )
+        else
+          c,
+    ],
+    runs: current.runs,
+    rules: current.rules,
+  );
+
+  set originAcknowledged(bool value) => setConversation(
+    profile: current.conversations.firstWhere((c) => c.id == 'c').profile,
+    acknowledged: value,
+  );
   @override
   Future<CommandReply> execute(AppCommand command) async {
     await super.execute(command);

@@ -645,6 +645,33 @@ async fn failed_run_snapshot_carries_failure_code_and_detail() {
 }
 
 #[tokio::test]
+async fn run_snapshot_names_its_input_message() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    drop(listener);
+    let f = AppFixture::open(&url).await;
+    let stopped = f.stopped.notified();
+    let run = f.app.command(f.start()).await.unwrap().id.unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(10), stopped)
+        .await
+        .expect("run settles");
+    let snapshot = f.app.snapshot().await.unwrap();
+    let run = snapshot.runs.iter().find(|r| r.id == run).expect("run");
+    let conversation = snapshot
+        .conversations
+        .iter()
+        .find(|c| c.id == run.conversation_id)
+        .expect("conversation");
+    let input = conversation
+        .messages
+        .iter()
+        .find(|m| m.role == "user")
+        .expect("user message");
+    assert_eq!(run.input_message_id.as_deref(), Some(input.id.as_str()));
+    f.app.close().await.unwrap();
+}
+
+#[tokio::test]
 async fn mcp_error_reason_redacts_short_header_secret() {
     let mut wire = Wire::open().await;
     let f = AppFixture::open_with(&wire.url, Some("k3y9")).await;

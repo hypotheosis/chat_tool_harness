@@ -351,6 +351,7 @@ class Run {
     this.failureDetail,
     required this.attempts,
     required this.context,
+    this.inputMessageId,
   });
   final String id;
   final String conversationId;
@@ -365,6 +366,9 @@ class Run {
   final FailureDetail? failureDetail;
   final List<Attempt> attempts;
   final RunContext context;
+
+  /// The user message that started a turn run; null for summary runs.
+  final String? inputMessageId;
 }
 
 class Conversation {

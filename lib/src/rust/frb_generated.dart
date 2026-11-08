@@ -923,8 +923,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AgentRun dco_decode_agent_run(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 13)
-      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
+    if (arr.length != 14)
+      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
     return AgentRun(
       id: dco_decode_String(arr[0]),
       conversationId: dco_decode_String(arr[1]),
@@ -939,6 +939,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       failureDetail: dco_decode_opt_box_autoadd_agent_failure_detail(arr[10]),
       attempts: dco_decode_list_agent_attempt(arr[11]),
       context: dco_decode_agent_run_context(arr[12]),
+      inputMessageId: dco_decode_opt_String(arr[13]),
     );
   }
 
@@ -2262,6 +2263,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     );
     var var_attempts = sse_decode_list_agent_attempt(deserializer);
     var var_context = sse_decode_agent_run_context(deserializer);
+    var var_inputMessageId = sse_decode_opt_String(deserializer);
     return AgentRun(
       id: var_id,
       conversationId: var_conversationId,
@@ -2276,6 +2278,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       failureDetail: var_failureDetail,
       attempts: var_attempts,
       context: var_context,
+      inputMessageId: var_inputMessageId,
     );
   }
 
@@ -3803,6 +3806,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     );
     sse_encode_list_agent_attempt(self.attempts, serializer);
     sse_encode_agent_run_context(self.context, serializer);
+    sse_encode_opt_String(self.inputMessageId, serializer);
   }
 
   @protected

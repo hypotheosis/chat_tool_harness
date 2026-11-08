@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import '../../backend/backend.dart';
 import '../../backend/models.dart';
-import '../screen_controller.dart';
-import '../settings/endpoint_screen.dart';
 import '../files/file_controller.dart';
 import '../files/file_panel.dart';
+import '../profiles/profile_screen.dart';
+import '../result_banner.dart';
+import '../screen_controller.dart';
+import '../settings/endpoint_screen.dart';
+import '../settings/server_screen.dart';
 import 'chat_controller.dart';
+import 'run_card.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -42,6 +46,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (conversation == null) return;
     final messages = <String>{...target?.context.selection?.messageIds ?? []};
     final summaries = <String>{...target?.context.selection?.summaryIds ?? []};
+    final origin = (target?.profile ?? conversation.profile).inferenceOrigin;
     final choice = await showDialog<(ContextSelection, bool)>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -53,14 +58,12 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    disclosureLabel(
-                      target == null ? 'New summary' : 'Run ${target.id}',
-                      target?.profile ?? conversation.profile,
+                  if (origin != null)
+                    Text(
+                      'Selected content will be sent to ${originHost(origin)}.',
                     ),
-                  ),
                   const Text(
-                    'No content is silently removed. Select complete tool-call/result pairs. Summaries are derived context, not originals. Summary requests also transmit selected content to inference.',
+                    'Select complete tool-call/result pairs. Summaries are derived context, not originals.',
                   ),
                   for (final m in conversation.messages)
                     CheckboxListTile(
@@ -133,70 +136,355 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  String disclosureLabel(String target, ProfileSnapshot profile) =>
-      '$target disclosure\nOrigin: ${profile.inferenceOrigin ?? 'Unavailable — repair configuration'}';
+  /// Asks before stopping: Stop is local and cannot undo remote work.
+  Future<void> confirmStop(Run run) async {
+    final stop = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Stop this run?'),
+        content: const Text(
+          'Stop is local and best effort. Work already sent to a server is not rolled back.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('confirm-stop'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Stop'),
+          ),
+        ],
+      ),
+    );
+    if (stop == true) await state.stop(run.id);
+  }
 
-  Widget runPanel(Run run) {
-    final usage = run.context.usage;
+  Future<void> open(Widget screen) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(builder: (_) => screen),
+    );
+    if (mounted) await state.refresh();
+  }
+
+  /// The current profile behind [snapshot], for editing.
+  Widget profileScreen(ProfileSnapshot snapshot) => ProfileScreen(
+    backend: widget.backend,
+    profile: state.snapshot?.profiles
+        .where((p) => p.id == snapshot.profileId)
+        .firstOrNull,
+  );
+
+  /// The current endpoint of [snapshot], for editing.
+  Widget endpointScreen(ProfileSnapshot snapshot) => EndpointScreen(
+    backend: widget.backend,
+    endpoint:
+        state.snapshot?.endpoints
+            .where((e) => e.id == snapshot.endpoint.id)
+            .firstOrNull ??
+        snapshot.endpoint,
+  );
+
+  /// The settings screen of the target that failed in [run]: the endpoint or
+  /// server it names, or the profile when the target is not known.
+  Widget targetSettings(Run run) {
+    final detail = run.failureDetail;
+    final profile = run.profile;
+    switch (detail?.targetKind) {
+      case 'inference':
+        return endpointScreen(profile);
+      case 'mcpServer':
+        final named = profile.servers
+            .where((s) => s.name == detail?.targetName)
+            .firstOrNull;
+        final current = state.snapshot?.servers
+            .where((s) => s.id == named?.id)
+            .firstOrNull;
+        if (current ?? named case final server?) {
+          return ServerScreen(backend: widget.backend, server: server);
+        }
+      case 'credential':
+        // The endpoint holds the credential for chat requests and model
+        // discovery, and is the only holder when no server has secret headers.
+        final step = detail?.step;
+        if (step == 'chatRequest' ||
+            step == 'discoverModels' ||
+            profile.servers.every((s) => s.secretHeaders.isEmpty)) {
+          return endpointScreen(profile);
+        }
+    }
+    return profileScreen(profile);
+  }
+
+  String actionLabel(RunAction action, Run run) => switch (action) {
+    RunAction.openSettings =>
+      'Open ${run.failureDetail?.targetName ?? 'profile'} settings',
+    RunAction.reenterCredential => 'Re-enter credential',
+    RunAction.chooseContext => 'Choose context',
+    RunAction.retry => 'Retry',
+    RunAction.resume => 'Resume',
+    RunAction.allow => 'Allow',
+    RunAction.stop => 'Stop',
+  };
+
+  Future<void> act(RunAction action, Run run, Conversation c) async {
+    switch (action) {
+      case RunAction.openSettings || RunAction.reenterCredential:
+        await open(targetSettings(run));
+      case RunAction.chooseContext:
+        // An ended run cannot take a new selection; a summary shortens the
+        // context for the next turn instead.
+        await chooseContext(run.state == RunState.failed ? null : run);
+      case RunAction.retry:
+        final input = c.messages
+            .where((m) => m.id == run.inputMessageId)
+            .firstOrNull;
+        if (input == null) {
+          await chooseContext(null);
+        } else {
+          await state.send(input.content);
+        }
+      case RunAction.resume:
+        await state.resume(run.id);
+      case RunAction.allow:
+        await state.allowAndResume(run);
+      case RunAction.stop:
+        await confirmStop(run);
+    }
+  }
+
+  /// Whether [run]'s own origin is the conversation's acknowledged one.
+  bool runOriginAcknowledged(Run run, Conversation c) =>
+      c.originAcknowledged &&
+      run.profile.inferenceOrigin == c.profile.inferenceOrigin;
+
+  /// A run's tool calls and its status: a compact row while it works, one
+  /// card when it failed or paused, nothing once it succeeded.
+  Widget? runView(Run run, Conversation c) {
+    if (run.state == RunState.completed || run.state == RunState.cancelled) {
+      return null;
+    }
+    final issue = runIssue(
+      run,
+      originAcknowledged: runOriginAcknowledged(run, c),
+    );
+    final busy = state.loading;
     return Column(
       key: ValueKey('run-${run.id}'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Run ${run.id} • ${run.state.name}'),
-        if (run.failure != null)
-          const Text(
-            'Run failed. Check configuration or context; no automatic retry was made.',
-          ),
-        if (run.partialText.isNotEmpty) SafeMarkdown(run.partialText),
+        if (run.partialText.isNotEmpty && run.state != RunState.failed)
+          SafeMarkdown(run.partialText),
         for (final a in run.attempts) attempt(a, run),
-        if (usage != null)
-          Text(
-            'Estimated input: ${usage.estimatedInputTokens} tokens (conservative UTF-8 bytes). Output reserve ${usage.outputReserve}; window ${usage.window}.\n${usage.provider == null ? 'Provider usage not reported.' : 'Provider usage: ${usage.provider!.promptTokens} input / ${usage.provider!.completionTokens} output.'}\n${usage.reason == null ? '' : 'Context choice required: ${usage.reason!.name}'}',
-          ),
-        Text(disclosureLabel('Run ${run.id}', run.profile)),
-        const Text(
-          'Resuming this run follows current settings and may transmit selected messages, tool results and derived summaries to that origin.',
-        ),
-        TextButton(
-          key: Key('ack-${run.id}'),
-          onPressed: state.loading
-              ? null
-              : () => state.acknowledgeInferenceDisclosure(run.profile),
-          child: const Text('Acknowledge inference disclosure'),
-        ),
-        Wrap(
-          spacing: 8,
-          children: [
-            TextButton(
-              key: Key('context-${run.id}'),
-              onPressed: state.loading ? null : () => chooseContext(run),
-              child: const Text('Choose context'),
+        if (issue != null)
+          RunCard(
+            run: run,
+            issue: issue,
+            actionLabel: actionLabel(issue.action, run),
+            actionKey: Key(switch (issue.action) {
+              RunAction.resume => 'resume-${run.id}',
+              RunAction.stop => 'stop-${run.id}',
+              _ => 'run-action-${run.id}',
+            }),
+            onAction: busy ? null : () => act(issue.action, run, c),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                if (run.state == RunState.running)
+                  const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  const Icon(Icons.pending_actions, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    run.state == RunState.running
+                        ? 'Working…'
+                        : 'Waiting for approval',
+                  ),
+                ),
+                if (run.state == RunState.waitingApproval &&
+                    !hasUnresolvedAttempt(run))
+                  TextButton(
+                    key: Key('resume-${run.id}'),
+                    onPressed: busy ? null : () => state.resume(run.id),
+                    child: const Text('Resume'),
+                  ),
+                OutlinedButton(
+                  key: Key('stop-${run.id}'),
+                  onPressed: busy ? null : () => confirmStop(run),
+                  child: const Text('Stop'),
+                ),
+              ],
             ),
-            if (run.state == RunState.running ||
-                run.state == RunState.waitingApproval ||
-                run.state == RunState.paused ||
-                run.state == RunState.interrupted)
-              OutlinedButton(
-                key: Key('stop-${run.id}'),
-                onPressed: state.loading ? null : () => state.stop(run.id),
-                child: const Text('Stop'),
-              ),
-            if ((run.state == RunState.paused ||
-                    run.state == RunState.waitingApproval ||
-                    run.state == RunState.interrupted) &&
-                !run.attempts.any(
-                  (a) =>
-                      a.state == AttemptState.outcomeUnknown ||
-                      a.state == AttemptState.dispatching,
-                ))
-              OutlinedButton(
-                key: Key('resume-${run.id}'),
-                onPressed: state.loading ? null : () => state.resume(run.id),
-                child: const Text('Resume'),
-              ),
-          ],
-        ),
+          ),
       ],
+    );
+  }
+
+  /// Messages in order, each run placed after the messages of its turn,
+  /// which start at its input message; runs without one come last.
+  List<Widget> transcript(Conversation c) {
+    final byInput = <String, List<Run>>{};
+    final loose = <Run>[];
+    final ids = {for (final m in c.messages) m.id};
+    for (final r in state.runs) {
+      final input = r.inputMessageId;
+      if (input != null && ids.contains(input)) {
+        (byInput[input] ??= []).add(r);
+      } else {
+        loose.add(r);
+      }
+    }
+    final out = <Widget>[];
+    var pending = <Run>[];
+    void flush() {
+      for (final r in pending) {
+        if (runView(r, c) case final view?) out.add(view);
+      }
+      pending = [];
+    }
+
+    for (final m in c.messages) {
+      if (byInput[m.id] case final runs?) {
+        flush();
+        pending = runs;
+      }
+      out.add(messageCard(m));
+    }
+    flush();
+    pending = loose;
+    flush();
+    return out;
+  }
+
+  Widget messageCard(Message m) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(m.role, style: Theme.of(context).textTheme.labelLarge),
+          SafeMarkdown(m.content),
+          for (final call in m.calls)
+            ExpansionTile(
+              title: Text(
+                '${call.key.serverId ?? 'Local files'} / ${call.key.name}',
+              ),
+              children: [SelectableText(call.argumentsJson)],
+            ),
+        ],
+      ),
+    ),
+  );
+
+  Widget header(Conversation c) => ListTile(
+    key: const Key('chat-header'),
+    dense: true,
+    title: Text(c.profile.name),
+    subtitle: Text(
+      c.profile.mode == ProfileMode.chatOnly
+          ? '${c.profile.endpoint.model} • Chat only'
+          : c.profile.endpoint.model,
+      key: const Key('chat-model'),
+    ),
+    trailing: IconButton(
+      icon: const Icon(Icons.tune),
+      tooltip: 'Profile settings',
+      onPressed: () => open(profileScreen(c.profile)),
+    ),
+  );
+
+  Future<void> sendMessage() async {
+    final text = message.text;
+    await state.send(text);
+    if (mounted && state.error == null) message.clear();
+  }
+
+  /// The result banner, the disclosure card and the composer, kept above the
+  /// system navigation bar.
+  Widget bottom(Conversation c) {
+    final origin = c.profile.inferenceOrigin;
+    final unacknowledged = origin != null && !c.originAcknowledged;
+    // A paused run asking for this origin already offers Allow.
+    final runAsks = state.runs.any(
+      (r) =>
+          r.profile.inferenceOrigin == origin &&
+          runIssue(r, originAcknowledged: false)?.action == RunAction.allow,
+    );
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.5,
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ResultBanner(state: state),
+              if (unacknowledged && !runAsks)
+                Card(
+                  key: const Key('disclosure'),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Messages will be sent to ${originHost(origin)}.',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          key: const Key('ack-new-work'),
+                          onPressed: state.loading
+                              ? null
+                              : () => state.acknowledgeOrigin(origin),
+                          child: const Text('Allow'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      key: const Key('message'),
+                      controller: message,
+                      minLines: 1,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: 'Message',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: state.loading || unacknowledged
+                        ? null
+                        : sendMessage,
+                    child: const Text('Send'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -252,6 +540,7 @@ class _ChatScreenState extends State<ChatScreen> {
       ],
     ),
   );
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: state,
@@ -260,7 +549,28 @@ class _ChatScreenState extends State<ChatScreen> {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Chat'),
+          bottom: settingsProgress(state),
           actions: [
+            if (c != null)
+              IconButton(
+                onPressed: state.loading ? null : () => chooseContext(null),
+                tooltip: 'Summarize context',
+                icon: const Icon(Icons.compress),
+              ),
+            if (widget.documents case final documents?)
+              IconButton(
+                onPressed: () => open(
+                  FilePanel(
+                    controller: FileController(
+                      widget.backend,
+                      documents,
+                      widget.conversationId,
+                    ),
+                  ),
+                ),
+                tooltip: 'Generated artifacts',
+                icon: const Icon(Icons.folder_outlined),
+              ),
             IconButton(
               onPressed: state.refresh,
               tooltip: 'Refresh',
@@ -268,129 +578,32 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
         ),
-        bottomNavigationBar: ScreenStatus(state),
-        body: ListView(
-          padding: const EdgeInsets.all(12),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (c == null && !state.loading)
-              const Text('Conversation unavailable. Return home or refresh.'),
-            if (c != null) ...[
-              Text(
-                '${c.profile.name} • revision ${c.profile.revision} • ${c.profile.mode.name}',
-              ),
-              SelectableText(
-                'Current profile model: ${c.profile.endpoint.model}',
-              ),
-              if (c.profile.mode == ProfileMode.chatOnly)
-                const Text(
-                  'Chat only: MCP and local tools are disabled. This mode cannot perform tool actions.',
-                ),
-              const Text(
-                'Conversation profile is an immutable snapshot. Applying a current profile affects future turns, not existing runs.',
-              ),
-              Wrap(
-                spacing: 8,
+            if (c != null) header(c),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 children: [
-                  TextButton(
-                    onPressed: state.loading
-                        ? null
-                        : () => state.applyProfile(c.profile.profileId),
-                    child: const Text('Apply current profile'),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                        builder: (_) => EndpointScreen(
-                          backend: widget.backend,
-                          endpoint: c.profile.endpoint,
-                        ),
-                      ),
+                  if (c == null && !state.loading)
+                    const Text(
+                      'Conversation unavailable. Return home or refresh.',
                     ),
-                    child: const Text('Repair configuration'),
-                  ),
+                  if (c != null) ...transcript(c),
                 ],
               ),
-              for (final m in c.messages)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          m.role,
-                          style: Theme.of(context).textTheme.labelLarge,
-                        ),
-                        SafeMarkdown(m.content),
-                        for (final call in m.calls)
-                          ExpansionTile(
-                            title: Text(
-                              '${call.key.serverId ?? 'Local files'} / ${call.key.name}',
-                            ),
-                            children: [SelectableText(call.argumentsJson)],
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              for (final r in state.runs) runPanel(r),
-              Text(disclosureLabel('New turn / summary', c.profile)),
-              const Text(
-                'Selected messages, tool results and derived summaries may be transmitted to this origin. Acknowledgement applies to every conversation using this origin; a new scheme, host or port asks again.',
-              ),
-              TextButton(
-                key: const Key('ack-new-work'),
-                onPressed: state.loading
-                    ? null
-                    : () => state.acknowledgeInferenceDisclosure(c.profile),
-                child: const Text('Acknowledge new turn / summary disclosure'),
-              ),
-              TextButton(
-                key: const Key('summary-context'),
-                onPressed: state.loading ? null : () => chooseContext(null),
-                child: const Text('Choose summary context'),
-              ),
-              const Text(
-                'Stop is local / best effort, not remote rollback. Unknown outcomes are never retried.',
-              ),
-              TextField(
-                key: const Key('message'),
-                controller: message,
-                minLines: 1,
-                maxLines: 6,
-                decoration: const InputDecoration(
-                  labelText: 'Message',
-                  border: OutlineInputBorder(),
+            ),
+            if (c != null)
+              bottom(c)
+            else
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: ResultBanner(state: state),
                 ),
               ),
-              FilledButton(
-                onPressed: state.loading
-                    ? null
-                    : () async {
-                        final text = message.text;
-                        await state.send(text);
-                        if (mounted && state.error == null) message.clear();
-                      },
-                child: const Text('Send'),
-              ),
-              if (widget.documents != null)
-                OutlinedButton(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => FilePanel(
-                        controller: FileController(
-                          widget.backend,
-                          widget.documents!,
-                          widget.conversationId,
-                        ),
-                      ),
-                    ),
-                  ),
-                  child: const Text('Generated artifacts'),
-                ),
-            ],
           ],
         ),
       );

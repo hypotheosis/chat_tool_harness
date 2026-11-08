@@ -408,6 +408,11 @@ void main() {
         'persisted input',
       );
       expect(snapshot.runs.single.state, RunState.cancelled);
+      // The run names the message it started from, for the chat run card.
+      expect(
+        snapshot.runs.single.inputMessageId,
+        snapshot.conversations.single.messages.single.id,
+      );
       await backend.execute(
         const SaveServer(
           ServerConfig(

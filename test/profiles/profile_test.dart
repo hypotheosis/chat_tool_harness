@@ -32,7 +32,7 @@ void main() {
     await t.pumpAndSettle();
     expect(b.commands.whereType<SetRule>().single.rule, PermissionRule.block);
   });
-  testWidgets('profile_snapshot_requires_explicit_apply', (t) async {
+  testWidgets('chat_follows_profile_without_explicit_apply', (t) async {
     final b = UiBackend();
     await t.pumpWidget(
       MaterialApp(
@@ -40,11 +40,12 @@ void main() {
       ),
     );
     await t.pumpAndSettle();
-    expect(find.textContaining('Old profile'), findsWidgets);
-    expect(b.commands.whereType<ApplyProfile>(), isEmpty);
-    await t.tap(find.text('Apply current profile'));
+    expect(find.text('Old profile'), findsOneWidget);
+    expect(find.text('Apply current profile'), findsNothing);
+    await t.tap(find.byTooltip('Profile settings'));
     await t.pumpAndSettle();
-    expect(b.commands.whereType<ApplyProfile>().single.profileId, 'p');
+    expect(find.byType(ProfileScreen), findsOneWidget);
+    expect(b.commands.whereType<ApplyProfile>(), isEmpty);
     await t.pumpWidget(const SizedBox());
     await t.pumpAndSettle();
     expect(b.closed, isFalse);

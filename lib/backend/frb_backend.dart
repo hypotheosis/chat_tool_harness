@@ -497,6 +497,7 @@ Run _fromRun(g.AgentRun v) => Run(
       : _fromFailureDetail(v.failureDetail!),
   attempts: v.attempts.map((v) => _fromAttempt(v)).toList(),
   context: _fromRunContext(v.context),
+  inputMessageId: v.inputMessageId,
 );
 
 Conversation _fromConversation(g.AgentConversation v) => Conversation(

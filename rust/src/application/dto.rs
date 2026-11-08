@@ -156,6 +156,8 @@ pub struct AgentRun {
     pub failure_detail: Option<AgentFailureDetail>,
     pub attempts: Vec<AgentAttempt>,
     pub context: AgentRunContext,
+    /// The id of the user message that started a turn; none for summaries.
+    pub input_message_id: Option<String>,
 }
 #[derive(Debug, Clone)]
 pub struct AgentConversation {

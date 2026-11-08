@@ -496,6 +496,7 @@ impl Application {
                     })
                     .collect(),
                 context: v.context.into(),
+                input_message_id: v.input_message_id,
             })
             .collect();
         let store = self.artifacts.clone();
