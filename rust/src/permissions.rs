@@ -2188,4 +2188,54 @@ mod tests {
         other.arguments_json = r#"{"path":"b"}"#.into();
         assert!(!already_approved(&f.repo, &other).unwrap());
     }
+    /// Approves the fixture call, then rediscovers its tool with a changed
+    /// schema; the stored approval is bound to the old definition.
+    fn approved_then_changed(f: &Fixture) -> (ApprovalBinding, ToolDefinition) {
+        let d = f.definition();
+        let b = ask(authorize(&f.repo, f.attempt, &f.call(), &d, None).unwrap());
+        approve(&f.repo, f.attempt, &b).unwrap();
+        assert_eq!(attempt_row(&f.repo, f.attempt).0, "Approved");
+        let changed = ToolDefinition::from_discovery(
+            &f.repo,
+            d.key.clone(),
+            r#"{"type":"object","properties":{"path":{"type":"string"}}}"#,
+        )
+        .unwrap();
+        assert_ne!(changed.schema_digest, d.schema_digest);
+        (b, changed)
+    }
+    #[test]
+    fn approved_call_with_changed_definition_dispatches_under_server_trust() {
+        let f = Fixture::new();
+        let (b, changed) = approved_then_changed(&f);
+        set_server_trust(&f.repo, f.server, true).unwrap();
+        assert_eq!(
+            authorize(&f.repo, f.attempt, &f.call(), &changed, Some(&b)).unwrap(),
+            Authorization::Allow
+        );
+        assert_eq!(attempt_row(&f.repo, f.attempt).0, "Dispatching");
+    }
+    #[test]
+    fn approved_call_with_changed_definition_dispatches_under_allow_rule() {
+        let f = Fixture::new();
+        let (b, changed) = approved_then_changed(&f);
+        set_rule(&f.repo, &changed, PermissionRule::Allow).unwrap();
+        assert_eq!(
+            authorize(&f.repo, f.attempt, &f.call(), &changed, Some(&b)).unwrap(),
+            Authorization::Allow
+        );
+        assert_eq!(attempt_row(&f.repo, f.attempt).0, "Dispatching");
+    }
+    #[test]
+    fn approved_call_with_changed_definition_is_blocked_despite_trust() {
+        let f = Fixture::new();
+        let (b, changed) = approved_then_changed(&f);
+        set_server_trust(&f.repo, f.server, true).unwrap();
+        set_rule(&f.repo, &changed, PermissionRule::Block).unwrap();
+        assert_eq!(
+            authorize(&f.repo, f.attempt, &f.call(), &changed, Some(&b)).unwrap(),
+            Authorization::Block
+        );
+        assert_ne!(attempt_row(&f.repo, f.attempt).0, "Dispatching");
+    }
 }

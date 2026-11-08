@@ -181,10 +181,10 @@ void main() {
         // The transcript card, `tool · server · state`.
         final tile = find.textContaining(
           RegExp(
-            '^${pending.attempts.single.call.key.name} · .* · Needs approval\$',
+            '^${RegExp.escape(pending.attempts.first.call.key.name)} · .* · Needs approval\$',
           ),
         );
-        await tap(tile);
+        await tap(tile.first);
         expect(find.text('Requested arguments (immutable)'), findsOneWidget);
         // Approve all decides every pending call and resumes the run.
         await tap(find.byKey(Key('approve-all-${pending.id}')));
@@ -198,6 +198,26 @@ void main() {
         'name': 'read',
         'arguments': {'value': 'read-exact'},
       });
+      // One turn requesting two calls: both are bound before the run waits,
+      // and one Approve all decides both and completes the run.
+      run = await send('pair', (r) => r.state == RunState.waitingApproval);
+      lastRun = run.id;
+      expect(run.attempts, hasLength(2));
+      expect(run.attempts.every((a) => a.binding != null), isTrue);
+      expect(fixture.calls, hasLength(1));
+      await approve(run);
+      expect([
+        for (final c in fixture.calls.skip(1)) c['arguments']['value'],
+      ], unorderedEquals(['pair-one-exact', 'pair-two-exact']));
+      // A trusted server's call runs without an approval card.
+      await backend.execute(SetServerTrust(server, trusted: true));
+      run = await send('trusted', (r) => r.state == RunState.completed);
+      lastRun = run.id;
+      expect(run.attempts.single.state, AttemptState.succeeded);
+      expect(fixture.calls.last['arguments'], {'value': 'trusted-exact'});
+      await chat();
+      expect(find.byKey(Key('approval-${run.id}')), findsNothing);
+      await backend.execute(SetServerTrust(server, trusted: false));
       run = await send('ask', (r) => r.state == RunState.waitingApproval);
       lastRun = run.id;
       expect(fixture.writes, 0);
@@ -274,7 +294,8 @@ void main() {
       );
       expect(stopped.state, RunState.cancelled);
       expect(stopped.partialText, 'controlled partial');
-      expect(fixture.calls.length, 3);
+      // read, two pair reads, trusted read, then three writes.
+      expect(fixture.calls.length, 6);
       await policy('write', PermissionRule.allow);
       run = await send(
         'unknown',
@@ -424,7 +445,7 @@ class _Fixture {
           delta = {'content': 'Controlled operation complete'};
           finish = 'stop';
         } else {
-          final tool = prompt == 'read'
+          final tool = {'read', 'pair', 'trusted'}.contains(prompt)
               ? 'read'
               : prompt == 'markdown'
               ? 'create_artifact'
@@ -436,15 +457,20 @@ class _Fixture {
           final args = tool == 'create_artifact'
               ? {'name': 'summary.md', 'content': _markdown}
               : {'value': '$prompt-exact'};
+          Map<String, dynamic> call(int index, String id, Object arguments) => {
+            'index': index,
+            'id': id,
+            'type': 'function',
+            'function': {'name': name, 'arguments': jsonEncode(arguments)},
+          };
           delta = {
-            'tool_calls': [
-              {
-                'index': 0,
-                'id': 'controlled-$prompt',
-                'type': 'function',
-                'function': {'name': name, 'arguments': jsonEncode(args)},
-              },
-            ],
+            'tool_calls': prompt == 'pair'
+                // Two read calls in one turn, each with its own id.
+                ? [
+                    call(0, 'controlled-pair-1', {'value': 'pair-one-exact'}),
+                    call(1, 'controlled-pair-2', {'value': 'pair-two-exact'}),
+                  ]
+                : [call(0, 'controlled-$prompt', args)],
           };
           finish = 'tool_calls';
         }

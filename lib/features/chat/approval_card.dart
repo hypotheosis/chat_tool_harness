@@ -2,28 +2,53 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../backend/models.dart';
 
+/// The ids of the MCP servers [servers] marks trusted.
+Set<String> trustedServerIds(Iterable<ServerConfig> servers) => {
+  for (final s in servers)
+    if (s.trusted) s.id,
+};
+
+/// Whether [a] is a proposed call with a binding, waiting for a decision
+/// unless its server is in [trusted].
+bool _bound(Attempt a) => a.state == AttemptState.proposed && a.binding != null;
+
 /// The calls of [run] that still need the user's decision: proposed attempts
-/// with an approval binding, while the run waits for approval.
-List<Attempt> pendingDecisions(Run run) => [
+/// with an approval binding, while the run waits for approval, except calls
+/// of a server in [trusted], which run on resume without asking.
+List<Attempt> pendingDecisions(Run run, {Set<String> trusted = const {}}) => [
   if (run.state == RunState.waitingApproval)
     for (final a in run.attempts)
-      if (a.state == AttemptState.proposed && a.binding != null) a,
+      if (_bound(a) && !trusted.contains(a.call.key.serverId)) a,
 ];
 
-/// The display name of [serverId] for a call of [run]: the run's own server
-/// configuration, else the current one in [snapshot], else the id. Null
-/// means local files.
-String serverLabel(String? serverId, Run run, AppSnapshot? snapshot) {
+/// The display name of [serverId], the first match in [servers], else the
+/// id. Null means local files.
+String serverLabel(String? serverId, Iterable<ServerConfig> servers) {
   if (serverId == null) return 'Local files';
-  for (final s in [...run.profile.servers, ...?snapshot?.servers]) {
+  for (final s in servers) {
     if (s.id == serverId) return s.name;
   }
   return serverId;
 }
 
-/// A short readable state for a tool call.
-String attemptStateLabel(Attempt a) => switch (a.state) {
-  AttemptState.proposed => a.binding == null ? 'Queued' : 'Needs approval',
+/// The distinct servers of [calls] (null for local files).
+Set<String?> callServers(Iterable<Attempt> calls) => {
+  for (final a in calls) a.call.key.serverId,
+};
+
+/// A short readable state for a tool call of [run]. [trusted] holds the
+/// trusted server ids; [run]'s unresolved attempt holds its other calls.
+String attemptStateLabel(
+  Attempt a, {
+  bool unresolved = false,
+  Set<String> trusted = const {},
+}) => switch (a.state) {
+  AttemptState.proposed when a.binding == null => 'Queued',
+  AttemptState.proposed when unresolved =>
+    "Waiting — an earlier call's outcome is unknown",
+  AttemptState.proposed when trusted.contains(a.call.key.serverId) =>
+    'Trusted, runs on resume',
+  AttemptState.proposed => 'Needs approval',
   AttemptState.approved => 'Approved',
   AttemptState.denied => 'Denied',
   AttemptState.dispatching => 'Running',
@@ -32,11 +57,15 @@ String attemptStateLabel(Attempt a) => switch (a.state) {
   AttemptState.outcomeUnknown => 'Outcome unknown',
 };
 
-/// [json] indented for reading, or unchanged when it is not valid JSON.
+/// [json] indented for reading, or unchanged unless it is compact JSON that
+/// survives a round trip exactly: Dart reads integers beyond 64 bits as
+/// doubles, which would change the digits the user approves.
 String prettyJson(String json) {
   try {
-    return const JsonEncoder.withIndent('  ').convert(jsonDecode(json));
-  } on FormatException {
+    final value = jsonDecode(json);
+    if (jsonEncode(value) != json) return json;
+    return const JsonEncoder.withIndent('  ').convert(value);
+  } catch (_) {
     return json;
   }
 }
@@ -71,7 +100,7 @@ class ApprovalCard extends StatelessWidget {
 
   /// The MCP server every call is from, or null.
   static String? soleServer(List<Attempt> calls) {
-    final ids = {for (final a in calls) a.call.key.serverId};
+    final ids = callServers(calls);
     return ids.length == 1 ? ids.single : null;
   }
 
@@ -80,7 +109,7 @@ class ApprovalCard extends StatelessWidget {
     final sole = soleServer(calls);
     final count = calls.length;
     final tools = count == 1 ? '1 tool' : '$count tools';
-    final title = {for (final a in calls) a.call.key.serverId}.length == 1
+    final title = callServers(calls).length == 1
         ? '${serverName(calls.first.call.key.serverId)} wants to run $tools'
         : '$count tool calls need your approval';
     final theme = Theme.of(context);
@@ -93,12 +122,7 @@ class ApprovalCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(title, style: theme.textTheme.titleSmall),
-            for (final a in calls)
-              _PendingCall(
-                attempt: a,
-                serverName: serverName(a.call.key.serverId),
-                onDeny: onDeny == null ? null : () => onDeny!(a),
-              ),
+            // Actions first, so many calls never push them out of view.
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -122,6 +146,13 @@ class ApprovalCard extends StatelessWidget {
                   ),
               ],
             ),
+            for (final a in calls)
+              _PendingCall(
+                key: ValueKey(a.id),
+                attempt: a,
+                serverName: serverName(a.call.key.serverId),
+                onDeny: onDeny == null ? null : () => onDeny!(a),
+              ),
           ],
         ),
       ),
@@ -131,6 +162,7 @@ class ApprovalCard extends StatelessWidget {
 
 class _PendingCall extends StatefulWidget {
   const _PendingCall({
+    super.key,
     required this.attempt,
     required this.serverName,
     this.onDeny,
@@ -168,10 +200,13 @@ class _PendingCallState extends State<_PendingCall> {
                   style: Theme.of(context).textTheme.labelLarge,
                 ),
               ),
-              TextButton(
-                key: Key('deny-${a.id}'),
-                onPressed: widget.onDeny,
-                child: const Text('Deny'),
+              Tooltip(
+                message: 'Deny ${a.call.key.name} on ${widget.serverName}',
+                child: TextButton(
+                  key: Key('deny-${a.id}'),
+                  onPressed: widget.onDeny,
+                  child: const Text('Deny'),
+                ),
               ),
             ],
           ),

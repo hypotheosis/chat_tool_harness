@@ -336,13 +336,15 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: Text(
                     run.state == RunState.running
                         ? 'Working…'
+                        : hasUnresolvedAttempt(run)
+                        ? "Waiting — a tool call's outcome is unknown"
                         : 'Waiting for your approval',
                   ),
                 ),
                 // The approval card decides pending calls and resumes; Resume
                 // is only for a run whose calls are all decided already.
                 if (run.state == RunState.waitingApproval &&
-                    pendingDecisions(run).isEmpty &&
+                    decisions(run).isEmpty &&
                     !hasUnresolvedAttempt(run))
                   TextButton(
                     key: Key('resume-${run.id}'),
@@ -397,19 +399,17 @@ class _ChatScreenState extends State<ChatScreen> {
     return out;
   }
 
-  /// The display name of [serverId] in [run].
-  String serverName(String? serverId, Run run) =>
-      serverLabel(serverId, run, state.snapshot);
-
-  /// The display name of [serverId] in [c]'s profile, else the current
+  /// The display name of [serverId] in [profile], else in the current
   /// configuration, else the id.
-  String conversationServerName(String? serverId, Conversation c) {
-    if (serverId == null) return 'Local files';
-    for (final s in [...c.profile.servers, ...?state.snapshot?.servers]) {
-      if (s.id == serverId) return s.name;
-    }
-    return serverId;
-  }
+  String serverName(String? serverId, ProfileSnapshot profile) =>
+      serverLabel(serverId, [...profile.servers, ...?state.snapshot?.servers]);
+
+  /// Servers trusted now. The current configuration decides, since trust can
+  /// change while a run waits; a run's own snapshot may be stale.
+  Set<String> get trusted => trustedServerIds(state.snapshot?.servers ?? []);
+
+  /// The calls of [run] the user must still decide.
+  List<Attempt> decisions(Run run) => pendingDecisions(run, trusted: trusted);
 
   /// Asks before trusting [server]: trust covers tools it adds later.
   Future<bool> confirmTrust(String server) async =>
@@ -441,7 +441,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return ApprovalCard(
       runId: run.id,
       calls: calls,
-      serverName: (id) => serverName(id, run),
+      serverName: (id) => serverName(id, run.profile),
       onApproveAll: busy ? null : () => state.decide(run.id, approve: bindings),
       onDenyAll: busy
           ? null
@@ -450,7 +450,7 @@ class _ChatScreenState extends State<ChatScreen> {
       onAlwaysAllow: busy || sole == null
           ? null
           : () async {
-              if (await confirmTrust(serverName(sole, run))) {
+              if (await confirmTrust(serverName(sole, run.profile))) {
                 await state.trustAndApprove(run.id, sole, bindings);
               }
             },
@@ -468,7 +468,7 @@ class _ChatScreenState extends State<ChatScreen> {
           for (final call in m.calls)
             ExpansionTile(
               title: Text(
-                '${call.key.name} · ${conversationServerName(call.key.serverId, c)}',
+                '${call.key.name} · ${serverName(call.key.serverId, c.profile)}',
               ),
               children: [SelectableText(call.argumentsJson)],
             ),
@@ -528,7 +528,7 @@ class _ChatScreenState extends State<ChatScreen> {
               // Deciding resumes the run, so a run with a call whose outcome
               // is unknown gets no approval card; Stop is all it offers.
               for (final r in state.runs)
-                if (pendingDecisions(r) case final calls
+                if (decisions(r) case final calls
                     when calls.isNotEmpty && !hasUnresolvedAttempt(r))
                   approvalCard(r, calls),
               if (unacknowledged && !runAsks)
@@ -594,7 +594,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return Card(
       child: ExpansionTile(
         title: Text(
-          '${key.name} · ${serverName(key.serverId, run)} · ${attemptStateLabel(a)}',
+          '${key.name} · ${serverName(key.serverId, run.profile)} · ${attemptStateLabel(a, unresolved: hasUnresolvedAttempt(run), trusted: trusted)}',
         ),
         subtitle: a.state == AttemptState.outcomeUnknown
             ? const Text(
