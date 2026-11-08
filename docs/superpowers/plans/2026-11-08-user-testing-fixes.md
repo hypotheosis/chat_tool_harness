@@ -399,7 +399,7 @@ Background: `send` (endpoint requests) maps 401/403 → `Authentication`, other 
         assert!(matches!(result, Err(CoreError::UnavailableTransport)));
         let detail = detail.unwrap();
         assert_eq!(detail.status, None);
-        assert_eq!(detail.reason.as_deref(), Some("connection failed"));
+        assert_eq!(detail.reason.as_deref(), Some("connection refused"));
     }
 ```
 
@@ -890,7 +890,7 @@ class BackendFailure implements Exception {
 ```
   Add `failureCode` (`FailureCode?`) and `failureDetail` (`FailureDetail?`) to the run model next to `failure` and map them in `frb_backend.dart` (~line 474). In `mapFailure`, handle the generated `AgentFailure` type first (map `code` with the existing switch, now including `credentialMissing`, and convert `detail`), then the existing `errors.CoreError` branch.
 
-- [ ] **Step 5: Real-bridge test.** In `integration_test/agent_bridge_test.dart` add a case that saves an endpoint pointing at `http://127.0.0.1:9/v1` with `allowHttp: true` (port 9 is discard/closed) and runs `DiscoverModels`; expect a `BackendFailure` with `detail?.step == 'discoverModels'` and `detail?.reason == 'connection failed'`.
+- [ ] **Step 5: Real-bridge test.** In `integration_test/agent_bridge_test.dart` add a case that saves an endpoint pointing at `http://127.0.0.1:9/v1` with `allowHttp: true` (port 9 is discard/closed) and runs `DiscoverModels`; expect a `BackendFailure` with `detail?.step == 'discoverModels'` and `detail?.reason == 'connection refused'`.
 
 - [ ] **Step 6: Gates and commit**
 
