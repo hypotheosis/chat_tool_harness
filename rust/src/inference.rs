@@ -246,6 +246,7 @@ impl<P: CredentialProvider> InferenceClient<P> {
         deadline: Instant,
         cancel: Cancellation,
     ) -> CoreResult<Vec<String>> {
+        crate::failure::set_step(crate::failure::FailureStep::DiscoverModels);
         let mut response = match self
             .net
             .get(endpoint, "models", deadline, cancel.clone())
@@ -311,6 +312,7 @@ impl<P: CredentialProvider> InferenceClient<P> {
             body["tool_choice"] = json!("required");
             payload = serde_json::to_vec(&body).map_err(|_| CoreError::InvalidInput)?;
         }
+        crate::failure::set_step(crate::failure::FailureStep::ChatRequest);
         let mut response = self
             .net
             .post(
@@ -1169,5 +1171,72 @@ mod tests {
         assert!(r.validate().is_err());
         r.endpoint.context_tokens = u32::MAX;
         assert!(r.validate().is_err());
+    }
+    struct NoKeyNoted;
+    impl CredentialProvider for NoKeyNoted {
+        fn resolve(
+            &self,
+            _: crate::model::core::CredentialRef,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = CoreResult<crate::net::SecretValue>> + Send + '_>,
+        > {
+            Box::pin(async { Err(CoreError::Authentication) })
+        }
+    }
+    async fn one_shot(status: u16, body: &'static str) -> (String, tokio::task::JoinHandle<()>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buf = [0; 4096];
+            let _ = socket.read(&mut buf).await.unwrap();
+            socket.write_all(format!("HTTP/1.1 {status} Error\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+        });
+        (format!("http://{addr}/v1"), task)
+    }
+    #[tokio::test]
+    async fn discovery_failure_is_tagged_with_its_step() {
+        let (base, server) = one_shot(401, r#"{"error":{"message":"bad key"}}"#).await;
+        let mut endpoint = endpoint();
+        endpoint.base_url = base;
+        endpoint.allow_http = true;
+        let (result, detail) = crate::failure::scope(async {
+            InferenceClient::new(NoKeyNoted)
+                .unwrap()
+                .discover_models_with(
+                    &endpoint,
+                    Instant::now() + std::time::Duration::from_secs(5),
+                    Cancellation::new(),
+                )
+                .await
+        })
+        .await;
+        assert_eq!(result, Err(CoreError::Authentication));
+        let detail = detail.expect("detail");
+        assert_eq!(detail.step, crate::failure::FailureStep::DiscoverModels);
+        assert_eq!(detail.status, Some(401));
+        assert_eq!(detail.reason.as_deref(), Some("bad key"));
+        server.await.unwrap();
+    }
+    #[tokio::test]
+    async fn chat_failure_is_tagged_with_its_step() {
+        let (base, server) = one_shot(500, "{}").await;
+        let mut r = request(vec![]);
+        r.endpoint.base_url = base;
+        r.endpoint.allow_http = true;
+        let (sender, _receiver) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
+        let (result, detail) = crate::failure::scope(async {
+            InferenceClient::new(NoKeyNoted)
+                .unwrap()
+                .stream_turn(r, sender, Cancellation::new())
+                .await
+        })
+        .await;
+        assert!(result.is_err());
+        let detail = detail.expect("detail");
+        assert_eq!(detail.step, crate::failure::FailureStep::ChatRequest);
+        assert_eq!(detail.status, Some(500));
+        server.await.unwrap();
     }
 }

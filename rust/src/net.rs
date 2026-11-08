@@ -101,13 +101,13 @@ fn note_failure(
     });
 }
 
-const ERROR_BODY_READ_TIMEOUT: Duration = Duration::from_secs(2);
+pub(crate) const ERROR_BODY_READ_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Reads at most 4096 body bytes of an error response, waiting at most
 /// `bound` for it. The flag is true when the body was cut short by the size
 /// limit. A stalled or failed read yields whatever arrived; only caller
 /// cancellation or the caller's own deadline is an error.
-async fn read_error_body(
+pub(crate) async fn read_error_body(
     response: &mut Response,
     deadline: Instant,
     cancel: &Cancellation,

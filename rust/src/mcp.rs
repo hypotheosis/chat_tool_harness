@@ -1,6 +1,9 @@
 use crate::error::CoreError;
 use crate::model::core::{ProfileId, ServerConfig, ToolCall, ToolDefinition, ToolKey, ToolServer};
-use crate::net::{next_chunk, Cancellation, CredentialProvider, NetClient};
+use crate::net::{
+    next_chunk, read_error_body, Cancellation, CredentialProvider, NetClient,
+    ERROR_BODY_READ_TIMEOUT,
+};
 use crate::permissions;
 use crate::storage::Repository;
 use reqwest::{header, Method, Response};
@@ -177,15 +180,19 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
             .map_err(Into::into)
     }
     async fn initialize(&mut self, deadline: Instant, cancel: &Cancellation) -> McpResult<()> {
+        crate::failure::set_step(crate::failure::FailureStep::Initialize);
         let id = self.id()?;
         let request = json!({"jsonrpc":"2.0","id":id,"method":"initialize","params":{
             "protocolVersion":SUPPORTED_VERSIONS[0],"capabilities":{},"clientInfo":{"name":"chat_tool_harness","version":"0.1.0"}
         }});
         let mut response = self.post(request, deadline, cancel, false).await?;
-        if matches!(response.status().as_u16(), 400 | 404 | 405) {
-            return Err(McpError::UnsupportedTransport);
+        if !response.status().is_success() {
+            let status = note_status(&self.server, &mut response, deadline, cancel).await?;
+            if matches!(status, 400 | 404 | 405) {
+                return Err(McpError::UnsupportedTransport);
+            }
+            return Err(classify_code(status, false));
         }
-        classify_status(&response, false)?;
         let session = response
             .headers()
             .get("Mcp-Session-Id")
@@ -222,7 +229,7 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
         }
         self.version = version.to_owned();
         self.session_id = session;
-        let response = self
+        let mut response = self
             .post(
                 json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
                 deadline,
@@ -231,7 +238,10 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
             )
             .await?;
         if response.status().as_u16() != 202 {
-            classify_status(&response, self.session_id.is_some())?;
+            if !response.status().is_success() {
+                let status = note_status(&self.server, &mut response, deadline, cancel).await?;
+                return Err(classify_code(status, self.session_id.is_some()));
+            }
             return Err(McpError::Protocol);
         }
         self.stale = true;
@@ -257,7 +267,8 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
                 .as_ref()
                 .map(|v| json!({"cursor":v}))
                 .unwrap_or_else(|| json!({}));
-            let response = self
+            crate::failure::set_step(crate::failure::FailureStep::ListTools);
+            let mut response = self
                 .post(
                     json!({"jsonrpc":"2.0","id":id,"method":"tools/list","params":params}),
                     deadline,
@@ -265,14 +276,16 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
                     true,
                 )
                 .await?;
-            if response.status().as_u16() == 404 && self.session_id.is_some() {
-                self.invalidate().await?;
-                self.session_id = None;
-                self.initialize(deadline, &cancel).await?;
-                return Err(McpError::ExpiredSession);
+            if !response.status().is_success() {
+                let status = note_status(&self.server, &mut response, deadline, &cancel).await?;
+                if status == 404 && self.session_id.is_some() {
+                    self.invalidate().await?;
+                    self.session_id = None;
+                    self.initialize(deadline, &cancel).await?;
+                    return Err(McpError::ExpiredSession);
+                }
+                return Err(classify_code(status, self.session_id.is_some()));
             }
-            classify_status(&response, self.session_id.is_some())?;
-            let mut response = response;
             let (value, changed) = read_rpc_events(
                 &mut response,
                 id,
@@ -439,6 +452,7 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
             return Err(McpError::Cancelled);
         }
         let id = self.id()?;
+        crate::failure::set_step(crate::failure::FailureStep::CallTool);
         let response = self.post(json!({"jsonrpc":"2.0","id":id,"method":"tools/call","params":{"name":call.key.name,"arguments":arguments}}), deadline, &cancel, true).await;
         let mut response = match response {
             Ok(v) => v,
@@ -447,12 +461,16 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
             }
             Err(e) => return Err(e),
         };
-        if response.status().as_u16() == 404 && self.session_id.is_some() {
-            self.invalidate().await?;
-            self.session_id = None;
-            return Err(McpError::OutcomeUnknown);
-        }
         if !response.status().is_success() {
+            // The request may have reached the server, so every failure here is an unknown outcome.
+            let status = match note_status(&self.server, &mut response, deadline, &cancel).await {
+                Ok(status) => status,
+                Err(_) => response.status().as_u16(),
+            };
+            if status == 404 && self.session_id.is_some() {
+                self.invalidate().await?;
+                self.session_id = None;
+            }
             return Err(McpError::OutcomeUnknown);
         }
         let (value, list_changed) = read_rpc_events(
@@ -671,10 +689,39 @@ impl<P> Drop for McpSession<P> {
 fn classify_status(response: &Response, session: bool) -> McpResult<()> {
     match response.status().as_u16() {
         200..=299 => Ok(()),
-        401 | 403 => Err(McpError::Authentication),
-        404 if session => Err(McpError::ExpiredSession),
-        _ => Err(McpError::Protocol),
+        status => Err(classify_code(status, session)),
     }
+}
+/// Error for a non-success status.
+fn classify_code(status: u16, session: bool) -> McpError {
+    match status {
+        401 | 403 => McpError::Authentication,
+        404 if session => McpError::ExpiredSession,
+        _ => McpError::Protocol,
+    }
+}
+/// Reads a bounded slice of a non-success response body, records the failure
+/// note for the current step and returns the status. Only caller cancellation
+/// or the caller's deadline turns into an error; a stalled body is ignored.
+async fn note_status(
+    server: &ServerConfig,
+    response: &mut Response,
+    deadline: Instant,
+    cancel: &Cancellation,
+) -> McpResult<u16> {
+    let status = response.status().as_u16();
+    let url = crate::failure::display_url(response.url());
+    let (body, _) = read_error_body(response, deadline, cancel, ERROR_BODY_READ_TIMEOUT).await?;
+    crate::failure::note(crate::failure::FailureDetail {
+        target: crate::failure::FailureTarget::McpServer {
+            name: server.name.clone(),
+        },
+        step: crate::failure::FailureStep::Request,
+        url: Some(url),
+        status: Some(status),
+        reason: crate::failure::reason_from_body(&body, &[]),
+    });
+    Ok(status)
 }
 fn event_delimiter(bytes: &[u8]) -> Option<(usize, usize)> {
     for i in 0..bytes.len() {
@@ -2816,6 +2863,144 @@ mod tests {
                 .await,
             Err(McpError::UnsupportedTransport)
         ));
+        task.await.unwrap();
+    }
+    use crate::failure::{self, FailureStep, FailureTarget};
+
+    async fn connect_noted(
+        server: &ServerConfig,
+    ) -> (McpResult<McpSession<NoKey>>, Option<failure::FailureDetail>) {
+        failure::scope(async {
+            McpClient::new(NoKey)
+                .unwrap()
+                .connect(
+                    ProfileId(server.id.0),
+                    server.clone(),
+                    fixture_repository(server),
+                    deadline(),
+                    Cancellation::new(),
+                )
+                .await
+        })
+        .await
+    }
+    #[tokio::test]
+    async fn initialize_401_notes_status_reason_and_step() {
+        let (server, task) = fixture(vec![(
+            401,
+            "Content-Type: application/json\r\n",
+            r#"{"error":"unknown API key"}"#.into(),
+        )])
+        .await;
+        let (result, detail) = connect_noted(&server).await;
+        assert!(matches!(result, Err(McpError::Authentication)));
+        let detail = detail.expect("detail");
+        assert_eq!(detail.step, FailureStep::Initialize);
+        assert_eq!(detail.status, Some(401));
+        assert_eq!(detail.reason.as_deref(), Some("unknown API key"));
+        assert_eq!(
+            detail.target,
+            FailureTarget::McpServer {
+                name: "fixture".into()
+            }
+        );
+        task.await.unwrap();
+    }
+    #[tokio::test]
+    async fn initialize_404_is_unsupported_transport_with_detail() {
+        let (server, task) = fixture(vec![(404, "", String::new())]).await;
+        let (result, detail) = connect_noted(&server).await;
+        assert!(matches!(result, Err(McpError::UnsupportedTransport)));
+        let detail = detail.expect("detail");
+        assert_eq!(detail.step, FailureStep::Initialize);
+        assert_eq!(detail.status, Some(404));
+        task.await.unwrap();
+    }
+    #[tokio::test(start_paused = true)]
+    async fn initialize_stalled_error_body_still_maps_status() {
+        // Headers promise a body that never arrives; the bounded read must not hang.
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = ServerConfig {
+            id: ServerId::new(),
+            name: "fixture".into(),
+            url: format!("http://{addr}/mcp"),
+            allow_http: true,
+            secret_headers: vec![],
+        };
+        let (done_tx, done_rx) = tokio::sync::oneshot::channel::<()>();
+        let task = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buf = [0; 4096];
+            assert!(socket.read(&mut buf).await.unwrap() > 0);
+            socket
+                .write_all(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 50\r\n\r\n")
+                .await
+                .unwrap();
+            let _ = done_rx.await;
+        });
+        let (result, detail) = connect_noted(&server).await;
+        assert!(matches!(result, Err(McpError::Authentication)));
+        assert_eq!(detail.expect("detail").status, Some(401));
+        let _ = done_tx.send(());
+        task.await.unwrap();
+    }
+    #[tokio::test]
+    async fn list_and_call_failures_carry_their_steps() {
+        let (server, task) = fixture(vec![
+            (200, "Content-Type: application/json\r\n", init()),
+            (202, "", String::new()),
+            (500, "", r#"{"message":"list broke"}"#.into()),
+            (
+                200,
+                "Content-Type: application/json\r\n",
+                list(3, &["alpha"], None),
+            ),
+            (502, "", String::new()),
+        ])
+        .await;
+        let mut session = McpClient::new(NoKey)
+            .unwrap()
+            .connect(
+                ProfileId(server.id.0),
+                server.clone(),
+                fixture_repository(&server),
+                deadline(),
+                Cancellation::new(),
+            )
+            .await
+            .unwrap();
+        let (result, detail) =
+            failure::scope(async { session.list_tools(deadline(), Cancellation::new()).await })
+                .await;
+        assert!(matches!(result, Err(McpError::Protocol)));
+        let detail = detail.expect("detail");
+        assert_eq!(detail.step, FailureStep::ListTools);
+        assert_eq!(detail.status, Some(500));
+        assert_eq!(detail.reason.as_deref(), Some("list broke"));
+        session
+            .list_tools(deadline(), Cancellation::new())
+            .await
+            .unwrap();
+        let call = ToolCall {
+            key: ToolKey {
+                profile_id: session.profile_id(),
+                server: ToolServer::Mcp(server.id),
+                name: "alpha".into(),
+            },
+            provider_call_id: "call".into(),
+            arguments_json: "{}".into(),
+        };
+        let (result, detail) = failure::scope(async {
+            session
+                .call_tool(&call, deadline(), Cancellation::new())
+                .await
+        })
+        .await;
+        assert!(matches!(result, Err(McpError::OutcomeUnknown)));
+        let detail = detail.expect("detail");
+        assert_eq!(detail.step, FailureStep::CallTool);
+        assert_eq!(detail.status, Some(502));
         task.await.unwrap();
     }
 }
