@@ -162,12 +162,12 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
         deadline: Instant,
         cancel: &Cancellation,
         initialized: bool,
-    ) -> McpResult<Response> {
+    ) -> McpResult<(Response, crate::net::SentSecrets)> {
         let body = serde_json::to_vec(&payload).map_err(|_| McpError::InvalidInput)?;
         let version = initialized.then_some(self.version.as_str());
         let session = initialized.then_some(self.session_id.as_deref()).flatten();
         self.net
-            .mcp_request(
+            .mcp_exchange(
                 &self.server,
                 Method::POST,
                 Some(body),
@@ -185,9 +185,10 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
         let request = json!({"jsonrpc":"2.0","id":id,"method":"initialize","params":{
             "protocolVersion":SUPPORTED_VERSIONS[0],"capabilities":{},"clientInfo":{"name":"chat_tool_harness","version":"0.1.0"}
         }});
-        let mut response = self.post(request, deadline, cancel, false).await?;
+        let (mut response, secrets) = self.post(request, deadline, cancel, false).await?;
         if !response.status().is_success() {
-            let status = note_status(&self.server, &mut response, deadline, cancel).await?;
+            let status =
+                note_status(&self.server, &mut response, &secrets, deadline, cancel).await?;
             if matches!(status, 400 | 404 | 405) {
                 return Err(McpError::UnsupportedTransport);
             }
@@ -229,7 +230,7 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
         }
         self.version = version.to_owned();
         self.session_id = session;
-        let mut response = self
+        let (mut response, secrets) = self
             .post(
                 json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
                 deadline,
@@ -239,7 +240,8 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
             .await?;
         if response.status().as_u16() != 202 {
             if !response.status().is_success() {
-                let status = note_status(&self.server, &mut response, deadline, cancel).await?;
+                let status =
+                    note_status(&self.server, &mut response, &secrets, deadline, cancel).await?;
                 return Err(classify_code(status, self.session_id.is_some()));
             }
             return Err(McpError::Protocol);
@@ -268,7 +270,7 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
                 .map(|v| json!({"cursor":v}))
                 .unwrap_or_else(|| json!({}));
             crate::failure::set_step(crate::failure::FailureStep::ListTools);
-            let mut response = self
+            let (mut response, secrets) = self
                 .post(
                     json!({"jsonrpc":"2.0","id":id,"method":"tools/list","params":params}),
                     deadline,
@@ -284,7 +286,7 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
                     self.invalidate().await?;
                     self.session_id = None;
                 }
-                note_status(&self.server, &mut response, deadline, &cancel).await?;
+                note_status(&self.server, &mut response, &secrets, deadline, &cancel).await?;
                 if expired {
                     self.initialize(deadline, &cancel).await?;
                     return Err(McpError::ExpiredSession);
@@ -459,7 +461,7 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
         let id = self.id()?;
         crate::failure::set_step(crate::failure::FailureStep::CallTool);
         let response = self.post(json!({"jsonrpc":"2.0","id":id,"method":"tools/call","params":{"name":call.key.name,"arguments":arguments}}), deadline, &cancel, true).await;
-        let mut response = match response {
+        let (mut response, secrets) = match response {
             Ok(v) => v,
             Err(McpError::Cancelled | McpError::Unavailable) => {
                 return Err(McpError::OutcomeUnknown)
@@ -468,10 +470,11 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
         };
         if !response.status().is_success() {
             // The request may have reached the server, so every failure here is an unknown outcome.
-            let status = match note_status(&self.server, &mut response, deadline, &cancel).await {
-                Ok(status) => status,
-                Err(_) => response.status().as_u16(),
-            };
+            let status =
+                match note_status(&self.server, &mut response, &secrets, deadline, &cancel).await {
+                    Ok(status) => status,
+                    Err(_) => response.status().as_u16(),
+                };
             if status == 404 && self.session_id.is_some() {
                 self.invalidate().await?;
                 self.session_id = None;
@@ -717,6 +720,7 @@ fn classify_code(status: u16, session: bool) -> McpError {
 async fn note_status(
     server: &ServerConfig,
     response: &mut Response,
+    secrets: &crate::net::SentSecrets,
     deadline: Instant,
     cancel: &Cancellation,
 ) -> McpResult<u16> {
@@ -730,7 +734,7 @@ async fn note_status(
         step: crate::failure::FailureStep::Request,
         url: Some(url),
         status: Some(status),
-        reason: crate::failure::reason_from_body(&body, &[]),
+        reason: crate::failure::reason_from_body(&body, &secrets.redactions()),
     });
     Ok(status)
 }

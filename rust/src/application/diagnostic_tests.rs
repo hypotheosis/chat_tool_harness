@@ -286,13 +286,24 @@ struct AppFixture {
 }
 impl AppFixture {
     async fn open(url: &str) -> Self {
+        Self::open_with(url, None).await
+    }
+    /// Opens with every credential resolving to `credential` (or missing).
+    async fn open_with(url: &str, credential: Option<&'static str>) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let stopped = Arc::new(Notify::new());
         let notice = stopped.clone();
         let app = Arc::new(
             Application::open(
                 dir.path().to_string_lossy().into_owned(),
-                |_| Box::pin(async { CredentialReply::Missing }),
+                move |_| {
+                    Box::pin(async move {
+                        match credential {
+                            Some(value) => CredentialReply::Value(value.into()),
+                            None => CredentialReply::Missing,
+                        }
+                    })
+                },
                 move |active| {
                     let notice = notice.clone();
                     Box::pin(async move {
@@ -630,5 +641,38 @@ async fn failed_run_snapshot_carries_failure_code_and_detail() {
     assert_eq!(code, CoreError::UnavailableTransport);
     assert_eq!(detail.reason.as_deref(), Some("connection refused"));
     assert_eq!(run.failure, detail.reason);
+    f.app.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn mcp_error_reason_redacts_short_header_secret() {
+    let mut wire = Wire::open().await;
+    let f = AppFixture::open_with(&wire.url, Some("k3y9")).await;
+    f.app
+        .repository
+        .save_server(core::ServerConfig {
+            id: core::ServerId(uuid(&f.server).unwrap()),
+            name: "s".into(),
+            url: format!("{}/mcp", wire.url),
+            allow_http: true,
+            secret_headers: vec![("X-Api-Key".into(), core::CredentialRef::new())],
+        })
+        .unwrap();
+    let app = f.app.clone();
+    let command = f.discover();
+    let diagnostic = tokio::spawn(async move { app.command_with_detail(command).await });
+    let request = wire.next().await;
+    assert_eq!(request.body["method"], "initialize");
+    request.respond(
+        401,
+        "application/json",
+        "",
+        json!({"error":"key k3y9 is not valid"}).to_string(),
+    );
+    let failure = diagnostic.await.unwrap().unwrap_err();
+    assert_eq!(failure.code, CoreError::Authentication);
+    let reason = failure.detail.expect("detail").reason.expect("reason");
+    assert!(!reason.contains("k3y9"), "{reason}");
+    assert_eq!(reason, "key ••• is not valid");
     f.app.close().await.unwrap();
 }

@@ -147,7 +147,7 @@ void main() {
             isA<BackendFailure>().having(
               (e) => e.code,
               'missing historical key',
-              FailureCode.authentication,
+              FailureCode.credentialMissing,
             ),
           ),
         );

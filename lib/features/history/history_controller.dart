@@ -124,7 +124,10 @@ class HistoryController extends ChangeNotifier {
     try {
       await action();
     } catch (e) {
-      error = e is BackendFailure && e.code == FailureCode.authentication
+      error =
+          e is BackendFailure &&
+              (e.code == FailureCode.authentication ||
+                  e.code == FailureCode.credentialMissing)
           ? 'Export blocked: configured credential missing or unavailable. Repair credentials in Settings; history browsing is still available.'
           : e is BackendFailure && e.code == FailureCode.limit
           ? 'History/export safety limit reached: transcripts must fit 1 MiB and the private storage quota. Nothing was truncated; history remains available.'

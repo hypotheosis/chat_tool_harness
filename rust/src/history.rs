@@ -78,7 +78,11 @@ pub async fn export_transcript<P: CredentialProvider>(
         let value = tokio::time::timeout_at(deadline, credentials.resolve(*reference))
             .await
             .map_err(|_| CoreError::Authentication)?
-            .map_err(|_| CoreError::Authentication)?;
+            .map_err(|e| match e {
+                // Keep the precise kind so every caller reports a missing key the same way.
+                CoreError::CredentialMissing => CoreError::CredentialMissing,
+                _ => CoreError::Authentication,
+            })?;
         if value.as_str().is_empty() {
             return Err(CoreError::Authentication);
         }

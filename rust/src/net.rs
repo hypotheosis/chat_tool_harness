@@ -23,6 +23,27 @@ impl SecretValue {
         &self.0
     }
 }
+/// Secret header values sent with one MCP request, kept only to redact that
+/// request's error body.
+pub struct SentSecrets(Vec<SecretValue>);
+impl SentSecrets {
+    /// Every sent value, plus the part after a scheme such as `Bearer `.
+    pub(crate) fn redactions(&self) -> Vec<&str> {
+        let mut out = Vec::new();
+        for secret in &self.0 {
+            out.push(secret.as_str());
+            if let Some((_, bare)) = secret.as_str().split_once(' ') {
+                out.push(bare);
+            }
+        }
+        out
+    }
+}
+impl fmt::Debug for SentSecrets {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SentSecrets([REDACTED])")
+    }
+}
 impl fmt::Debug for SecretValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("SecretValue([REDACTED])")
@@ -156,6 +177,23 @@ impl<P: CredentialProvider> NetClient<P> {
         deadline: Instant,
         cancel: &Cancellation,
     ) -> CoreResult<Response> {
+        self.mcp_exchange(server, method, body, version, session, deadline, cancel)
+            .await
+            .map(|(response, _)| response)
+    }
+    /// [`NetClient::mcp_request`] that also returns the secret header values it
+    /// sent, so a caller reading an error body can redact them.
+    #[allow(clippy::too_many_arguments)] // Same request contexts as `mcp_request`.
+    pub async fn mcp_exchange(
+        &self,
+        server: &crate::model::core::ServerConfig,
+        method: Method,
+        body: Option<Vec<u8>>,
+        version: Option<&str>,
+        session: Option<&str>,
+        deadline: Instant,
+        cancel: &Cancellation,
+    ) -> CoreResult<(Response, SentSecrets)> {
         let url = Url::parse(&server.url).map_err(|_| CoreError::InvalidInput)?;
         let shown_url = url.clone();
         if server.url.trim() != server.url
@@ -214,6 +252,7 @@ impl<P: CredentialProvider> NetClient<P> {
             value.set_sensitive(true);
             builder = builder.header("MCP-Session-Id", value);
         }
+        let mut sent = Vec::new();
         for (name, reference) in custom {
             let secret = tokio::select! {
                 _ = cancel.cancelled() => return Err(CoreError::Cancelled),
@@ -227,6 +266,7 @@ impl<P: CredentialProvider> NetClient<P> {
             .map_err(|_| CoreError::Configuration)?;
             value.set_sensitive(true);
             builder = builder.header(name, value);
+            sent.push(secret);
         }
         if let Some(body) = body {
             builder = builder
@@ -255,7 +295,7 @@ impl<P: CredentialProvider> NetClient<P> {
                     );
                     Err(CoreError::UnavailableTransport)
                 }
-                Ok(Ok(Ok(response))) => Ok(response),
+                Ok(Ok(Ok(response))) => Ok((response, SentSecrets(sent))),
             },
         }
     }

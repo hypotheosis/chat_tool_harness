@@ -24,6 +24,9 @@ impl std::fmt::Debug for CredentialReply {
         f.write_str("CredentialReply([REDACTED])")
     }
 }
+// Credential notes must never carry external text (platform messages, lookup
+// errors): `failure::promote` treats the CREDENTIAL_MISSING_REASON reason on a
+// Credential note as the marker for an absent credential.
 fn credential_value(reply: CredentialReply) -> CoreResult<SecretValue> {
     match reply {
         CredentialReply::Value(value) => Ok(SecretValue::new(value)),

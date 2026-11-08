@@ -327,7 +327,8 @@ impl From<crate::failure::FailureDetail> for AgentFailureDetail {
         };
         Self {
             target_kind: target_kind.into(),
-            target_name,
+            // Settlement falls back to an empty name when the snapshot is unreadable.
+            target_name: target_name.filter(|name| !name.is_empty()),
             step: step.into(),
             url: v.url,
             status: v.status,
@@ -378,6 +379,42 @@ mod tests {
                 reason: Some("busy".into()),
             }
         );
+        let mapped = |target: FailureTarget, step: FailureStep| {
+            AgentFailureDetail::from(FailureDetail {
+                target,
+                step,
+                url: None,
+                status: None,
+                reason: None,
+            })
+        };
+        let profile = mapped(
+            FailureTarget::Profile { name: "p".into() },
+            FailureStep::RefreshProfile,
+        );
+        assert_eq!(
+            (profile.target_kind.as_str(), profile.target_name.as_deref()),
+            ("profile", Some("p"))
+        );
+        assert_eq!(profile.step, "refreshProfile");
+        let inference = |step| mapped(FailureTarget::Inference { name: "m".into() }, step);
+        assert_eq!(inference(FailureStep::ChatRequest).target_kind, "inference");
+        for (step, name) in [
+            (FailureStep::ChatRequest, "chatRequest"),
+            (FailureStep::CallTool, "callTool"),
+            (FailureStep::Request, "request"),
+            (FailureStep::DiscoverModels, "discoverModels"),
+            (FailureStep::Initialize, "initialize"),
+        ] {
+            assert_eq!(inference(step).step, name);
+        }
+        let unnamed = mapped(
+            FailureTarget::Inference {
+                name: String::new(),
+            },
+            FailureStep::Request,
+        );
+        assert_eq!(unnamed.target_name, None);
         let credential: AgentFailureDetail = crate::failure::credential_missing().into();
         assert_eq!(credential.target_kind, "credential");
         assert_eq!(credential.target_name, None);

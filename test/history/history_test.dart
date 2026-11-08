@@ -223,6 +223,12 @@ void main() {
       await c.preview('owner', false);
       expect(c.error, contains('credential'));
       expect(c.rows, isNotEmpty);
+      final blocked = c.error;
+      b.failure = const BackendFailure(FailureCode.credentialMissing);
+      await c.preview('owner', false);
+      expect(c.error, startsWith('Export blocked'));
+      expect(c.error, blocked);
+      expect(c.rows, isNotEmpty);
       c.dispose();
       expect(b.closed, isFalse);
       await b.close();

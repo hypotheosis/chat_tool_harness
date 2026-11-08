@@ -581,3 +581,54 @@ async fn typed_configuration_reopens_and_closed_handle_rejects_commands() {
     assert!(app.snapshot().await.unwrap().artifacts.is_empty());
     app.close().await.unwrap();
 }
+
+#[tokio::test]
+async fn export_with_missing_credential_is_credential_missing_across_bridge_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = Application::open(
+        dir.path().to_string_lossy().into_owned(),
+        |_| Box::pin(async { CredentialReply::Missing }),
+        |_| Box::pin(async { PlatformReply::Ok }),
+    )
+    .await
+    .unwrap();
+    let endpoint = core::EndpointId::new();
+    let profile = core::ProfileId::new();
+    app.repository
+        .save_endpoint(core::EndpointConfig {
+            id: endpoint,
+            name: "e".into(),
+            base_url: "https://example.invalid/v1".into(),
+            model: "m".into(),
+            context_tokens: 4096,
+            max_output_tokens: 128,
+            temperature: 0.0,
+            allow_http: false,
+            credential: Some(core::CredentialRef::new()),
+        })
+        .unwrap();
+    app.repository
+        .save_profile(core::Profile {
+            id: profile,
+            name: "p".into(),
+            endpoint_id: endpoint,
+            server_ids: vec![],
+            mode: core::ProfileMode::ChatOnly,
+            instructions: String::new(),
+            limits: core::RunLimits::default(),
+        })
+        .unwrap();
+    let conversation = app.repository.create_conversation(profile).unwrap();
+    let export = || AppCommand::ExportTranscript {
+        conversation_id: conversation.0.to_string(),
+        include_tool_payloads: false,
+    };
+    let failure = app.command_with_detail(export()).await.unwrap_err();
+    assert_eq!(failure.code, CoreError::CredentialMissing);
+    // The plain command path agrees on the precise kind.
+    assert_eq!(
+        app.command(export()).await.unwrap_err(),
+        CoreError::CredentialMissing
+    );
+    app.close().await.unwrap();
+}
