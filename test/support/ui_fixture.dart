@@ -21,7 +21,7 @@ const profile = Profile(
   limits: RunLimits(),
 );
 const profileSnapshot = ProfileSnapshot(
-  inferenceDestination: 'https://example.test/v1/chat/completions',
+  inferenceOrigin: 'https://example.test',
   profileId: 'p',
   revision: 1,
   name: 'Old profile',

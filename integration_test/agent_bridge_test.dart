@@ -77,15 +77,19 @@ void main() {
       expect(snapshot.profiles.single.mode, ProfileMode.chatOnly);
       expect(snapshot.conversations.single.profile.mode, ProfileMode.chatOnly);
       expect(
-        snapshot.conversations.single.profile.inferenceDestination,
-        'https://never-contact.invalid/v1/chat/completions',
+        snapshot.conversations.single.profile.inferenceOrigin,
+        'https://never-contact.invalid',
       );
+      expect(snapshot.conversations.single.originAcknowledged, isFalse);
       await backend.execute(
         AcknowledgeContextDisclosure(
           conversation,
-          snapshot.conversations.single.profile.revision,
-          snapshot.conversations.single.profile.inferenceDestination!,
+          snapshot.conversations.single.profile.inferenceOrigin!,
         ),
+      );
+      expect(
+        (await backend.snapshot()).conversations.single.originAcknowledged,
+        isTrue,
       );
       // Inference diagnostics report the missing credential itself; MCP
       // diagnostics still collapse it into authentication.
@@ -391,11 +395,7 @@ void main() {
       );
       await backend.execute(ApplyProfile(conversation, profile.id));
       await backend.execute(
-        AcknowledgeContextDisclosure(
-          conversation,
-          2,
-          'https://example.invalid/v1/chat/completions',
-        ),
+        AcknowledgeContextDisclosure(conversation, 'https://example.invalid'),
       );
       final updated = await backend.snapshot();
       expect(updated.conversations.single.profile.instructions, 'updated');

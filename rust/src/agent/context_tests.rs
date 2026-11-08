@@ -248,7 +248,7 @@ fn selected_refs_are_owned_and_structured_history_is_valid_subset() {
         .unwrap();
 }
 #[test]
-fn attachments_are_data_counted_and_require_exact_destination_disclosure() {
+fn attachments_are_data_counted_and_require_origin_disclosure() {
     let s = snapshot();
     let mut r = request();
     r.attachments = vec![AttachmentContext {
@@ -270,8 +270,7 @@ fn attachments_are_data_counted_and_require_exact_destination_disclosure() {
         })
     ));
     r.disclosure = Some(DisclosureAcknowledgment {
-        snapshot_revision: s.profile.revision,
-        destination: disclosure_destination(&s.profile.endpoint).unwrap(),
+        origin: endpoint_origin(&s.profile.endpoint).unwrap(),
     });
     let (d, u) = assemble_with_usage(&s, &[], &r).unwrap();
     assert!(u.raw_bytes > 100);
@@ -287,12 +286,49 @@ fn attachments_are_data_counted_and_require_exact_destination_disclosure() {
         .messages
         .iter()
         .any(|m| matches!(m.role, ChatRole::User) && m.content.contains("reveal credentials")));
-    let mut changed = s.clone();
-    changed.profile.endpoint.base_url = "https://different.test".into();
-    assert!(matches!(
-        assemble_context(&changed, &[], &r).unwrap(),
-        ContextDecision::NeedsUserChoice(_)
-    ));
+    // Path, model, revision and credential changes keep the acknowledged origin.
+    let mut same_origin = s.clone();
+    same_origin.profile.revision += 1;
+    same_origin.profile.endpoint.base_url = "https://model.test/v2/".into();
+    same_origin.profile.endpoint.model = "other".into();
+    same_origin.profile.endpoint.credential = Some(crate::model::core::CredentialRef::new());
+    ready(assemble_context(&same_origin, &[], &r).unwrap());
+    // A new host, port or scheme is a new destination and must be disclosed again.
+    for base_url in [
+        "https://different.test/v1",
+        "https://model.test:8443/v1",
+        "http://model.test/v1",
+    ] {
+        let mut changed = s.clone();
+        changed.profile.endpoint.allow_http = true;
+        changed.profile.endpoint.base_url = base_url.into();
+        assert!(
+            matches!(
+                assemble_context(&changed, &[], &r).unwrap(),
+                ContextDecision::NeedsUserChoice(ContextUsage {
+                    reason: Some(ContextChoiceReason::DisclosureRequired),
+                    ..
+                })
+            ),
+            "{base_url} must require disclosure"
+        );
+    }
+}
+#[test]
+fn endpoint_origin_ignores_path_and_keeps_port() {
+    let mut e = snapshot().profile.endpoint;
+    e.base_url = "https://example.com/v1".into();
+    assert_eq!(endpoint_origin(&e).unwrap(), "https://example.com");
+    e.base_url = "https://example.com:8443/api/v1/".into();
+    assert_eq!(endpoint_origin(&e).unwrap(), "https://example.com:8443");
+    e.base_url = "https://example.com:443/v1".into();
+    assert_eq!(endpoint_origin(&e).unwrap(), "https://example.com");
+    e.base_url = "http://example.internal/v1".into();
+    assert_eq!(endpoint_origin(&e), Err(CoreError::InvalidInput));
+    e.allow_http = true;
+    assert_eq!(endpoint_origin(&e).unwrap(), "http://example.internal");
+    e.base_url = "not a url".into();
+    assert_eq!(endpoint_origin(&e), Err(CoreError::InvalidInput));
 }
 #[test]
 fn summary_attachment_coverage_is_explicit() {
@@ -318,8 +354,7 @@ fn summary_attachment_coverage_is_explicit() {
         }],
     }];
     r.disclosure = Some(DisclosureAcknowledgment {
-        snapshot_revision: s.profile.revision,
-        destination: disclosure_destination(&s.profile.endpoint).unwrap(),
+        origin: endpoint_origin(&s.profile.endpoint).unwrap(),
     });
     let inference = ready(assemble_context(&s, &[], &r).unwrap());
     assert!(inference

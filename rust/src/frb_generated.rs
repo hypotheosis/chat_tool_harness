@@ -811,6 +811,7 @@ impl SseDecode for crate::application::dto::AgentConversation {
         let mut var_id = <String>::sse_decode(deserializer);
         let mut var_profile =
             <crate::application::dto::AgentProfileSnapshot>::sse_decode(deserializer);
+        let mut var_originAcknowledged = <bool>::sse_decode(deserializer);
         let mut var_messages =
             <Vec<crate::application::dto::AgentMessage>>::sse_decode(deserializer);
         let mut var_summaries =
@@ -818,6 +819,7 @@ impl SseDecode for crate::application::dto::AgentConversation {
         return crate::application::dto::AgentConversation {
             id: var_id,
             profile: var_profile,
+            origin_acknowledged: var_originAcknowledged,
             messages: var_messages,
             summaries: var_summaries,
         };
@@ -955,7 +957,7 @@ impl SseDecode for crate::application::dto::AgentProfile {
 impl SseDecode for crate::application::dto::AgentProfileSnapshot {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_inferenceDestination = <Option<String>>::sse_decode(deserializer);
+        let mut var_inferenceOrigin = <Option<String>>::sse_decode(deserializer);
         let mut var_mode = <crate::model::core::ProfileMode>::sse_decode(deserializer);
         let mut var_profileId = <String>::sse_decode(deserializer);
         let mut var_revision = <i64>::sse_decode(deserializer);
@@ -967,7 +969,7 @@ impl SseDecode for crate::application::dto::AgentProfileSnapshot {
         let mut var_instructions = <String>::sse_decode(deserializer);
         let mut var_limits = <crate::application::dto::AgentRunLimits>::sse_decode(deserializer);
         return crate::application::dto::AgentProfileSnapshot {
-            inference_destination: var_inferenceDestination,
+            inference_origin: var_inferenceOrigin,
             mode: var_mode,
             profile_id: var_profileId,
             revision: var_revision,
@@ -1338,12 +1340,10 @@ impl SseDecode for crate::application::dto::AppCommand {
             }
             26 => {
                 let mut var_conversationId = <String>::sse_decode(deserializer);
-                let mut var_snapshotRevision = <i64>::sse_decode(deserializer);
-                let mut var_destination = <String>::sse_decode(deserializer);
+                let mut var_origin = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::AcknowledgeContextDisclosure {
                     conversation_id: var_conversationId,
-                    snapshot_revision: var_snapshotRevision,
-                    destination: var_destination,
+                    origin: var_origin,
                 };
             }
             _ => {
@@ -2379,6 +2379,7 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentConversatio
         [
             self.id.into_into_dart().into_dart(),
             self.profile.into_into_dart().into_dart(),
+            self.origin_acknowledged.into_into_dart().into_dart(),
             self.messages.into_into_dart().into_dart(),
             self.summaries.into_into_dart().into_dart(),
         ]
@@ -2565,7 +2566,7 @@ impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentProfile>
 impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentProfileSnapshot {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
-            self.inference_destination.into_into_dart().into_dart(),
+            self.inference_origin.into_into_dart().into_dart(),
             self.mode.into_into_dart().into_dart(),
             self.profile_id.into_into_dart().into_dart(),
             self.revision.into_into_dart().into_dart(),
@@ -2972,13 +2973,11 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AppCommand {
             .into_dart(),
             crate::application::dto::AppCommand::AcknowledgeContextDisclosure {
                 conversation_id,
-                snapshot_revision,
-                destination,
+                origin,
             } => [
                 26.into_dart(),
                 conversation_id.into_into_dart().into_dart(),
-                snapshot_revision.into_into_dart().into_dart(),
-                destination.into_into_dart().into_dart(),
+                origin.into_into_dart().into_dart(),
             ]
             .into_dart(),
             _ => {
@@ -3600,6 +3599,7 @@ impl SseEncode for crate::application::dto::AgentConversation {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.id, serializer);
         <crate::application::dto::AgentProfileSnapshot>::sse_encode(self.profile, serializer);
+        <bool>::sse_encode(self.origin_acknowledged, serializer);
         <Vec<crate::application::dto::AgentMessage>>::sse_encode(self.messages, serializer);
         <Vec<crate::application::dto::AgentDerivedContext>>::sse_encode(self.summaries, serializer);
     }
@@ -3688,7 +3688,7 @@ impl SseEncode for crate::application::dto::AgentProfile {
 impl SseEncode for crate::application::dto::AgentProfileSnapshot {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <Option<String>>::sse_encode(self.inference_destination, serializer);
+        <Option<String>>::sse_encode(self.inference_origin, serializer);
         <crate::model::core::ProfileMode>::sse_encode(self.mode, serializer);
         <String>::sse_encode(self.profile_id, serializer);
         <i64>::sse_encode(self.revision, serializer);
@@ -3972,13 +3972,11 @@ impl SseEncode for crate::application::dto::AppCommand {
             }
             crate::application::dto::AppCommand::AcknowledgeContextDisclosure {
                 conversation_id,
-                snapshot_revision,
-                destination,
+                origin,
             } => {
                 <i32>::sse_encode(26, serializer);
                 <String>::sse_encode(conversation_id, serializer);
-                <i64>::sse_encode(snapshot_revision, serializer);
-                <String>::sse_encode(destination, serializer);
+                <String>::sse_encode(origin, serializer);
             }
             _ => {
                 unimplemented!("");

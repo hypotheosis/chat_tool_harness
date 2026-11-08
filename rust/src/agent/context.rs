@@ -59,8 +59,8 @@ pub enum ContextPurpose {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DisclosureAcknowledgment {
-    pub snapshot_revision: i64,
-    pub destination: String,
+    /// Normalized `scheme://host[:port]` of the inference endpoint.
+    pub origin: String,
 }
 #[derive(Debug, Clone)]
 pub struct ContextRequest {
@@ -114,9 +114,11 @@ pub struct RunContext {
     pub summary: Option<DerivedContext>,
 }
 
-pub fn disclosure_destination(endpoint: &EndpointConfig) -> CoreResult<String> {
-    // The normalized full destination (not the credential handle) invalidates old acknowledgments.
-    Ok(crate::net::endpoint_url(endpoint, "chat/completions")?.to_string())
+/// The origin that disclosure is acknowledged for: only a new scheme, host or
+/// port re-prompts; path, model, credential and profile changes do not.
+pub fn endpoint_origin(endpoint: &EndpointConfig) -> CoreResult<String> {
+    let url = crate::net::endpoint_url(endpoint, "chat/completions")?;
+    Ok(url.origin().ascii_serialization())
 }
 pub fn validate_selection(
     snapshot: &ConversationSnapshot,
@@ -349,8 +351,7 @@ pub(crate) fn assemble_with_usage(
     } else if document_backed
         && request.disclosure.as_ref()
             != Some(&DisclosureAcknowledgment {
-                snapshot_revision: snapshot.profile.revision,
-                destination: disclosure_destination(&inference.endpoint)?,
+                origin: endpoint_origin(&inference.endpoint)?,
             })
     {
         Some(ContextChoiceReason::DisclosureRequired)

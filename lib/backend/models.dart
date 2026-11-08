@@ -140,10 +140,12 @@ class Profile {
 }
 
 class ProfileSnapshot {
-  final String? inferenceDestination;
+  /// Normalized `scheme://host[:port]` of the inference endpoint, or null when
+  /// the endpoint is misconfigured.
+  final String? inferenceOrigin;
   final ProfileMode mode;
   const ProfileSnapshot({
-    this.inferenceDestination,
+    this.inferenceOrigin,
     this.mode = ProfileMode.agent,
     required this.profileId,
     required this.revision,
@@ -344,11 +346,15 @@ class Conversation {
     required this.profile,
     required this.messages,
     required this.summaries,
+    this.originAcknowledged = false,
   });
   final String id;
   final ProfileSnapshot profile;
   final List<Message> messages;
   final List<DerivedContext> summaries;
+
+  /// Whether disclosure was acknowledged, app-wide, for `profile.inferenceOrigin`.
+  final bool originAcknowledged;
 }
 
 class ToolRule {
@@ -540,12 +546,7 @@ class ApplyContextSelection extends AppCommand {
 }
 
 class AcknowledgeContextDisclosure extends AppCommand {
-  const AcknowledgeContextDisclosure(
-    this.conversationId,
-    this.snapshotRevision,
-    this.destination,
-  );
+  const AcknowledgeContextDisclosure(this.conversationId, this.origin);
   final String conversationId;
-  final int snapshotRevision;
-  final String destination;
+  final String origin;
 }

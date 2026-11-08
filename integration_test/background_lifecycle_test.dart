@@ -114,11 +114,7 @@ void main() {
         final snapshot = await backend.snapshot();
         final profile = snapshot.conversations.single.profile;
         await backend.execute(
-          AcknowledgeContextDisclosure(
-            conversation,
-            profile.revision,
-            profile.inferenceDestination!,
-          ),
+          AcknowledgeContextDisclosure(conversation, profile.inferenceOrigin!),
         );
         final run = (await backend.execute(
           StartTurn(conversation, 'test-owned controlled write'),
@@ -236,8 +232,7 @@ void main() {
           await reopened.execute(
             AcknowledgeContextDisclosure(
               nextConversation,
-              nextProfile.revision,
-              nextProfile.inferenceDestination!,
+              nextProfile.inferenceOrigin!,
             ),
           );
           await probe.invokeMethod<void>('finishActivity');

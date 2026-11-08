@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Error as SqlError, Result as SqlResult};
 
-const VERSION: i64 = 6;
+const VERSION: i64 = 7;
 
 pub fn apply(connection: &mut Connection) -> SqlResult<()> {
     let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
@@ -25,7 +25,17 @@ pub fn apply(connection: &mut Connection) -> SqlResult<()> {
     if version < 6 {
         migrate_v6(connection)?;
     }
+    if version < 7 {
+        migrate_v7(connection)?;
+    }
     Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn migrate_v6_for_test(connection: &mut Connection) -> SqlResult<()> {
+    migrate_v4_for_test(connection)?;
+    migrate_v5(connection)?;
+    migrate_v6(connection)
 }
 
 #[cfg(test)]
@@ -43,6 +53,35 @@ pub(crate) fn migrate_v1_for_test(connection: &mut Connection) -> SqlResult<()> 
 #[cfg(test)]
 pub(crate) fn migrate_v2_for_test(connection: &mut Connection) -> SqlResult<()> {
     migrate_v2(connection)
+}
+
+fn migrate_v7(connection: &mut Connection) -> SqlResult<()> {
+    let tx = connection.transaction()?;
+    // Disclosure becomes app-wide per inference origin. The per-conversation
+    // table is left in place but no longer read.
+    tx.execute_batch("CREATE TABLE acknowledged_origins (origin TEXT PRIMARY KEY);")?;
+    let payloads: Vec<String> = {
+        let mut statement = tx.prepare("SELECT payload FROM disclosure_acknowledgments")?;
+        let rows = statement.query_map([], |row| row.get(0))?;
+        rows.collect::<SqlResult<_>>()?
+    };
+    for payload in payloads {
+        // Unreadable legacy rows are skipped: they only cost one more prompt.
+        let origin = serde_json::from_str::<serde_json::Value>(&payload)
+            .ok()
+            .and_then(|v| v.get("destination")?.as_str().map(str::to_owned))
+            .and_then(|d| url::Url::parse(&d).ok())
+            .filter(|u| matches!(u.scheme(), "https" | "http"))
+            .map(|u| u.origin().ascii_serialization());
+        if let Some(origin) = origin {
+            tx.execute(
+                "INSERT OR IGNORE INTO acknowledged_origins(origin) VALUES(?1)",
+                [origin],
+            )?;
+        }
+    }
+    tx.execute_batch("PRAGMA user_version = 7;")?;
+    tx.commit()
 }
 
 fn migrate_v6(connection: &mut Connection) -> SqlResult<()> {

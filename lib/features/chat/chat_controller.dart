@@ -40,18 +40,13 @@ class ChatController extends ScreenController {
   }
 
   Future<void> acknowledgeInferenceDisclosure(ProfileSnapshot profile) async {
-    if (profile.inferenceDestination == null) {
+    final origin = profile.inferenceOrigin;
+    if (origin == null) {
       error = failureMessage(const BackendFailure(FailureCode.configuration));
       changed();
       return;
     }
-    await perform(
-      AcknowledgeContextDisclosure(
-        conversationId,
-        profile.revision,
-        profile.inferenceDestination!,
-      ),
-    );
+    await perform(AcknowledgeContextDisclosure(conversationId, origin));
   }
 
   Future<void> select(String runId, ContextSelection selection) async {

@@ -501,7 +501,7 @@ async fn context_snapshot_exposes_owned_message_refs_and_derived_entries() {
 }
 
 #[tokio::test]
-async fn summary_disclosure_is_durable_exact_and_never_an_mcp_allow() {
+async fn summary_disclosure_is_durable_per_origin_and_never_an_mcp_allow() {
     let mut f = Fixture::new();
     let old = f.start().await;
     let binding = f.waiting(old).await;
@@ -551,14 +551,13 @@ async fn summary_disclosure_is_durable_exact_and_never_an_mcp_allow() {
             .acknowledge_context_disclosure(
                 f.conversation,
                 context::DisclosureAcknowledgment {
-                    snapshot_revision: 1,
-                    destination: "https://wrong.test/chat/completions".into()
+                    origin: "https://wrong.test".into()
                 }
             )
             .await,
         Err(CoreError::InvalidInput)
     );
-    let destination = context::disclosure_destination(
+    let origin = context::endpoint_origin(
         &f.repo
             .conversation(f.conversation)
             .unwrap()
@@ -572,25 +571,21 @@ async fn summary_disclosure_is_durable_exact_and_never_an_mcp_allow() {
         .unwrap()
         .profile
         .endpoint;
-    let original_url = endpoint.base_url.clone();
     endpoint.base_url = "https://other.test".into();
     f.repo.save_endpoint(endpoint.clone()).unwrap();
     f.repo.apply_profile(f.conversation, f.profile).unwrap();
-    // Acknowledging the paused run's pinned revision remains possible after applying a profile.
+    // The paused run's origin can still be acknowledged after applying a profile.
     f.coordinator
         .acknowledge_context_disclosure(
             f.conversation,
-            context::DisclosureAcknowledgment {
-                snapshot_revision: 1,
-                destination,
-            },
+            context::DisclosureAcknowledgment { origin },
         )
         .await
         .unwrap();
     f.coordinator.shutdown().await.unwrap();
     f.reopen();
     // Resume follows current settings: the run is rebound to the edited endpoint,
-    // whose destination has not been acknowledged yet.
+    // whose new host has not been acknowledged yet.
     f.coordinator.resume(run).await.unwrap();
     f.idle().await;
     assert_eq!(
@@ -604,8 +599,7 @@ async fn summary_disclosure_is_durable_exact_and_never_an_mcp_allow() {
         .acknowledge_context_disclosure(
             f.conversation,
             context::DisclosureAcknowledgment {
-                snapshot_revision: current.revision,
-                destination: context::disclosure_destination(&current.endpoint).unwrap(),
+                origin: context::endpoint_origin(&current.endpoint).unwrap(),
             },
         )
         .await
@@ -616,20 +610,16 @@ async fn summary_disclosure_is_durable_exact_and_never_an_mcp_allow() {
     assert!(r.request.tools.is_empty());
     r.finish(Ok(turn(vec![])));
     f.settled(run).await;
-    assert_eq!(
-        f.data(old).await.attempts[0].binding.as_ref(),
-        Some(&binding)
-    );
-    assert_eq!(f.writes.load(Ordering::SeqCst), 0);
     let sources = f.repo.conversation(f.conversation).unwrap();
     assert_eq!(
         sources.summaries[1].page_references,
         sources.summaries[0].page_references
     );
-    // An endpoint change requires a new disclosure even when the source summary is old.
-    endpoint.base_url = original_url;
+    // Returning to an acknowledged origin with a new path and model does not
+    // re-prompt, even though the snapshot revision changes.
+    endpoint.base_url = "https://model.test/v2".into();
+    endpoint.model = "other-model".into();
     f.repo.save_endpoint(endpoint).unwrap();
-    f.repo.apply_profile(f.conversation, f.profile).unwrap();
     let run = f
         .coordinator
         .summarize_context(
@@ -641,12 +631,99 @@ async fn summary_disclosure_is_durable_exact_and_never_an_mcp_allow() {
         )
         .await
         .unwrap();
-    f.idle().await;
+    let r = f.request().await;
+    assert_eq!(r.request.endpoint.base_url, "https://model.test/v2");
+    assert!(r.request.tools.is_empty());
+    r.finish(Ok(turn(vec![])));
+    f.settled(run).await;
+    assert!(f.repo.run_profile_revision(run).unwrap() > 2);
+    // Disclosure never acts as an MCP allow: the old approval still waits,
+    // no tool ran and no permission rule was recorded.
     assert_eq!(
-        f.data(run).await.context.usage.unwrap().reason,
+        f.data(old).await.attempts[0].binding.as_ref(),
+        Some(&binding)
+    );
+    assert_eq!(f.writes.load(Ordering::SeqCst), 0);
+    assert!(f.calls.try_recv().is_err());
+    let repo = f.repo.clone();
+    let rules: i64 = db(move || {
+        repo.with_connection(|conn| {
+            conn.query_row("SELECT count(*) FROM tool_permission_rules", [], |r| {
+                r.get(0)
+            })
+            .map_err(|_| CoreError::Storage)
+        })
+    })
+    .await
+    .unwrap();
+    assert_eq!(rules, 0);
+}
+
+#[tokio::test]
+async fn disclosure_is_acknowledged_once_per_origin_across_conversations() {
+    let f = Fixture::new();
+    let reason = |snapshot: &ConversationSnapshot,
+                  disclosure: Option<context::DisclosureAcknowledgment>| {
+        let request = context::ContextRequest {
+            selection: None,
+            attachments: vec![context::AttachmentContext {
+                conversation_id: snapshot.id,
+                attachment_id: AttachmentId::new(),
+                filename: "notes.txt".into(),
+                total_pages: 1,
+                extraction_status: "complete".into(),
+                excerpts: vec![context::PageExcerpt {
+                    physical_page: 1,
+                    text: "document text".into(),
+                }],
+            }],
+            purpose: context::ContextPurpose::Turn,
+            disclosure,
+            deadline: Instant::now(),
+        };
+        context::assemble_with_usage(snapshot, &[], &request)
+            .unwrap()
+            .1
+            .reason
+    };
+    let first = f.repo.conversation(f.conversation).unwrap();
+    assert_eq!(state::disclosure(&f.repo, &first.profile).unwrap(), None);
+    assert_eq!(
+        reason(&first, None),
         Some(ContextChoiceReason::DisclosureRequired)
     );
-    assert!(f.requests.try_recv().is_err());
+    let acknowledgment = context::DisclosureAcknowledgment {
+        origin: "https://model.test".into(),
+    };
+    for _ in 0..2 {
+        // Acknowledging the same origin again is harmless.
+        f.coordinator
+            .acknowledge_context_disclosure(f.conversation, acknowledgment.clone())
+            .await
+            .unwrap();
+    }
+    let mut endpoint = first.profile.endpoint.clone();
+    endpoint.base_url = "https://model.test/v2".into();
+    f.repo.save_endpoint(endpoint.clone()).unwrap();
+    let second = f
+        .repo
+        .conversation(f.repo.create_conversation(f.profile).unwrap())
+        .unwrap();
+    let disclosure = state::disclosure(&f.repo, &second.profile).unwrap();
+    assert_eq!(disclosure.as_ref(), Some(&acknowledgment));
+    assert_eq!(reason(&second, disclosure), None);
+    endpoint.base_url = "https://other.example.com/v1".into();
+    f.repo.save_endpoint(endpoint).unwrap();
+    let third = f
+        .repo
+        .conversation(f.repo.create_conversation(f.profile).unwrap())
+        .unwrap();
+    let disclosure = state::disclosure(&f.repo, &third.profile).unwrap();
+    assert_eq!(disclosure, None);
+    assert_eq!(
+        reason(&third, disclosure),
+        Some(ContextChoiceReason::DisclosureRequired)
+    );
 }
 
 #[tokio::test]

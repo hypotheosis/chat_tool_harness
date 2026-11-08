@@ -630,30 +630,60 @@ pub fn acknowledge_disclosure(
 ) -> CoreResult<()> {
     repo.with_connection(move |conn| {
         let tx = conn.transaction().map_err(sql_error)?;
-        let profile:String=tx.query_row("SELECT payload FROM conversation_snapshots WHERE conversation_id=?1 AND revision=?2",params![conversation.0.to_string(),acknowledgment.snapshot_revision],|r|r.get(0)).optional().map_err(sql_error)?.ok_or(CoreError::InvalidInput)?;
-        let profile:ProfileSnapshot=parse(&profile)?;
-        if acknowledgment.destination!=super::context::disclosure_destination(&profile.endpoint)? {return Err(CoreError::InvalidInput);}
+        // Only an origin this conversation has actually been shown may be acknowledged.
+        let payloads: Vec<String> = {
+            let mut statement = tx
+                .prepare("SELECT payload FROM conversation_snapshots WHERE conversation_id=?1")
+                .map_err(sql_error)?;
+            let rows = statement
+                .query_map([conversation.0.to_string()], |r| r.get(0))
+                .map_err(sql_error)?;
+            rows.collect::<Result<_, _>>().map_err(sql_error)?
+        };
+        let mut shown = false;
+        for payload in payloads {
+            let profile: ProfileSnapshot = parse(&payload)?;
+            if super::context::endpoint_origin(&profile.endpoint)
+                .ok()
+                .as_deref()
+                == Some(acknowledgment.origin.as_str())
+            {
+                shown = true;
+                break;
+            }
+        }
+        if !shown {
+            return Err(CoreError::InvalidInput);
+        }
         tx.execute(
-            "INSERT INTO disclosure_acknowledgments(conversation_id,payload) VALUES(?1,?2)",
-            params![conversation.0.to_string(), json(&acknowledgment)?],
+            "INSERT OR IGNORE INTO acknowledged_origins(origin) VALUES(?1)",
+            [&acknowledgment.origin],
         )
         .map_err(sql_error)?;
         event(&tx, conversation, "context:disclosure-acknowledged")?;
         tx.commit().map_err(sql_error)
     })
 }
+/// The app-wide acknowledgment for `profile`'s inference origin, if one exists.
 pub fn disclosure(
     repo: &Repository,
-    conversation: ConversationId,
     profile: &ProfileSnapshot,
 ) -> CoreResult<Option<super::context::DisclosureAcknowledgment>> {
-    let acknowledgment = super::context::DisclosureAcknowledgment {
-        snapshot_revision: profile.revision,
-        destination: super::context::disclosure_destination(&profile.endpoint)?,
-    };
+    let origin = super::context::endpoint_origin(&profile.endpoint)?;
+    Ok(origin_acknowledged(repo, &origin)?
+        .then_some(super::context::DisclosureAcknowledgment { origin }))
+}
+pub fn origin_acknowledged(repo: &Repository, origin: &str) -> CoreResult<bool> {
+    let origin = origin.to_owned();
     repo.with_connection(move |conn| {
-        let found:Option<String>=conn.query_row("SELECT payload FROM disclosure_acknowledgments WHERE conversation_id=?1 AND payload=?2 LIMIT 1",params![conversation.0.to_string(),json(&acknowledgment)?],|r|r.get(0)).optional().map_err(sql_error)?;
-        found.map(|value|parse(&value)).transpose()
+        conn.query_row(
+            "SELECT 1 FROM acknowledged_origins WHERE origin=?1",
+            [origin],
+            |_| Ok(()),
+        )
+        .optional()
+        .map(|found| found.is_some())
+        .map_err(sql_error)
     })
 }
 pub fn inference_started(repo: &Repository, run: RunId, active_ms: u64) -> CoreResult<()> {

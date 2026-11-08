@@ -129,7 +129,7 @@ fn v1_upgrade_preserves_records_and_does_not_trust_legacy_rules() {
     raw.execute("INSERT INTO permission_rules(id,profile_id,payload) VALUES('legacy','old-profile','{\"rule\":\"Allow\"}')", []).unwrap();
     drop(raw);
     let repo = Repository::open(&path).unwrap();
-    assert_eq!(repo.schema_version_for_test().unwrap(), 6);
+    assert_eq!(repo.schema_version_for_test().unwrap(), 7);
     let raw = Connection::open(&path).unwrap();
     let count: i64 = raw
         .query_row(
@@ -212,6 +212,44 @@ fn v4_context_upgrade_preserves_transcript_and_defaults_without_rewriting() {
 }
 
 #[test]
+fn migration_v7_copies_acknowledgments_as_origins() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("core.db");
+    let mut raw = Connection::open(&path).unwrap();
+    super::migrations::migrate_v6_for_test(&mut raw).unwrap();
+    raw.execute_batch(
+        r#"INSERT INTO conversations(id,current_revision) VALUES('a',1),('b',1);
+        INSERT INTO disclosure_acknowledgments(conversation_id,payload) VALUES
+          ('a','{"snapshot_revision":1,"destination":"https://example.com/v1/chat/completions"}'),
+          ('a','{"snapshot_revision":2,"destination":"https://example.com/v2/chat/completions"}'),
+          ('b','{"snapshot_revision":1,"destination":"https://example.com:8443/chat/completions"}'),
+          ('b','{"snapshot_revision":2,"destination":"not a url"}'),
+          ('b','not json');"#,
+    )
+    .unwrap();
+    super::migrations::apply(&mut raw).unwrap();
+    let origins: Vec<String> = raw
+        .prepare("SELECT origin FROM acknowledged_origins ORDER BY origin")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(origins, ["https://example.com", "https://example.com:8443"]);
+    // The old table stays in place, unread.
+    let old: i64 = raw
+        .query_row("SELECT count(*) FROM disclosure_acknowledgments", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(old, 5);
+    let version: i64 = raw
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 7);
+}
+
+#[test]
 fn current_migration_is_noop() {
     let dir = tempdir().expect("temporary directory");
     let path = dir.path().join("core.db");
@@ -224,7 +262,7 @@ fn current_migration_is_noop() {
         repository
             .schema_version_for_test()
             .expect("schema version"),
-        6
+        7
     );
     drop(repository);
     let reopened = Repository::open(&path).expect("current version opens");

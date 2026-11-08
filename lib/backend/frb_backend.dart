@@ -262,8 +262,7 @@ g.AppCommand _command(AppCommand command) => switch (command) {
   ),
   AcknowledgeContextDisclosure() => g.AppCommand.acknowledgeContextDisclosure(
     conversationId: command.conversationId,
-    snapshotRevision: command.snapshotRevision,
-    destination: command.destination,
+    origin: command.origin,
   ),
 };
 
@@ -352,7 +351,7 @@ g.AgentProfile _toProfile(Profile v) => g.AgentProfile(
 
 ProfileSnapshot _fromProfileSnapshot(g.AgentProfileSnapshot v) =>
     ProfileSnapshot(
-      inferenceDestination: v.inferenceDestination,
+      inferenceOrigin: v.inferenceOrigin,
       mode: _fromMode(v.mode),
       profileId: v.profileId,
       revision: v.revision,
@@ -482,6 +481,7 @@ Conversation _fromConversation(g.AgentConversation v) => Conversation(
   profile: _fromProfileSnapshot(v.profile),
   messages: v.messages.map((v) => _fromMessage(v)).toList(),
   summaries: v.summaries.map((v) => _fromDerivedContext(v)).toList(),
+  originAcknowledged: v.originAcknowledged,
 );
 
 ToolRule _fromToolRule(g.AgentToolRule v) => ToolRule(

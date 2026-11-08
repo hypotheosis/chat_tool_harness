@@ -134,7 +134,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   String disclosureLabel(String target, ProfileSnapshot profile) =>
-      '$target disclosure • revision ${profile.revision}\nDestination: ${profile.inferenceDestination ?? 'Unavailable — repair configuration'}';
+      '$target disclosure\nOrigin: ${profile.inferenceOrigin ?? 'Unavailable — repair configuration'}';
 
   Widget runPanel(Run run) {
     final usage = run.context.usage;
@@ -155,7 +155,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         Text(disclosureLabel('Run ${run.id}', run.profile)),
         const Text(
-          'Resuming this immutable run may transmit selected messages, tool results and derived summaries to its displayed destination, even after applying an updated profile.',
+          'Resuming this run follows current settings and may transmit selected messages, tool results and derived summaries to that origin.',
         ),
         TextButton(
           key: Key('ack-${run.id}'),
@@ -337,7 +337,7 @@ class _ChatScreenState extends State<ChatScreen> {
               for (final r in state.runs) runPanel(r),
               Text(disclosureLabel('New turn / summary', c.profile)),
               const Text(
-                'Selected messages, tool results and derived summaries may be transmitted to this exact destination. Acknowledgement is scoped to the displayed revision; it does not acknowledge other runs or updated profiles.',
+                'Selected messages, tool results and derived summaries may be transmitted to this origin. Acknowledgement applies to every conversation using this origin; a new scheme, host or port asks again.',
               ),
               TextButton(
                 key: const Key('ack-new-work'),

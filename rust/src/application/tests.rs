@@ -472,23 +472,21 @@ async fn typed_configuration_reopens_and_closed_handle_rejects_commands() {
     let snap = app.snapshot().await.unwrap();
     assert_eq!(snap.conversations[0].profile.instructions, "original");
     assert_eq!(
-        snap.conversations[0]
-            .profile
-            .inference_destination
-            .as_deref(),
-        Some("https://example.invalid/v1/chat/completions")
+        snap.conversations[0].profile.inference_origin.as_deref(),
+        Some("https://example.invalid")
     );
+    assert!(!snap.conversations[0].origin_acknowledged);
     app.command(AppCommand::AcknowledgeContextDisclosure {
         conversation_id: snap.conversations[0].id.clone(),
-        snapshot_revision: snap.conversations[0].profile.revision,
-        destination: snap.conversations[0]
+        origin: snap.conversations[0]
             .profile
-            .inference_destination
+            .inference_origin
             .clone()
             .unwrap(),
     })
     .await
     .unwrap();
+    assert!(app.snapshot().await.unwrap().conversations[0].origin_acknowledged);
     assert_eq!(snap.endpoints.len(), 1);
     let definition = core::ToolDefinition::from_discovery(
         &app.repository,

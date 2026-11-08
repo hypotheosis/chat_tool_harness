@@ -194,15 +194,8 @@ void main() {
     await t.tap(find.text('Acknowledge inference disclosure'));
     await t.pumpAndSettle();
     expect(
-      b.commands
-          .whereType<AcknowledgeContextDisclosure>()
-          .single
-          .snapshotRevision,
-      1,
-    );
-    expect(
-      b.commands.whereType<AcknowledgeContextDisclosure>().single.destination,
-      'https://example.test/v1/chat/completions',
+      b.commands.whereType<AcknowledgeContextDisclosure>().single.origin,
+      'https://example.test',
     );
   });
   testWidgets('service_busy_and_stale_approval_are_actionable', (t) async {

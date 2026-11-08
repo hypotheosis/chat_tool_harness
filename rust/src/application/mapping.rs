@@ -128,7 +128,7 @@ impl From<core::Profile> for AgentProfile {
 impl From<core::ProfileSnapshot> for AgentProfileSnapshot {
     fn from(v: core::ProfileSnapshot) -> Self {
         Self {
-            inference_destination: crate::agent::context::disclosure_destination(&v.endpoint).ok(),
+            inference_origin: crate::agent::context::endpoint_origin(&v.endpoint).ok(),
             profile_id: v.profile_id.0.to_string(),
             revision: v.revision,
             name: v.name,
@@ -295,10 +295,11 @@ impl From<ctx::HistoryMessage> for AgentMessage {
         }
     }
 }
-impl From<core::ConversationSnapshot> for AgentConversation {
-    fn from(v: core::ConversationSnapshot) -> Self {
+impl AgentConversation {
+    pub(crate) fn new(v: core::ConversationSnapshot, origin_acknowledged: bool) -> Self {
         Self {
             id: v.id.0.to_string(),
+            origin_acknowledged,
             profile: v.profile.into(),
             messages: v.messages.into_iter().map(Into::into).collect(),
             summaries: v.summaries.into_iter().map(Into::into).collect(),

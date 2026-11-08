@@ -194,7 +194,7 @@ return acknowledgeContextDisclosure(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String query,  int offset,  int limit)?  searchConversations,TResult Function( String conversationId,  String title)?  renameConversation,TResult Function( String conversationId,  bool confirmedUnknown)?  deleteConversation,TResult Function( String conversationId,  bool includeToolPayloads)?  exportTranscript,TResult Function( String endpointId)?  discoverModels,TResult Function( String endpointId)?  probeEndpoint,TResult Function( String profileId,  String serverId)?  discoverServer,TResult Function( String conversationId,  String name,  String content)?  createArtifact,TResult Function( String conversationId,  String artifactId)?  readArtifact,TResult Function( String conversationId,  String artifactId)?  deleteArtifact,TResult Function()?  newId,TResult Function( AgentEndpointConfig endpoint)?  saveEndpoint,TResult Function( AgentServerConfig server)?  saveServer,TResult Function( AgentProfile profile)?  saveProfile,TResult Function( String profileId)?  createConversation,TResult Function( String conversationId,  String profileId)?  applyProfile,TResult Function( AgentToolKey key,  String schemaDigest,  String destinationDigest,  PermissionRule rule)?  setRule,TResult Function( String conversationId,  String text)?  startTurn,TResult Function( String runId,  String generation)?  platformPause,TResult Function( String runId,  String generation)?  platformStop,TResult Function( String runId)?  cancelRun,TResult Function( String runId)?  resumeRun,TResult Function( AgentApprovalBinding binding)?  approve,TResult Function( String attemptId)?  deny,TResult Function( String conversationId,  AgentContextSelection selection)?  summarizeContext,TResult Function( String runId,  AgentContextSelection selection)?  applyContextSelection,TResult Function( String conversationId,  PlatformInt64 snapshotRevision,  String destination)?  acknowledgeContextDisclosure,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String query,  int offset,  int limit)?  searchConversations,TResult Function( String conversationId,  String title)?  renameConversation,TResult Function( String conversationId,  bool confirmedUnknown)?  deleteConversation,TResult Function( String conversationId,  bool includeToolPayloads)?  exportTranscript,TResult Function( String endpointId)?  discoverModels,TResult Function( String endpointId)?  probeEndpoint,TResult Function( String profileId,  String serverId)?  discoverServer,TResult Function( String conversationId,  String name,  String content)?  createArtifact,TResult Function( String conversationId,  String artifactId)?  readArtifact,TResult Function( String conversationId,  String artifactId)?  deleteArtifact,TResult Function()?  newId,TResult Function( AgentEndpointConfig endpoint)?  saveEndpoint,TResult Function( AgentServerConfig server)?  saveServer,TResult Function( AgentProfile profile)?  saveProfile,TResult Function( String profileId)?  createConversation,TResult Function( String conversationId,  String profileId)?  applyProfile,TResult Function( AgentToolKey key,  String schemaDigest,  String destinationDigest,  PermissionRule rule)?  setRule,TResult Function( String conversationId,  String text)?  startTurn,TResult Function( String runId,  String generation)?  platformPause,TResult Function( String runId,  String generation)?  platformStop,TResult Function( String runId)?  cancelRun,TResult Function( String runId)?  resumeRun,TResult Function( AgentApprovalBinding binding)?  approve,TResult Function( String attemptId)?  deny,TResult Function( String conversationId,  AgentContextSelection selection)?  summarizeContext,TResult Function( String runId,  AgentContextSelection selection)?  applyContextSelection,TResult Function( String conversationId,  String origin)?  acknowledgeContextDisclosure,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case AppCommand_SearchConversations() when searchConversations != null:
 return searchConversations(_that.query,_that.offset,_that.limit);case AppCommand_RenameConversation() when renameConversation != null:
@@ -223,7 +223,7 @@ return approve(_that.binding);case AppCommand_Deny() when deny != null:
 return deny(_that.attemptId);case AppCommand_SummarizeContext() when summarizeContext != null:
 return summarizeContext(_that.conversationId,_that.selection);case AppCommand_ApplyContextSelection() when applyContextSelection != null:
 return applyContextSelection(_that.runId,_that.selection);case AppCommand_AcknowledgeContextDisclosure() when acknowledgeContextDisclosure != null:
-return acknowledgeContextDisclosure(_that.conversationId,_that.snapshotRevision,_that.destination);case _:
+return acknowledgeContextDisclosure(_that.conversationId,_that.origin);case _:
   return orElse();
 
 }
@@ -241,7 +241,7 @@ return acknowledgeContextDisclosure(_that.conversationId,_that.snapshotRevision,
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String query,  int offset,  int limit)  searchConversations,required TResult Function( String conversationId,  String title)  renameConversation,required TResult Function( String conversationId,  bool confirmedUnknown)  deleteConversation,required TResult Function( String conversationId,  bool includeToolPayloads)  exportTranscript,required TResult Function( String endpointId)  discoverModels,required TResult Function( String endpointId)  probeEndpoint,required TResult Function( String profileId,  String serverId)  discoverServer,required TResult Function( String conversationId,  String name,  String content)  createArtifact,required TResult Function( String conversationId,  String artifactId)  readArtifact,required TResult Function( String conversationId,  String artifactId)  deleteArtifact,required TResult Function()  newId,required TResult Function( AgentEndpointConfig endpoint)  saveEndpoint,required TResult Function( AgentServerConfig server)  saveServer,required TResult Function( AgentProfile profile)  saveProfile,required TResult Function( String profileId)  createConversation,required TResult Function( String conversationId,  String profileId)  applyProfile,required TResult Function( AgentToolKey key,  String schemaDigest,  String destinationDigest,  PermissionRule rule)  setRule,required TResult Function( String conversationId,  String text)  startTurn,required TResult Function( String runId,  String generation)  platformPause,required TResult Function( String runId,  String generation)  platformStop,required TResult Function( String runId)  cancelRun,required TResult Function( String runId)  resumeRun,required TResult Function( AgentApprovalBinding binding)  approve,required TResult Function( String attemptId)  deny,required TResult Function( String conversationId,  AgentContextSelection selection)  summarizeContext,required TResult Function( String runId,  AgentContextSelection selection)  applyContextSelection,required TResult Function( String conversationId,  PlatformInt64 snapshotRevision,  String destination)  acknowledgeContextDisclosure,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String query,  int offset,  int limit)  searchConversations,required TResult Function( String conversationId,  String title)  renameConversation,required TResult Function( String conversationId,  bool confirmedUnknown)  deleteConversation,required TResult Function( String conversationId,  bool includeToolPayloads)  exportTranscript,required TResult Function( String endpointId)  discoverModels,required TResult Function( String endpointId)  probeEndpoint,required TResult Function( String profileId,  String serverId)  discoverServer,required TResult Function( String conversationId,  String name,  String content)  createArtifact,required TResult Function( String conversationId,  String artifactId)  readArtifact,required TResult Function( String conversationId,  String artifactId)  deleteArtifact,required TResult Function()  newId,required TResult Function( AgentEndpointConfig endpoint)  saveEndpoint,required TResult Function( AgentServerConfig server)  saveServer,required TResult Function( AgentProfile profile)  saveProfile,required TResult Function( String profileId)  createConversation,required TResult Function( String conversationId,  String profileId)  applyProfile,required TResult Function( AgentToolKey key,  String schemaDigest,  String destinationDigest,  PermissionRule rule)  setRule,required TResult Function( String conversationId,  String text)  startTurn,required TResult Function( String runId,  String generation)  platformPause,required TResult Function( String runId,  String generation)  platformStop,required TResult Function( String runId)  cancelRun,required TResult Function( String runId)  resumeRun,required TResult Function( AgentApprovalBinding binding)  approve,required TResult Function( String attemptId)  deny,required TResult Function( String conversationId,  AgentContextSelection selection)  summarizeContext,required TResult Function( String runId,  AgentContextSelection selection)  applyContextSelection,required TResult Function( String conversationId,  String origin)  acknowledgeContextDisclosure,}) {final _that = this;
 switch (_that) {
 case AppCommand_SearchConversations():
 return searchConversations(_that.query,_that.offset,_that.limit);case AppCommand_RenameConversation():
@@ -270,7 +270,7 @@ return approve(_that.binding);case AppCommand_Deny():
 return deny(_that.attemptId);case AppCommand_SummarizeContext():
 return summarizeContext(_that.conversationId,_that.selection);case AppCommand_ApplyContextSelection():
 return applyContextSelection(_that.runId,_that.selection);case AppCommand_AcknowledgeContextDisclosure():
-return acknowledgeContextDisclosure(_that.conversationId,_that.snapshotRevision,_that.destination);}
+return acknowledgeContextDisclosure(_that.conversationId,_that.origin);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -284,7 +284,7 @@ return acknowledgeContextDisclosure(_that.conversationId,_that.snapshotRevision,
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String query,  int offset,  int limit)?  searchConversations,TResult? Function( String conversationId,  String title)?  renameConversation,TResult? Function( String conversationId,  bool confirmedUnknown)?  deleteConversation,TResult? Function( String conversationId,  bool includeToolPayloads)?  exportTranscript,TResult? Function( String endpointId)?  discoverModels,TResult? Function( String endpointId)?  probeEndpoint,TResult? Function( String profileId,  String serverId)?  discoverServer,TResult? Function( String conversationId,  String name,  String content)?  createArtifact,TResult? Function( String conversationId,  String artifactId)?  readArtifact,TResult? Function( String conversationId,  String artifactId)?  deleteArtifact,TResult? Function()?  newId,TResult? Function( AgentEndpointConfig endpoint)?  saveEndpoint,TResult? Function( AgentServerConfig server)?  saveServer,TResult? Function( AgentProfile profile)?  saveProfile,TResult? Function( String profileId)?  createConversation,TResult? Function( String conversationId,  String profileId)?  applyProfile,TResult? Function( AgentToolKey key,  String schemaDigest,  String destinationDigest,  PermissionRule rule)?  setRule,TResult? Function( String conversationId,  String text)?  startTurn,TResult? Function( String runId,  String generation)?  platformPause,TResult? Function( String runId,  String generation)?  platformStop,TResult? Function( String runId)?  cancelRun,TResult? Function( String runId)?  resumeRun,TResult? Function( AgentApprovalBinding binding)?  approve,TResult? Function( String attemptId)?  deny,TResult? Function( String conversationId,  AgentContextSelection selection)?  summarizeContext,TResult? Function( String runId,  AgentContextSelection selection)?  applyContextSelection,TResult? Function( String conversationId,  PlatformInt64 snapshotRevision,  String destination)?  acknowledgeContextDisclosure,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String query,  int offset,  int limit)?  searchConversations,TResult? Function( String conversationId,  String title)?  renameConversation,TResult? Function( String conversationId,  bool confirmedUnknown)?  deleteConversation,TResult? Function( String conversationId,  bool includeToolPayloads)?  exportTranscript,TResult? Function( String endpointId)?  discoverModels,TResult? Function( String endpointId)?  probeEndpoint,TResult? Function( String profileId,  String serverId)?  discoverServer,TResult? Function( String conversationId,  String name,  String content)?  createArtifact,TResult? Function( String conversationId,  String artifactId)?  readArtifact,TResult? Function( String conversationId,  String artifactId)?  deleteArtifact,TResult? Function()?  newId,TResult? Function( AgentEndpointConfig endpoint)?  saveEndpoint,TResult? Function( AgentServerConfig server)?  saveServer,TResult? Function( AgentProfile profile)?  saveProfile,TResult? Function( String profileId)?  createConversation,TResult? Function( String conversationId,  String profileId)?  applyProfile,TResult? Function( AgentToolKey key,  String schemaDigest,  String destinationDigest,  PermissionRule rule)?  setRule,TResult? Function( String conversationId,  String text)?  startTurn,TResult? Function( String runId,  String generation)?  platformPause,TResult? Function( String runId,  String generation)?  platformStop,TResult? Function( String runId)?  cancelRun,TResult? Function( String runId)?  resumeRun,TResult? Function( AgentApprovalBinding binding)?  approve,TResult? Function( String attemptId)?  deny,TResult? Function( String conversationId,  AgentContextSelection selection)?  summarizeContext,TResult? Function( String runId,  AgentContextSelection selection)?  applyContextSelection,TResult? Function( String conversationId,  String origin)?  acknowledgeContextDisclosure,}) {final _that = this;
 switch (_that) {
 case AppCommand_SearchConversations() when searchConversations != null:
 return searchConversations(_that.query,_that.offset,_that.limit);case AppCommand_RenameConversation() when renameConversation != null:
@@ -313,7 +313,7 @@ return approve(_that.binding);case AppCommand_Deny() when deny != null:
 return deny(_that.attemptId);case AppCommand_SummarizeContext() when summarizeContext != null:
 return summarizeContext(_that.conversationId,_that.selection);case AppCommand_ApplyContextSelection() when applyContextSelection != null:
 return applyContextSelection(_that.runId,_that.selection);case AppCommand_AcknowledgeContextDisclosure() when acknowledgeContextDisclosure != null:
-return acknowledgeContextDisclosure(_that.conversationId,_that.snapshotRevision,_that.destination);case _:
+return acknowledgeContextDisclosure(_that.conversationId,_that.origin);case _:
   return null;
 
 }
@@ -2045,12 +2045,11 @@ as AgentContextSelection,
 
 
 class AppCommand_AcknowledgeContextDisclosure extends AppCommand {
-  const AppCommand_AcknowledgeContextDisclosure({required this.conversationId, required this.snapshotRevision, required this.destination}): super._();
+  const AppCommand_AcknowledgeContextDisclosure({required this.conversationId, required this.origin}): super._();
   
 
  final  String conversationId;
- final  PlatformInt64 snapshotRevision;
- final  String destination;
+ final  String origin;
 
 /// Create a copy of AppCommand
 /// with the given fields replaced by the non-null parameter values.
@@ -2062,16 +2061,16 @@ $AppCommand_AcknowledgeContextDisclosureCopyWith<AppCommand_AcknowledgeContextDi
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is AppCommand_AcknowledgeContextDisclosure&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.snapshotRevision, snapshotRevision) || other.snapshotRevision == snapshotRevision)&&(identical(other.destination, destination) || other.destination == destination));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AppCommand_AcknowledgeContextDisclosure&&(identical(other.conversationId, conversationId) || other.conversationId == conversationId)&&(identical(other.origin, origin) || other.origin == origin));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,conversationId,snapshotRevision,destination);
+int get hashCode => Object.hash(runtimeType,conversationId,origin);
 
 @override
 String toString() {
-  return 'AppCommand.acknowledgeContextDisclosure(conversationId: $conversationId, snapshotRevision: $snapshotRevision, destination: $destination)';
+  return 'AppCommand.acknowledgeContextDisclosure(conversationId: $conversationId, origin: $origin)';
 }
 
 
@@ -2082,7 +2081,7 @@ abstract mixin class $AppCommand_AcknowledgeContextDisclosureCopyWith<$Res> impl
   factory $AppCommand_AcknowledgeContextDisclosureCopyWith(AppCommand_AcknowledgeContextDisclosure value, $Res Function(AppCommand_AcknowledgeContextDisclosure) _then) = _$AppCommand_AcknowledgeContextDisclosureCopyWithImpl;
 @useResult
 $Res call({
- String conversationId, PlatformInt64 snapshotRevision, String destination
+ String conversationId, String origin
 });
 
 
@@ -2099,11 +2098,10 @@ class _$AppCommand_AcknowledgeContextDisclosureCopyWithImpl<$Res>
 
 /// Create a copy of AppCommand
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? conversationId = null,Object? snapshotRevision = null,Object? destination = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? conversationId = null,Object? origin = null,}) {
   return _then(AppCommand_AcknowledgeContextDisclosure(
 conversationId: null == conversationId ? _self.conversationId : conversationId // ignore: cast_nullable_to_non_nullable
-as String,snapshotRevision: null == snapshotRevision ? _self.snapshotRevision : snapshotRevision // ignore: cast_nullable_to_non_nullable
-as PlatformInt64,destination: null == destination ? _self.destination : destination // ignore: cast_nullable_to_non_nullable
+as String,origin: null == origin ? _self.origin : origin // ignore: cast_nullable_to_non_nullable
 as String,
   ));
 }

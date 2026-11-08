@@ -45,7 +45,7 @@ pub struct AgentProfile {
 }
 #[derive(Debug, Clone)]
 pub struct AgentProfileSnapshot {
-    pub inference_destination: Option<String>,
+    pub inference_origin: Option<String>,
     pub mode: ProfileMode,
     pub profile_id: String,
     pub revision: i64,
@@ -158,6 +158,8 @@ pub struct AgentRun {
 pub struct AgentConversation {
     pub id: String,
     pub profile: AgentProfileSnapshot,
+    /// Whether the app has acknowledged disclosure for `profile.inference_origin`.
+    pub origin_acknowledged: bool,
     pub messages: Vec<AgentMessage>,
     pub summaries: Vec<AgentDerivedContext>,
 }
@@ -319,7 +321,6 @@ pub enum AppCommand {
     },
     AcknowledgeContextDisclosure {
         conversation_id: String,
-        snapshot_revision: i64,
-        destination: String,
+        origin: String,
     },
 }

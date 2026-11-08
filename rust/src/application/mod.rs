@@ -422,16 +422,12 @@ impl Application {
             }
             AppCommand::AcknowledgeContextDisclosure {
                 conversation_id,
-                snapshot_revision,
-                destination,
+                origin,
             } => {
                 self.coordinator
                     .acknowledge_context_disclosure(
                         core::ConversationId(uuid(&conversation_id)?),
-                        crate::agent::context::DisclosureAcknowledgment {
-                            snapshot_revision,
-                            destination,
-                        },
+                        crate::agent::context::DisclosureAcknowledgment { origin },
                     )
                     .await?;
                 None
@@ -627,8 +623,14 @@ fn configuration_snapshot(repo: &Repository) -> CoreResult<ConfigSnapshot> {
     let conversations = ids
         .into_iter()
         .map(|id| {
-            repo.conversation(core::ConversationId(uuid(&id)?))
-                .map(Into::into)
+            let snapshot = repo.conversation(core::ConversationId(uuid(&id)?))?;
+            // A misconfigured endpoint has no origin, so nothing can be acknowledged for it.
+            let acknowledged =
+                match crate::agent::context::endpoint_origin(&snapshot.profile.endpoint) {
+                    Ok(origin) => crate::agent::origin_acknowledged(repo, &origin)?,
+                    Err(_) => false,
+                };
+            Ok(AgentConversation::new(snapshot, acknowledged))
         })
         .collect::<CoreResult<_>>()?;
     Ok((sequence, endpoints, servers, profiles, conversations, rules))

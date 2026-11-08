@@ -22,7 +22,7 @@ const profileB = ProfileSnapshot(
   servers: [],
   instructions: '',
   limits: RunLimits(),
-  inferenceDestination: 'https://new.test/v2/chat/completions',
+  inferenceOrigin: 'https://new.test',
 );
 const conversationB = Conversation(
   id: 'c',
@@ -79,27 +79,25 @@ void main() {
         await tapKey(t, 'ack-A');
         expect(
           find.text(
-            'Run A disclosure • revision 1\nDestination: ${profileSnapshot.inferenceDestination}',
+            'Run A disclosure\nOrigin: ${profileSnapshot.inferenceOrigin}',
           ),
           findsOneWidget,
         );
         var ack = b.commands.whereType<AcknowledgeContextDisclosure>().single;
-        expect(ack.snapshotRevision, 1);
-        expect(ack.destination, profileSnapshot.inferenceDestination);
+        expect(ack.origin, profileSnapshot.inferenceOrigin);
         await tapKey(t, 'ack-new-work');
         expect(
           find.text(
-            'New turn / summary disclosure • revision 2\nDestination: ${profileB.inferenceDestination}',
+            'New turn / summary disclosure\nOrigin: ${profileB.inferenceOrigin}',
           ),
           findsOneWidget,
         );
         ack = b.commands.whereType<AcknowledgeContextDisclosure>().last;
-        expect(ack.snapshotRevision, 2);
-        expect(ack.destination, profileB.inferenceDestination);
+        expect(ack.origin, profileB.inferenceOrigin);
         await tapKey(t, 'summary-context');
         expect(
           find.text(
-            'New summary disclosure • revision 2\nDestination: ${profileB.inferenceDestination}',
+            'New summary disclosure\nOrigin: ${profileB.inferenceOrigin}',
           ),
           findsOneWidget,
         );

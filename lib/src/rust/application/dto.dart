@@ -325,19 +325,27 @@ class AgentContextUsage {
 class AgentConversation {
   final String id;
   final AgentProfileSnapshot profile;
+
+  /// Whether the app has acknowledged disclosure for `profile.inference_origin`.
+  final bool originAcknowledged;
   final List<AgentMessage> messages;
   final List<AgentDerivedContext> summaries;
 
   const AgentConversation({
     required this.id,
     required this.profile,
+    required this.originAcknowledged,
     required this.messages,
     required this.summaries,
   });
 
   @override
   int get hashCode =>
-      id.hashCode ^ profile.hashCode ^ messages.hashCode ^ summaries.hashCode;
+      id.hashCode ^
+      profile.hashCode ^
+      originAcknowledged.hashCode ^
+      messages.hashCode ^
+      summaries.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -346,6 +354,7 @@ class AgentConversation {
           runtimeType == other.runtimeType &&
           id == other.id &&
           profile == other.profile &&
+          originAcknowledged == other.originAcknowledged &&
           messages == other.messages &&
           summaries == other.summaries;
 }
@@ -589,7 +598,7 @@ class AgentProfile {
 }
 
 class AgentProfileSnapshot {
-  final String? inferenceDestination;
+  final String? inferenceOrigin;
   final ProfileMode mode;
   final String profileId;
   final PlatformInt64 revision;
@@ -600,7 +609,7 @@ class AgentProfileSnapshot {
   final AgentRunLimits limits;
 
   const AgentProfileSnapshot({
-    this.inferenceDestination,
+    this.inferenceOrigin,
     required this.mode,
     required this.profileId,
     required this.revision,
@@ -613,7 +622,7 @@ class AgentProfileSnapshot {
 
   @override
   int get hashCode =>
-      inferenceDestination.hashCode ^
+      inferenceOrigin.hashCode ^
       mode.hashCode ^
       profileId.hashCode ^
       revision.hashCode ^
@@ -628,7 +637,7 @@ class AgentProfileSnapshot {
       identical(this, other) ||
       other is AgentProfileSnapshot &&
           runtimeType == other.runtimeType &&
-          inferenceDestination == other.inferenceDestination &&
+          inferenceOrigin == other.inferenceOrigin &&
           mode == other.mode &&
           profileId == other.profileId &&
           revision == other.revision &&
@@ -1019,7 +1028,6 @@ sealed class AppCommand with _$AppCommand {
   }) = AppCommand_ApplyContextSelection;
   const factory AppCommand.acknowledgeContextDisclosure({
     required String conversationId,
-    required PlatformInt64 snapshotRevision,
-    required String destination,
+    required String origin,
   }) = AppCommand_AcknowledgeContextDisclosure;
 }

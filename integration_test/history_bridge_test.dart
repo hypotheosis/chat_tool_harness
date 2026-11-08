@@ -74,8 +74,7 @@ void main() {
         await b.execute(
           AcknowledgeContextDisclosure(
             owner,
-            conversation.profile.revision,
-            conversation.profile.inferenceDestination!,
+            conversation.profile.inferenceOrigin!,
           ),
         );
         final message = jsonEncode({

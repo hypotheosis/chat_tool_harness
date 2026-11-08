@@ -228,11 +228,7 @@ Future<void> main() async {
     )).id!;
     final saved = (await backend.snapshot()).conversations.single.profile;
     await backend.execute(
-      AcknowledgeContextDisclosure(
-        conversation,
-        saved.revision,
-        saved.inferenceDestination!,
-      ),
+      AcknowledgeContextDisclosure(conversation, saved.inferenceOrigin!),
     );
     final run = (await backend.execute(
       StartTurn(conversation, 'controlled test write'),

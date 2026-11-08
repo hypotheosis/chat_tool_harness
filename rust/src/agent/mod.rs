@@ -1,5 +1,6 @@
 pub mod context;
 mod state;
+pub(crate) use state::origin_acknowledged;
 
 use crate::error::{CoreError, CoreResult};
 use crate::inference::{InferenceClient, InferenceEvent, InferenceRequest, InferenceTurn};
@@ -1093,7 +1094,7 @@ async fn work(
             .persist(move |repo| {
                 let mut snapshot = repo.conversation(conversation)?;
                 snapshot.profile = profile;
-                let disclosure = state::disclosure(&repo, conversation, &snapshot.profile)?;
+                let disclosure = state::disclosure(&repo, &snapshot.profile)?;
                 let mut selection = data.context.selection;
                 if purpose == context::ContextPurpose::Turn {
                     if let Some(selection) = &mut selection {

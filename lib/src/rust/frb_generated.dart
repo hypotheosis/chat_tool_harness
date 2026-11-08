@@ -746,13 +746,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AgentConversation dco_decode_agent_conversation(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return AgentConversation(
       id: dco_decode_String(arr[0]),
       profile: dco_decode_agent_profile_snapshot(arr[1]),
-      messages: dco_decode_list_agent_message(arr[2]),
-      summaries: dco_decode_list_agent_derived_context(arr[3]),
+      originAcknowledged: dco_decode_bool(arr[2]),
+      messages: dco_decode_list_agent_message(arr[3]),
+      summaries: dco_decode_list_agent_derived_context(arr[4]),
     );
   }
 
@@ -866,7 +867,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     if (arr.length != 9)
       throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return AgentProfileSnapshot(
-      inferenceDestination: dco_decode_opt_String(arr[0]),
+      inferenceOrigin: dco_decode_opt_String(arr[0]),
       mode: dco_decode_profile_mode(arr[1]),
       profileId: dco_decode_String(arr[2]),
       revision: dco_decode_i_64(arr[3]),
@@ -1127,8 +1128,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 26:
         return AppCommand_AcknowledgeContextDisclosure(
           conversationId: dco_decode_String(raw[1]),
-          snapshotRevision: dco_decode_i_64(raw[2]),
-          destination: dco_decode_String(raw[3]),
+          origin: dco_decode_String(raw[2]),
         );
       default:
         throw Exception("unreachable");
@@ -1948,11 +1948,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_id = sse_decode_String(deserializer);
     var var_profile = sse_decode_agent_profile_snapshot(deserializer);
+    var var_originAcknowledged = sse_decode_bool(deserializer);
     var var_messages = sse_decode_list_agent_message(deserializer);
     var var_summaries = sse_decode_list_agent_derived_context(deserializer);
     return AgentConversation(
       id: var_id,
       profile: var_profile,
+      originAcknowledged: var_originAcknowledged,
       messages: var_messages,
       summaries: var_summaries,
     );
@@ -2090,7 +2092,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_inferenceDestination = sse_decode_opt_String(deserializer);
+    var var_inferenceOrigin = sse_decode_opt_String(deserializer);
     var var_mode = sse_decode_profile_mode(deserializer);
     var var_profileId = sse_decode_String(deserializer);
     var var_revision = sse_decode_i_64(deserializer);
@@ -2100,7 +2102,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_instructions = sse_decode_String(deserializer);
     var var_limits = sse_decode_agent_run_limits(deserializer);
     return AgentProfileSnapshot(
-      inferenceDestination: var_inferenceDestination,
+      inferenceOrigin: var_inferenceOrigin,
       mode: var_mode,
       profileId: var_profileId,
       revision: var_revision,
@@ -2431,12 +2433,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         );
       case 26:
         var var_conversationId = sse_decode_String(deserializer);
-        var var_snapshotRevision = sse_decode_i_64(deserializer);
-        var var_destination = sse_decode_String(deserializer);
+        var var_origin = sse_decode_String(deserializer);
         return AppCommand_AcknowledgeContextDisclosure(
           conversationId: var_conversationId,
-          snapshotRevision: var_snapshotRevision,
-          destination: var_destination,
+          origin: var_origin,
         );
       default:
         throw UnimplementedError('');
@@ -3439,6 +3439,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.id, serializer);
     sse_encode_agent_profile_snapshot(self.profile, serializer);
+    sse_encode_bool(self.originAcknowledged, serializer);
     sse_encode_list_agent_message(self.messages, serializer);
     sse_encode_list_agent_derived_context(self.summaries, serializer);
   }
@@ -3534,7 +3535,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_opt_String(self.inferenceDestination, serializer);
+    sse_encode_opt_String(self.inferenceOrigin, serializer);
     sse_encode_profile_mode(self.mode, serializer);
     sse_encode_String(self.profileId, serializer);
     sse_encode_i_64(self.revision, serializer);
@@ -3806,13 +3807,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_box_autoadd_agent_context_selection(selection, serializer);
       case AppCommand_AcknowledgeContextDisclosure(
         conversationId: final conversationId,
-        snapshotRevision: final snapshotRevision,
-        destination: final destination,
+        origin: final origin,
       ):
         sse_encode_i_32(26, serializer);
         sse_encode_String(conversationId, serializer);
-        sse_encode_i_64(snapshotRevision, serializer);
-        sse_encode_String(destination, serializer);
+        sse_encode_String(origin, serializer);
     }
   }
 
