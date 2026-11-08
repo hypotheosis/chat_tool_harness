@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chat_tool_harness/backend/models.dart';
+import 'package:chat_tool_harness/features/profiles/tool_rules_screen.dart';
+import 'package:chat_tool_harness/features/result_banner.dart';
 import 'package:chat_tool_harness/features/settings/endpoint_screen.dart';
 import 'package:chat_tool_harness/features/settings/server_screen.dart';
 import '../support/ui_fixture.dart';
@@ -54,6 +56,24 @@ Future<void> openEndpoint(WidgetTester t, UiBackend b) async {
   );
   await t.pumpAndSettle();
   await scrollToEnd(t);
+}
+
+/// Scrolls far enough that the banner is disposed, then back to just above
+/// it: the rebuilt banner must not treat its old result as new and scroll
+/// the list to it again.
+Future<void> expectNoSnapBack(WidgetTester t) async {
+  final position = t
+      .state<ScrollableState>(find.byType(Scrollable).first)
+      .position;
+  final back = (position.pixels - 200).clamp(0.0, position.maxScrollExtent);
+  expect(position.maxScrollExtent, greaterThan(back + 3000));
+  position.jumpTo(back + 3000);
+  await t.pumpAndSettle();
+  expect(find.byType(ResultBanner), findsNothing);
+  position.jumpTo(back);
+  await t.pumpAndSettle();
+  expect(find.byType(ResultBanner), findsOneWidget);
+  expect(position.pixels, back);
 }
 
 void expectOnScreen(WidgetTester t, Finder finder) {
@@ -110,6 +130,41 @@ void main() {
     await t.tap(find.text('Discover models'));
     await t.pumpAndSettle();
     expectOnScreen(t, find.textContaining('6 models available'));
+  });
+
+  testWidgets('scrolling back past an old tool rules result stays put', (
+    t,
+  ) async {
+    final rules = [
+      for (var i = 0; i < 30; i++)
+        ToolRule(
+          key: ToolKey(profileId: 'p', serverId: 's', name: 'tool-$i'),
+          schemaJson: '{}',
+          schemaDigest: 'schema',
+          destinationDigest: 'destination',
+          rule: PermissionRule.ask,
+        ),
+    ];
+    final b = UiBackend()..reply = CommandReply(discoveredRules: rules);
+    phone(t);
+    await t.pumpWidget(MaterialApp(home: ToolRulesScreen(backend: b)));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Discover rules Profile • p / s'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('30 tools available'), findsOneWidget);
+    await expectNoSnapBack(t);
+  });
+
+  testWidgets('scrolling back past an old endpoint result stays put', (
+    t,
+  ) async {
+    final b = UiBackend()
+      ..reply = CommandReply(models: [for (var i = 0; i < 100; i++) 'm$i']);
+    await openEndpoint(t, b);
+    await t.tap(find.text('Discover models'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('100 models available'), findsOneWidget);
+    await expectNoSnapBack(t);
   });
 
   testWidgets('progress is visible while an action is pending', (t) async {

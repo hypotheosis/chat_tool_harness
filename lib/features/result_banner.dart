@@ -20,7 +20,10 @@ class _ResultBannerState extends State<ResultBanner> {
   @override
   void initState() {
     super.initState();
-    noticeResult();
+    // A lazy list rebuilds the banner when it scrolls back into range; the
+    // result it shows then is old, so record it without scrolling.
+    final s = widget.state;
+    shown = (s.error, s.success, s.lastFailure);
   }
 
   @override
