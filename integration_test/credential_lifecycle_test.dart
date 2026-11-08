@@ -37,9 +37,12 @@ void main() {
       [67],
     );
     await credentials.invokeMethod<void>('delete', {'reference': reference});
-    await expectLater(
-      credentials.invokeMethod('resolve', {'reference': reference}),
-      throwsA(isA<PlatformException>()),
+    // A deleted credential is absent, not a failure.
+    expect(
+      await credentials.invokeMethod<Uint8List>('resolve', {
+        'reference': reference,
+      }),
+      isNull,
     );
     await expectLater(
       credentials.invokeMethod('put', {
@@ -108,7 +111,7 @@ void main() {
             isA<BackendFailure>().having(
               (e) => e.code,
               'requires reentry',
-              FailureCode.authentication,
+              FailureCode.credentialMissing,
             ),
           ),
         );
@@ -130,4 +133,50 @@ void main() {
       }
     },
   );
+  testWidgets('describe reports scheme and length without the secret', (
+    tester,
+  ) async {
+    const ref = 'a92677ad-3f0c-4ca5-b10a-c4fcd9bf4131';
+    addTearDown(() => PlatformServices.deleteCredential(ref));
+    await PlatformServices.putCredential(ref, 'Bearer okf_example');
+    final d = await PlatformServices.describeCredential(ref);
+    expect(d, isNotNull);
+    expect(d!.scheme, 'Bearer');
+    expect(d.length, 'Bearer okf_example'.length);
+    await PlatformServices.putCredential(ref, 'plainkey');
+    final bare = await PlatformServices.describeCredential(ref);
+    expect(bare!.scheme, isNull);
+    expect(bare.length, 8);
+    // Same rule as Rust's authorization_value: a trailing space or a
+    // non-token first word is not a scheme.
+    await PlatformServices.putCredential(ref, 'Bearer ');
+    expect((await PlatformServices.describeCredential(ref))!.scheme, isNull);
+    await PlatformServices.putCredential(ref, '1abc def');
+    expect((await PlatformServices.describeCredential(ref))!.scheme, isNull);
+    await PlatformServices.putCredential(ref, 'Token: x');
+    expect((await PlatformServices.describeCredential(ref))!.scheme, isNull);
+    await PlatformServices.deleteCredential(ref);
+    expect(await PlatformServices.describeCredential(ref), isNull);
+  });
+  testWidgets('a corrupted credential is a failure, not missing', (
+    tester,
+  ) async {
+    const ref = 'b92677ad-3f0c-4ca5-b10a-c4fcd9bf4131';
+    addTearDown(() => PlatformServices.deleteCredential(ref));
+    await PlatformServices.putCredential(ref, 'test-only-corrupt');
+    // CredentialStore keeps ciphertext in Context.noBackupFilesDir/credentials.
+    final file = File(
+      '${Directory.systemTemp.parent.path}/no_backup/credentials/$ref',
+    );
+    expect(file.existsSync(), isTrue);
+    await file.writeAsBytes(List<int>.filled(40, 7), flush: true);
+    await expectLater(
+      PlatformServices.android().resolveCredential(ref),
+      throwsA(isA<PlatformException>()),
+    );
+    await expectLater(
+      PlatformServices.describeCredential(ref),
+      throwsA(isA<PlatformException>()),
+    );
+  });
 }

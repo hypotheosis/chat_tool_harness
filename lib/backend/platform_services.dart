@@ -6,6 +6,22 @@ import 'frb_backend.dart';
 import 'models.dart';
 import 'engine_lifecycle.dart';
 
+/// What the device reports about a stored credential; never the secret.
+class CredentialSummary {
+  const CredentialSummary({this.scheme, required this.length});
+
+  /// Auth scheme the stored value starts with, or null when `Bearer` is added.
+  final String? scheme;
+
+  /// Stored value length in UTF-8 bytes.
+  final int length;
+
+  /// What will be sent for an Authorization header.
+  String get authorizationPreview => scheme != null
+      ? '$scheme ••• ($length chars)'
+      : 'Bearer ••• (${length + 7} chars, Bearer added)';
+}
+
 class PlatformServices {
   const PlatformServices({
     required this.resolveCredential,
@@ -29,6 +45,23 @@ class PlatformServices {
 
   static Future<void> deleteCredential(String reference) =>
       credentials.invokeMethod<void>('delete', {'reference': reference});
+
+  /// Null when no credential is stored under [reference]; decryption and
+  /// keystore failures throw.
+  static Future<CredentialSummary?> describeCredential(String reference) async {
+    final reply = await credentials.invokeMapMethod<String, Object?>(
+      'describe',
+      {'reference': reference},
+    );
+    if (reply == null) return null;
+    final length = reply['length'];
+    final scheme = reply['scheme'];
+    if (length is! int || (scheme != null && scheme is! String)) {
+      throw const BackendFailure(FailureCode.authentication);
+    }
+    return CredentialSummary(scheme: scheme as String?, length: length);
+  }
+
   factory PlatformServices.android({
     Future<String?> Function(String)? resolveCredential,
   }) => PlatformServices(
@@ -38,9 +71,8 @@ class PlatformServices {
           final bytes = await credentials.invokeMethod<Uint8List>('resolve', {
             'reference': reference,
           });
-          if (bytes == null) {
-            throw const BackendFailure(FailureCode.authentication);
-          }
+          // Null means no credential is stored: Rust reports CredentialMissing.
+          if (bytes == null) return null;
           // Codec results are read-only views; Strings/transport buffers are transient, not wipeable.
           return utf8.decode(bytes);
         },

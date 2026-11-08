@@ -5,6 +5,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.AtomicFile
 import java.io.File
+import java.io.FileNotFoundException
 import java.security.KeyStore
 import java.util.UUID
 import javax.crypto.Cipher
@@ -50,14 +51,41 @@ class CredentialStore(context: Context, private val alias: String = "agent.crede
             throw error
         }
     }
-    @Synchronized fun resolve(reference: String): ByteArray {
-        val encrypted = file(reference).readFully()
+    /** Null when nothing is stored under [reference]; decrypt and keystore errors throw. */
+    @Synchronized fun resolve(reference: String): ByteArray? {
+        val encrypted = try {
+            file(reference).readFully()
+        } catch (_: FileNotFoundException) {
+            return null
+        }
         check(encrypted.size in 29..8220)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, key(false), GCMParameterSpec(128, encrypted.copyOfRange(0, 12)))
         cipher.updateAAD(reference.toByteArray(Charsets.UTF_8))
         return cipher.doFinal(encrypted, 12, encrypted.size - 12)
     }
+    /**
+     * Scheme token (when the value starts with "<scheme> " followed by more text, the same
+     * rule as Rust's `net::authorization_value`) and UTF-8 byte length; null if absent.
+     */
+    @Synchronized fun describe(reference: String): Map<String, Any?>? {
+        val value = resolve(reference) ?: return null
+        try {
+            val text = String(value, Charsets.UTF_8)
+            val space = text.indexOf(' ')
+            val scheme = if (space > 0 && space < text.length - 1 && isScheme(text.substring(0, space))) {
+                text.substring(0, space)
+            } else {
+                null
+            }
+            return mapOf("scheme" to scheme, "length" to value.size)
+        } finally {
+            value.fill(0)
+        }
+    }
+    private fun isScheme(token: String): Boolean =
+        token.first().let { it in 'A'..'Z' || it in 'a'..'z' } &&
+            token.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it in "!#$%&'*+.^_`|~-" }
     @Synchronized fun delete(reference: String) {
         val target = file(reference)
         target.delete()

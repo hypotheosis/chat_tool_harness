@@ -14,7 +14,7 @@ class CredentialChannel(context: Context, engine: FlutterEngine) {
     init {
         MethodChannel(engine.dartExecutor.binaryMessenger, "chat_tool_harness/credentials")
             .setMethodCallHandler { call, result ->
-                if (call.method !in setOf("put", "resolve", "delete")) {
+                if (call.method !in setOf("put", "resolve", "describe", "delete")) {
                     result.notImplemented()
                 } else {
                     executor.execute {
@@ -28,6 +28,7 @@ class CredentialChannel(context: Context, engine: FlutterEngine) {
                                     null
                                 }
                                 "resolve" -> store.resolve(reference)
+                                "describe" -> store.describe(reference)
                                 else -> { store.delete(reference); null }
                             }
                             main.post {
