@@ -67,6 +67,8 @@ pub(crate) fn migrate_v2_for_test(connection: &mut Connection) -> SqlResult<()> 
 fn migrate_v8(connection: &mut Connection) -> SqlResult<()> {
     let tx = connection.transaction()?;
     // Server trust is app-wide and bound to the destination it was granted for.
+    // The foreign key has no ON DELETE action: a future server delete must
+    // remove the server's trusted_servers row first.
     tx.execute_batch(
         "CREATE TABLE trusted_servers (
             server_id TEXT PRIMARY KEY REFERENCES servers(id),

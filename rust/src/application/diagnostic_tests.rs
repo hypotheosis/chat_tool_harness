@@ -951,3 +951,68 @@ async fn trusted_server_runs_calls_without_asking_until_its_url_changes() {
     ));
     f.app.close().await.unwrap();
 }
+
+#[tokio::test]
+async fn decide_approvals_on_a_running_run_stores_decisions_without_resuming() {
+    let wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    let repo = f.app.repository.clone();
+    let profile = core::ProfileId(uuid(&f.profile).unwrap());
+    let conversation = core::ConversationId(uuid(&f.conversation).unwrap());
+    let run = core::RunId::new();
+    let attempt = core::AttemptId::new();
+    let binding = blocking(move || {
+        repo.insert_run_for_test(run, conversation, core::RunState::Running)?;
+        repo.insert_attempt_for_test(attempt, run, core::AttemptState::Proposed)?;
+        let key = core::ToolKey {
+            profile_id: profile,
+            server: core::ToolServer::LocalFiles,
+            name: "read".into(),
+        };
+        let definition =
+            core::ToolDefinition::from_discovery(&repo, key.clone(), r#"{"type":"object"}"#)?;
+        let call = core::ToolCall {
+            key,
+            provider_call_id: "call".into(),
+            arguments_json: "{}".into(),
+        };
+        match crate::permissions::authorize(&repo, attempt, &call, &definition, None)? {
+            core::Authorization::Ask(binding) => Ok(*binding),
+            _ => Err(CoreError::Conflict),
+        }
+    })
+    .await
+    .unwrap();
+    f.app
+        .command(AppCommand::DecideApprovals {
+            run_id: run.0.to_string(),
+            approve: vec![binding.into()],
+            deny: vec![],
+        })
+        .await
+        .unwrap();
+    let repo = f.app.repository.clone();
+    let state = blocking(move || {
+        repo.with_connection(move |conn| {
+            conn.query_row(
+                "SELECT state FROM attempts WHERE id=?1",
+                [attempt.0.to_string()],
+                |r| r.get::<_, String>(0),
+            )
+            .map_err(|_| CoreError::Storage)
+        })
+    })
+    .await
+    .unwrap();
+    assert_eq!(state, "Approved");
+    assert_eq!(
+        blocking({
+            let repo = f.app.repository.clone();
+            move || crate::agent::run_state(&repo, run)
+        })
+        .await
+        .unwrap(),
+        core::RunState::Running
+    );
+    f.app.close().await.unwrap();
+}

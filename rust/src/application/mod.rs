@@ -493,26 +493,26 @@ impl Application {
         let repeated =
             blocking(move || crate::agent::already_decided(&repo, run, check_approve, check_deny))
                 .await?;
-        if repeated {
-            // Nothing to store; resume only a run that is not already going.
-            let repo = self.repository.clone();
-            let current = blocking(move || crate::agent::run_state(&repo, run)).await?;
-            if !matches!(
-                current,
-                core::RunState::WaitingApproval
-                    | core::RunState::Paused
-                    | core::RunState::Interrupted
-            ) {
-                return Ok(());
+        if !repeated {
+            if approve
+                .iter()
+                .any(|b| matches!(b.key.server, core::ToolServer::Mcp(_)))
+            {
+                self.diagnostic(Diagnostic::Decide { run, approve, deny })
+                    .await?;
+            } else {
+                self.coordinator.decide(run, approve, deny).await?;
             }
-        } else if approve
-            .iter()
-            .any(|b| matches!(b.key.server, core::ToolServer::Mcp(_)))
-        {
-            self.diagnostic(Diagnostic::Decide { run, approve, deny })
-                .await?;
-        } else {
-            self.coordinator.decide(run, approve, deny).await?;
+        }
+        // Every decision is stored; resume only a run that is stopped. A run
+        // that is already going (or finished) keeps the decisions as they are.
+        let repo = self.repository.clone();
+        let current = blocking(move || crate::agent::run_state(&repo, run)).await?;
+        if !matches!(
+            current,
+            core::RunState::WaitingApproval | core::RunState::Paused | core::RunState::Interrupted
+        ) {
+            return Ok(());
         }
         self.coordinator.resume(run).await
     }

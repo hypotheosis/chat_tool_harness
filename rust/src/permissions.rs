@@ -676,41 +676,46 @@ pub fn authorize(
         if policy != PermissionRule::Block && !observed_current {
             return Err(CoreError::Conflict);
         }
+        let old = stored
+            .map(|raw| serde_json::from_str::<ApprovalBinding>(&raw))
+            .transpose()
+            .map_err(|_| CoreError::Storage)?;
+        if state == "Approved" && old.is_none() {
+            return Err(CoreError::Storage);
+        }
+        // The caller must hold the binding it last saw for this attempt, and
+        // the call itself can never change; only its definition may.
+        if policy != PermissionRule::Block
+            && old.is_some()
+            && (supplied != old || old.as_ref().is_some_and(|old| !same_call(old, &exact)))
+        {
+            return Err(CoreError::Conflict);
+        }
+        let dispatch = |transaction: &rusqlite::Transaction<'_>| {
+            transaction
+                .execute(
+                    "UPDATE attempts SET state='Dispatching' WHERE id=?1",
+                    [attempt_id.0.to_string()],
+                )
+                .map_err(|_| CoreError::Storage)
+        };
         let result = if policy == PermissionRule::Block {
             Authorization::Block
-        } else if state == "Approved" {
-            let old: ApprovalBinding = serde_json::from_str(&stored.ok_or(CoreError::Storage)?)
-                .map_err(|_| CoreError::Storage)?;
-            if supplied.as_ref() != Some(&old) || old != exact {
-                return Err(CoreError::Conflict);
-            }
-            transaction
-                .execute(
-                    "UPDATE attempts SET state='Dispatching' WHERE id=?1",
-                    [attempt_id.0.to_string()],
-                )
-                .map_err(|_| CoreError::Storage)?;
+        } else if state == "Approved" && old.as_ref() == Some(&exact) {
+            dispatch(&transaction)?;
             Authorization::Allow
         } else if policy == PermissionRule::Allow {
-            // Allow (rule or trust) wins over a binding prepared while it asked.
-            transaction
-                .execute(
-                    "UPDATE attempts SET state='Dispatching' WHERE id=?1",
-                    [attempt_id.0.to_string()],
-                )
-                .map_err(|_| CoreError::Storage)?;
+            // Allow (rule or trust) wins over a binding stored while it asked.
+            dispatch(&transaction)?;
             Authorization::Allow
-        } else if let Some(stored) = stored {
-            let old: ApprovalBinding =
-                serde_json::from_str(&stored).map_err(|_| CoreError::Storage)?;
-            if old != exact || supplied.as_ref() != Some(&old) {
-                return Err(CoreError::Conflict);
-            }
-            Authorization::Ask(Box::new(old))
+        } else if state == "Proposed" && old.as_ref() == Some(&exact) {
+            Authorization::Ask(Box::new(exact))
         } else {
+            // No binding yet, or the definition changed since it was bound
+            // (or approved): bind the current call and ask again.
             transaction
                 .execute(
-                    "UPDATE attempts SET approval_binding=?1 WHERE id=?2",
+                    "UPDATE attempts SET state='Proposed',approval_binding=?1 WHERE id=?2",
                     params![
                         serde_json::to_string(&exact).map_err(|_| CoreError::Storage)?,
                         attempt_id.0.to_string()
@@ -722,6 +727,15 @@ pub fn authorize(
         transaction.commit().map_err(|_| CoreError::Storage)?;
         Ok(result)
     })
+}
+/// Whether two bindings are for the same call (attempt, tool, provider id and
+/// arguments), whatever definition they were bound to.
+fn same_call(a: &ApprovalBinding, b: &ApprovalBinding) -> bool {
+    a.attempt_id == b.attempt_id
+        && a.key == b.key
+        && a.provider_call_id == b.provider_call_id
+        && a.arguments_digest == b.arguments_digest
+        && a.arguments_json == b.arguments_json
 }
 fn call_server(server: &str) -> Option<&str> {
     server.strip_prefix("mcp:")
@@ -746,7 +760,7 @@ pub fn approve(
         Ok(())
     })
 }
-/// Whether an attempt is already approved with exactly this binding.
+/// Whether an attempt was already approved with exactly this binding.
 pub fn already_approved(repo: &Repository, binding: &ApprovalBinding) -> CoreResult<bool> {
     let binding = binding.clone();
     repo.with_connection(move |conn| already_approved_on(conn, &binding))
@@ -764,8 +778,9 @@ pub(crate) fn already_approved_on(
         )
         .optional()
         .map_err(|_| CoreError::Storage)?;
+    // Once approved, the attempt may already be dispatching or finished.
     Ok(matches!(row, Some((state, Some(stored)))
-        if state == "Approved"
+        if matches!(state.as_str(), "Approved" | "Dispatching" | "Succeeded" | "Failed" | "OutcomeUnknown")
             && serde_json::from_str::<ApprovalBinding>(&stored).ok().as_ref() == Some(binding)))
 }
 /// Approve one attempt inside the caller's transaction. Returns whether it
@@ -1325,7 +1340,9 @@ mod tests {
         let b = ask(authorize(&f.repo, f.attempt, &f.call(), &d, None).unwrap());
         let changed =
             ToolDefinition::from_discovery(&f.repo, d.key.clone(), r#"{"type":"object"}"#).unwrap();
-        assert!(authorize(&f.repo, f.attempt, &f.call(), &changed, Some(&b)).is_err());
+        // The old binding is replaced: the call asks again for the new definition.
+        let fresh = ask(authorize(&f.repo, f.attempt, &f.call(), &changed, Some(&b)).unwrap());
+        assert_ne!(fresh, b);
         assert!(approve(&f.repo, f.attempt, &b).is_err());
         assert!(authorize(&f.repo, f.attempt, &f.call(), &changed, Some(&b)).is_err());
     }
@@ -2075,5 +2092,100 @@ mod tests {
         bad.arguments_json = r#"{"path":1}"#.into();
         prepare_approval(&f.repo, f.attempt, &bad, &d).unwrap();
         assert_eq!(attempt_row(&f.repo, f.attempt), ("Proposed".into(), None));
+    }
+    fn set_run_state(f: &Fixture, state: &'static str) {
+        let run = f.run();
+        f.repo
+            .with_connection(move |conn| {
+                conn.execute(
+                    "UPDATE runs SET state=?1 WHERE id=?2",
+                    params![state, run.0.to_string()],
+                )
+                .map_err(|_| CoreError::Storage)
+            })
+            .unwrap();
+    }
+    const CHANGED: &str = r#"{"type":"object","properties":{"path":{"type":"string"}}}"#;
+    #[test]
+    fn changed_definition_replaces_prepared_binding_and_asks_again() {
+        let f = Fixture::new();
+        let d = f.definition();
+        prepare_approval(&f.repo, f.attempt, &f.call(), &d).unwrap();
+        let old: ApprovalBinding =
+            serde_json::from_str(&attempt_row(&f.repo, f.attempt).1.unwrap()).unwrap();
+        let changed = ToolDefinition::from_discovery(&f.repo, d.key.clone(), CHANGED).unwrap();
+        let fresh = ask(authorize(&f.repo, f.attempt, &f.call(), &changed, Some(&old)).unwrap());
+        assert_ne!(fresh, old);
+        let (state, stored) = attempt_row(&f.repo, f.attempt);
+        assert_eq!(state, "Proposed");
+        assert_eq!(
+            serde_json::from_str::<ApprovalBinding>(&stored.unwrap()).unwrap(),
+            fresh
+        );
+        // The fresh binding is the one to approve; it then dispatches once.
+        approve(&f.repo, f.attempt, &fresh).unwrap();
+        assert_eq!(
+            authorize(&f.repo, f.attempt, &f.call(), &changed, Some(&fresh)).unwrap(),
+            Authorization::Allow
+        );
+    }
+    #[test]
+    fn changed_definition_after_approval_asks_again_without_dispatch() {
+        let f = Fixture::new();
+        let d = f.definition();
+        let b = ask(authorize(&f.repo, f.attempt, &f.call(), &d, None).unwrap());
+        approve(&f.repo, f.attempt, &b).unwrap();
+        let changed = ToolDefinition::from_discovery(&f.repo, d.key.clone(), CHANGED).unwrap();
+        let fresh = ask(authorize(&f.repo, f.attempt, &f.call(), &changed, Some(&b)).unwrap());
+        assert_ne!(fresh, b);
+        assert_eq!(attempt_row(&f.repo, f.attempt).0, "Proposed");
+    }
+    #[test]
+    fn prepare_skips_runs_that_are_not_running() {
+        let f = Fixture::new();
+        let d = f.definition();
+        set_run_state(&f, "WaitingApproval");
+        prepare_approval(&f.repo, f.attempt, &f.call(), &d).unwrap();
+        assert_eq!(attempt_row(&f.repo, f.attempt), ("Proposed".into(), None));
+    }
+    #[test]
+    fn prepare_skips_stale_observation_and_destination() {
+        let f = Fixture::new();
+        let d = f.definition();
+        invalidate_mcp_discovery(&f.repo, f.profile, f.server).unwrap();
+        prepare_approval(&f.repo, f.attempt, &f.call(), &d).unwrap();
+        assert_eq!(attempt_row(&f.repo, f.attempt), ("Proposed".into(), None));
+        let d = f.definition();
+        f.repo
+            .save_server(server_config(&f, "https://other.example.test/mcp", vec![]))
+            .unwrap();
+        prepare_approval(&f.repo, f.attempt, &f.call(), &d).unwrap();
+        assert_eq!(attempt_row(&f.repo, f.attempt), ("Proposed".into(), None));
+    }
+    #[test]
+    fn trust_ends_when_allow_http_changes() {
+        let f = Fixture::new();
+        set_server_trust(&f.repo, f.server, true).unwrap();
+        let mut config = server_config(&f, "https://server.test/mcp", vec![]);
+        config.allow_http = true;
+        f.repo.save_server(config).unwrap();
+        assert!(!server_trusted(&f.repo, f.server).unwrap());
+    }
+    #[test]
+    fn repeated_approval_after_dispatch_is_already_decided() {
+        let f = Fixture::new();
+        let d = f.definition();
+        let b = ask(authorize(&f.repo, f.attempt, &f.call(), &d, None).unwrap());
+        approve(&f.repo, f.attempt, &b).unwrap();
+        assert_eq!(
+            authorize(&f.repo, f.attempt, &f.call(), &d, Some(&b)).unwrap(),
+            Authorization::Allow
+        );
+        assert!(already_approved(&f.repo, &b).unwrap());
+        approve(&f.repo, f.attempt, &b).unwrap();
+        assert_eq!(attempt_row(&f.repo, f.attempt).0, "Dispatching");
+        let mut other = b.clone();
+        other.arguments_json = r#"{"path":"b"}"#.into();
+        assert!(!already_approved(&f.repo, &other).unwrap());
     }
 }

@@ -823,6 +823,15 @@ fn deny_on(tx: &rusqlite::Transaction<'_>, run: RunId, attempt: AttemptId) -> Co
     match attempt_run_on(tx, attempt)? {
         Some((owner, AttemptState::Denied)) if owner == run => Ok(false),
         Some((owner, _)) if owner == run => {
+            if !matches!(
+                run_state_on(tx, run)?,
+                RunState::WaitingApproval
+                    | RunState::Paused
+                    | RunState::Interrupted
+                    | RunState::Running
+            ) {
+                return Err(CoreError::Conflict);
+            }
             result_on(
                 tx,
                 run,

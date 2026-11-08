@@ -2100,6 +2100,60 @@ async fn repeated_decisions_are_idempotent_and_resume_dispatches_once() {
     assert_eq!(f.writes.load(Ordering::SeqCst), 1);
 }
 #[tokio::test]
+async fn repeated_decision_racing_dispatch_is_already_decided() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let request = f.request().await;
+    request.finish(Ok(turn(vec![f.tool_call("first"), f.tool_call("second")])));
+    let data = f.settled(run).await;
+    let first = data.attempts[0].binding.clone().unwrap();
+    let second = data.attempts[1].id;
+    f.coordinator
+        .decide(run, vec![first.clone()], vec![second])
+        .await
+        .unwrap();
+    f.coordinator.resume(run).await.unwrap();
+    // The first call is now dispatching; a double tap changes nothing.
+    let call = f.calls.recv().await.unwrap();
+    let repeated = f
+        .coordinator
+        .decide(run, vec![first.clone()], vec![second])
+        .await
+        .unwrap();
+    assert!(!repeated.changed);
+    assert_eq!(
+        f.data(run).await.attempts[0].state,
+        AttemptState::Dispatching
+    );
+    call.reply.send(Ok(outcome(false, 2))).unwrap();
+    f.request().await.finish(Ok(turn(vec![])));
+    assert_eq!(f.settled(run).await.state, RunState::Completed);
+    assert!(
+        !f.coordinator
+            .decide(run, vec![first], vec![second])
+            .await
+            .unwrap()
+            .changed
+    );
+    assert_eq!(f.writes.load(Ordering::SeqCst), 1);
+}
+#[tokio::test]
+async fn deny_requires_a_live_run() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let request = f.request().await;
+    request.finish(Ok(turn(vec![f.tool_call("first")])));
+    let attempt = f.settled(run).await.attempts[0].id;
+    f.coordinator.cancel(run).await.unwrap();
+    assert_eq!(f.data(run).await.attempts[0].state, AttemptState::Proposed);
+    assert_eq!(f.coordinator.deny(attempt).await, Err(CoreError::Conflict));
+    assert_eq!(
+        f.coordinator.decide(run, vec![], vec![attempt]).await,
+        Err(CoreError::Conflict)
+    );
+    assert_eq!(f.data(run).await.attempts[0].state, AttemptState::Proposed);
+}
+#[tokio::test]
 async fn stop_and_approval_race_has_no_dispatch() {
     let mut f = Fixture::new();
     let run = f.start().await;
