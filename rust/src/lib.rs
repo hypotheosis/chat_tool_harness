@@ -1,2 +1,14 @@
+pub mod agent;
 pub mod api;
+pub mod application;
+pub mod error;
+pub mod files;
 mod frb_generated;
+pub mod history;
+pub mod inference;
+pub mod mcp;
+pub mod model;
+pub mod net;
+pub mod permissions;
+pub mod profiles;
+pub mod storage;

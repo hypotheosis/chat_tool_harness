@@ -6,10 +6,19 @@
 // Static analysis wrongly picks the IO variant, thus ignore this
 // ignore_for_file: argument_type_not_assignable
 
+import 'agent/context.dart';
+import 'api/agent.dart';
+import 'api/pdf.dart';
 import 'api/simple.dart';
+import 'application.dart';
+import 'application/dto.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'error.dart';
 import 'frb_generated.dart';
+import 'inference.dart';
+import 'model.dart';
+import 'model/core.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
 
 abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
@@ -20,11 +29,377 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     required super.portManager,
   });
 
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_AgentHandlePtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle;
+
+  @protected
+  AnyhowException dco_decode_AnyhowException(dynamic raw);
+
+  @protected
+  AgentHandle
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    dynamic raw,
+  );
+
+  @protected
+  AgentHandle
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    dynamic raw,
+  );
+
+  @protected
+  FutureOr<CredentialReply> Function(String)
+  dco_decode_DartFn_Inputs_String_Output_credential_reply_AnyhowException(
+    dynamic raw,
+  );
+
+  @protected
+  FutureOr<PlatformReply> Function(RunHostRequest)
+  dco_decode_DartFn_Inputs_run_host_request_Output_platform_reply_AnyhowException(
+    dynamic raw,
+  );
+
+  @protected
+  Object dco_decode_DartOpaque(dynamic raw);
+
+  @protected
+  AgentHandle
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    dynamic raw,
+  );
+
+  @protected
+  RustStreamSink<AgentAppEvent> dco_decode_StreamSink_agent_app_event_Sse(
+    dynamic raw,
+  );
+
   @protected
   String dco_decode_String(dynamic raw);
 
   @protected
+  AgentAppEvent dco_decode_agent_app_event(dynamic raw);
+
+  @protected
+  AgentAppSnapshot dco_decode_agent_app_snapshot(dynamic raw);
+
+  @protected
+  AgentApprovalBinding dco_decode_agent_approval_binding(dynamic raw);
+
+  @protected
+  AgentArtifact dco_decode_agent_artifact(dynamic raw);
+
+  @protected
+  AgentArtifactContent dco_decode_agent_artifact_content(dynamic raw);
+
+  @protected
+  AgentAttempt dco_decode_agent_attempt(dynamic raw);
+
+  @protected
+  AgentCommandReply dco_decode_agent_command_reply(dynamic raw);
+
+  @protected
+  AgentContextSelection dco_decode_agent_context_selection(dynamic raw);
+
+  @protected
+  AgentContextUsage dco_decode_agent_context_usage(dynamic raw);
+
+  @protected
+  AgentConversation dco_decode_agent_conversation(dynamic raw);
+
+  @protected
+  AgentConversationSummary dco_decode_agent_conversation_summary(dynamic raw);
+
+  @protected
+  AgentDerivedContext dco_decode_agent_derived_context(dynamic raw);
+
+  @protected
+  AgentEndpointConfig dco_decode_agent_endpoint_config(dynamic raw);
+
+  @protected
+  AgentExportBundle dco_decode_agent_export_bundle(dynamic raw);
+
+  @protected
+  AgentMessage dco_decode_agent_message(dynamic raw);
+
+  @protected
+  AgentPageReference dco_decode_agent_page_reference(dynamic raw);
+
+  @protected
+  AgentProfile dco_decode_agent_profile(dynamic raw);
+
+  @protected
+  AgentProfileSnapshot dco_decode_agent_profile_snapshot(dynamic raw);
+
+  @protected
+  AgentProviderUsage dco_decode_agent_provider_usage(dynamic raw);
+
+  @protected
+  AgentRun dco_decode_agent_run(dynamic raw);
+
+  @protected
+  AgentRunContext dco_decode_agent_run_context(dynamic raw);
+
+  @protected
+  AgentRunLimits dco_decode_agent_run_limits(dynamic raw);
+
+  @protected
+  AgentSecretHeader dco_decode_agent_secret_header(dynamic raw);
+
+  @protected
+  AgentServerConfig dco_decode_agent_server_config(dynamic raw);
+
+  @protected
+  AgentToolCall dco_decode_agent_tool_call(dynamic raw);
+
+  @protected
+  AgentToolKey dco_decode_agent_tool_key(dynamic raw);
+
+  @protected
+  AgentToolRule dco_decode_agent_tool_rule(dynamic raw);
+
+  @protected
+  AppCommand dco_decode_app_command(dynamic raw);
+
+  @protected
+  AppError dco_decode_app_error(dynamic raw);
+
+  @protected
+  AttemptState dco_decode_attempt_state(dynamic raw);
+
+  @protected
+  bool dco_decode_bool(dynamic raw);
+
+  @protected
+  AgentApprovalBinding dco_decode_box_autoadd_agent_approval_binding(
+    dynamic raw,
+  );
+
+  @protected
+  AgentArtifactContent dco_decode_box_autoadd_agent_artifact_content(
+    dynamic raw,
+  );
+
+  @protected
+  AgentContextSelection dco_decode_box_autoadd_agent_context_selection(
+    dynamic raw,
+  );
+
+  @protected
+  AgentContextUsage dco_decode_box_autoadd_agent_context_usage(dynamic raw);
+
+  @protected
+  AgentDerivedContext dco_decode_box_autoadd_agent_derived_context(dynamic raw);
+
+  @protected
+  AgentEndpointConfig dco_decode_box_autoadd_agent_endpoint_config(dynamic raw);
+
+  @protected
+  AgentExportBundle dco_decode_box_autoadd_agent_export_bundle(dynamic raw);
+
+  @protected
+  AgentProfile dco_decode_box_autoadd_agent_profile(dynamic raw);
+
+  @protected
+  AgentProviderUsage dco_decode_box_autoadd_agent_provider_usage(dynamic raw);
+
+  @protected
+  AgentServerConfig dco_decode_box_autoadd_agent_server_config(dynamic raw);
+
+  @protected
+  AgentToolKey dco_decode_box_autoadd_agent_tool_key(dynamic raw);
+
+  @protected
+  AppCommand dco_decode_box_autoadd_app_command(dynamic raw);
+
+  @protected
+  ContextChoiceReason dco_decode_box_autoadd_context_choice_reason(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
+
+  @protected
+  PdfLimits dco_decode_box_autoadd_pdf_limits(dynamic raw);
+
+  @protected
+  PdfWorkerResult dco_decode_box_autoadd_pdf_worker_result(dynamic raw);
+
+  @protected
+  ToolSupport dco_decode_box_autoadd_tool_support(dynamic raw);
+
+  @protected
+  ContextChoiceReason dco_decode_context_choice_reason(dynamic raw);
+
+  @protected
+  ContextPurpose dco_decode_context_purpose(dynamic raw);
+
+  @protected
+  CoreError dco_decode_core_error(dynamic raw);
+
+  @protected
+  CredentialReply dco_decode_credential_reply(dynamic raw);
+
+  @protected
+  double dco_decode_f_32(dynamic raw);
+
+  @protected
+  int dco_decode_i_32(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_isize(dynamic raw);
+
+  @protected
+  List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<AgentArtifact> dco_decode_list_agent_artifact(dynamic raw);
+
+  @protected
+  List<AgentAttempt> dco_decode_list_agent_attempt(dynamic raw);
+
+  @protected
+  List<AgentConversation> dco_decode_list_agent_conversation(dynamic raw);
+
+  @protected
+  List<AgentConversationSummary> dco_decode_list_agent_conversation_summary(
+    dynamic raw,
+  );
+
+  @protected
+  List<AgentDerivedContext> dco_decode_list_agent_derived_context(dynamic raw);
+
+  @protected
+  List<AgentEndpointConfig> dco_decode_list_agent_endpoint_config(dynamic raw);
+
+  @protected
+  List<AgentMessage> dco_decode_list_agent_message(dynamic raw);
+
+  @protected
+  List<AgentPageReference> dco_decode_list_agent_page_reference(dynamic raw);
+
+  @protected
+  List<AgentProfile> dco_decode_list_agent_profile(dynamic raw);
+
+  @protected
+  List<AgentRun> dco_decode_list_agent_run(dynamic raw);
+
+  @protected
+  List<AgentSecretHeader> dco_decode_list_agent_secret_header(dynamic raw);
+
+  @protected
+  List<AgentServerConfig> dco_decode_list_agent_server_config(dynamic raw);
+
+  @protected
+  List<AgentToolCall> dco_decode_list_agent_tool_call(dynamic raw);
+
+  @protected
+  List<AgentToolRule> dco_decode_list_agent_tool_rule(dynamic raw);
+
+  @protected
+  List<PageText> dco_decode_list_page_text(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  AgentApprovalBinding? dco_decode_opt_box_autoadd_agent_approval_binding(
+    dynamic raw,
+  );
+
+  @protected
+  AgentArtifactContent? dco_decode_opt_box_autoadd_agent_artifact_content(
+    dynamic raw,
+  );
+
+  @protected
+  AgentContextSelection? dco_decode_opt_box_autoadd_agent_context_selection(
+    dynamic raw,
+  );
+
+  @protected
+  AgentContextUsage? dco_decode_opt_box_autoadd_agent_context_usage(
+    dynamic raw,
+  );
+
+  @protected
+  AgentDerivedContext? dco_decode_opt_box_autoadd_agent_derived_context(
+    dynamic raw,
+  );
+
+  @protected
+  AgentExportBundle? dco_decode_opt_box_autoadd_agent_export_bundle(
+    dynamic raw,
+  );
+
+  @protected
+  AgentProviderUsage? dco_decode_opt_box_autoadd_agent_provider_usage(
+    dynamic raw,
+  );
+
+  @protected
+  ContextChoiceReason? dco_decode_opt_box_autoadd_context_choice_reason(
+    dynamic raw,
+  );
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
+
+  @protected
+  ToolSupport? dco_decode_opt_box_autoadd_tool_support(dynamic raw);
+
+  @protected
+  PageStatus dco_decode_page_status(dynamic raw);
+
+  @protected
+  PageText dco_decode_page_text(dynamic raw);
+
+  @protected
+  PdfExtraction dco_decode_pdf_extraction(dynamic raw);
+
+  @protected
+  PdfFailure dco_decode_pdf_failure(dynamic raw);
+
+  @protected
+  PdfLimits dco_decode_pdf_limits(dynamic raw);
+
+  @protected
+  PdfWorkerReply dco_decode_pdf_worker_reply(dynamic raw);
+
+  @protected
+  PdfWorkerResult dco_decode_pdf_worker_result(dynamic raw);
+
+  @protected
+  PermissionRule dco_decode_permission_rule(dynamic raw);
+
+  @protected
+  PlatformReply dco_decode_platform_reply(dynamic raw);
+
+  @protected
+  ProfileMode dco_decode_profile_mode(dynamic raw);
+
+  @protected
+  RunHostRequest dco_decode_run_host_request(dynamic raw);
+
+  @protected
+  RunState dco_decode_run_state(dynamic raw);
+
+  @protected
+  TokenEstimation dco_decode_token_estimation(dynamic raw);
+
+  @protected
+  ToolSupport dco_decode_tool_support(dynamic raw);
+
+  @protected
+  int dco_decode_u_32(dynamic raw);
+
+  @protected
+  BigInt dco_decode_u_64(dynamic raw);
 
   @protected
   int dco_decode_u_8(dynamic raw);
@@ -33,10 +408,439 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void dco_decode_unit(dynamic raw);
 
   @protected
+  BigInt dco_decode_usize(dynamic raw);
+
+  @protected
+  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
+
+  @protected
+  AgentHandle
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentHandle
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Object sse_decode_DartOpaque(SseDeserializer deserializer);
+
+  @protected
+  AgentHandle
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RustStreamSink<AgentAppEvent> sse_decode_StreamSink_agent_app_event_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
+  AgentAppEvent sse_decode_agent_app_event(SseDeserializer deserializer);
+
+  @protected
+  AgentAppSnapshot sse_decode_agent_app_snapshot(SseDeserializer deserializer);
+
+  @protected
+  AgentApprovalBinding sse_decode_agent_approval_binding(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentArtifact sse_decode_agent_artifact(SseDeserializer deserializer);
+
+  @protected
+  AgentArtifactContent sse_decode_agent_artifact_content(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentAttempt sse_decode_agent_attempt(SseDeserializer deserializer);
+
+  @protected
+  AgentCommandReply sse_decode_agent_command_reply(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentContextSelection sse_decode_agent_context_selection(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentContextUsage sse_decode_agent_context_usage(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentConversation sse_decode_agent_conversation(SseDeserializer deserializer);
+
+  @protected
+  AgentConversationSummary sse_decode_agent_conversation_summary(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentDerivedContext sse_decode_agent_derived_context(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentEndpointConfig sse_decode_agent_endpoint_config(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentExportBundle sse_decode_agent_export_bundle(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentMessage sse_decode_agent_message(SseDeserializer deserializer);
+
+  @protected
+  AgentPageReference sse_decode_agent_page_reference(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentProfile sse_decode_agent_profile(SseDeserializer deserializer);
+
+  @protected
+  AgentProfileSnapshot sse_decode_agent_profile_snapshot(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentProviderUsage sse_decode_agent_provider_usage(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentRun sse_decode_agent_run(SseDeserializer deserializer);
+
+  @protected
+  AgentRunContext sse_decode_agent_run_context(SseDeserializer deserializer);
+
+  @protected
+  AgentRunLimits sse_decode_agent_run_limits(SseDeserializer deserializer);
+
+  @protected
+  AgentSecretHeader sse_decode_agent_secret_header(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentServerConfig sse_decode_agent_server_config(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentToolCall sse_decode_agent_tool_call(SseDeserializer deserializer);
+
+  @protected
+  AgentToolKey sse_decode_agent_tool_key(SseDeserializer deserializer);
+
+  @protected
+  AgentToolRule sse_decode_agent_tool_rule(SseDeserializer deserializer);
+
+  @protected
+  AppCommand sse_decode_app_command(SseDeserializer deserializer);
+
+  @protected
+  AppError sse_decode_app_error(SseDeserializer deserializer);
+
+  @protected
+  AttemptState sse_decode_attempt_state(SseDeserializer deserializer);
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  AgentApprovalBinding sse_decode_box_autoadd_agent_approval_binding(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentArtifactContent sse_decode_box_autoadd_agent_artifact_content(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentContextSelection sse_decode_box_autoadd_agent_context_selection(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentContextUsage sse_decode_box_autoadd_agent_context_usage(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentDerivedContext sse_decode_box_autoadd_agent_derived_context(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentEndpointConfig sse_decode_box_autoadd_agent_endpoint_config(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentExportBundle sse_decode_box_autoadd_agent_export_bundle(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentProfile sse_decode_box_autoadd_agent_profile(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentProviderUsage sse_decode_box_autoadd_agent_provider_usage(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentServerConfig sse_decode_box_autoadd_agent_server_config(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentToolKey sse_decode_box_autoadd_agent_tool_key(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AppCommand sse_decode_box_autoadd_app_command(SseDeserializer deserializer);
+
+  @protected
+  ContextChoiceReason sse_decode_box_autoadd_context_choice_reason(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
+
+  @protected
+  PdfLimits sse_decode_box_autoadd_pdf_limits(SseDeserializer deserializer);
+
+  @protected
+  PdfWorkerResult sse_decode_box_autoadd_pdf_worker_result(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ToolSupport sse_decode_box_autoadd_tool_support(SseDeserializer deserializer);
+
+  @protected
+  ContextChoiceReason sse_decode_context_choice_reason(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ContextPurpose sse_decode_context_purpose(SseDeserializer deserializer);
+
+  @protected
+  CoreError sse_decode_core_error(SseDeserializer deserializer);
+
+  @protected
+  CredentialReply sse_decode_credential_reply(SseDeserializer deserializer);
+
+  @protected
+  double sse_decode_f_32(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_isize(SseDeserializer deserializer);
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<AgentArtifact> sse_decode_list_agent_artifact(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<AgentAttempt> sse_decode_list_agent_attempt(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<AgentConversation> sse_decode_list_agent_conversation(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<AgentConversationSummary> sse_decode_list_agent_conversation_summary(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<AgentDerivedContext> sse_decode_list_agent_derived_context(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<AgentEndpointConfig> sse_decode_list_agent_endpoint_config(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<AgentMessage> sse_decode_list_agent_message(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<AgentPageReference> sse_decode_list_agent_page_reference(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<AgentProfile> sse_decode_list_agent_profile(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<AgentRun> sse_decode_list_agent_run(SseDeserializer deserializer);
+
+  @protected
+  List<AgentSecretHeader> sse_decode_list_agent_secret_header(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<AgentServerConfig> sse_decode_list_agent_server_config(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<AgentToolCall> sse_decode_list_agent_tool_call(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<AgentToolRule> sse_decode_list_agent_tool_rule(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<PageText> sse_decode_list_page_text(SseDeserializer deserializer);
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  AgentApprovalBinding? sse_decode_opt_box_autoadd_agent_approval_binding(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentArtifactContent? sse_decode_opt_box_autoadd_agent_artifact_content(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentContextSelection? sse_decode_opt_box_autoadd_agent_context_selection(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentContextUsage? sse_decode_opt_box_autoadd_agent_context_usage(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentDerivedContext? sse_decode_opt_box_autoadd_agent_derived_context(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentExportBundle? sse_decode_opt_box_autoadd_agent_export_bundle(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentProviderUsage? sse_decode_opt_box_autoadd_agent_provider_usage(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ContextChoiceReason? sse_decode_opt_box_autoadd_context_choice_reason(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
+
+  @protected
+  ToolSupport? sse_decode_opt_box_autoadd_tool_support(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PageStatus sse_decode_page_status(SseDeserializer deserializer);
+
+  @protected
+  PageText sse_decode_page_text(SseDeserializer deserializer);
+
+  @protected
+  PdfExtraction sse_decode_pdf_extraction(SseDeserializer deserializer);
+
+  @protected
+  PdfFailure sse_decode_pdf_failure(SseDeserializer deserializer);
+
+  @protected
+  PdfLimits sse_decode_pdf_limits(SseDeserializer deserializer);
+
+  @protected
+  PdfWorkerReply sse_decode_pdf_worker_reply(SseDeserializer deserializer);
+
+  @protected
+  PdfWorkerResult sse_decode_pdf_worker_result(SseDeserializer deserializer);
+
+  @protected
+  PermissionRule sse_decode_permission_rule(SseDeserializer deserializer);
+
+  @protected
+  PlatformReply sse_decode_platform_reply(SseDeserializer deserializer);
+
+  @protected
+  ProfileMode sse_decode_profile_mode(SseDeserializer deserializer);
+
+  @protected
+  RunHostRequest sse_decode_run_host_request(SseDeserializer deserializer);
+
+  @protected
+  RunState sse_decode_run_state(SseDeserializer deserializer);
+
+  @protected
+  TokenEstimation sse_decode_token_estimation(SseDeserializer deserializer);
+
+  @protected
+  ToolSupport sse_decode_tool_support(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_u_32(SseDeserializer deserializer);
+
+  @protected
+  BigInt sse_decode_u_64(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_8(SseDeserializer deserializer);
@@ -45,13 +849,428 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
-  int sse_decode_i_32(SseDeserializer deserializer);
+  BigInt sse_decode_usize(SseDeserializer deserializer);
 
   @protected
-  bool sse_decode_bool(SseDeserializer deserializer);
+  void sse_encode_AnyhowException(
+    AnyhowException self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    AgentHandle self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    AgentHandle self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_DartFn_Inputs_String_Output_credential_reply_AnyhowException(
+    FutureOr<CredentialReply> Function(String) self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_DartFn_Inputs_run_host_request_Output_platform_reply_AnyhowException(
+    FutureOr<PlatformReply> Function(RunHostRequest) self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_DartOpaque(Object self, SseSerializer serializer);
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    AgentHandle self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_StreamSink_agent_app_event_Sse(
+    RustStreamSink<AgentAppEvent> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_agent_app_event(AgentAppEvent self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_agent_app_snapshot(
+    AgentAppSnapshot self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_approval_binding(
+    AgentApprovalBinding self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_artifact(AgentArtifact self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_agent_artifact_content(
+    AgentArtifactContent self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_attempt(AgentAttempt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_agent_command_reply(
+    AgentCommandReply self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_context_selection(
+    AgentContextSelection self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_context_usage(
+    AgentContextUsage self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_conversation(
+    AgentConversation self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_conversation_summary(
+    AgentConversationSummary self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_derived_context(
+    AgentDerivedContext self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_endpoint_config(
+    AgentEndpointConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_export_bundle(
+    AgentExportBundle self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_message(AgentMessage self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_agent_page_reference(
+    AgentPageReference self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_profile(AgentProfile self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_agent_profile_snapshot(
+    AgentProfileSnapshot self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_provider_usage(
+    AgentProviderUsage self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_run(AgentRun self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_agent_run_context(
+    AgentRunContext self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_run_limits(
+    AgentRunLimits self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_secret_header(
+    AgentSecretHeader self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_server_config(
+    AgentServerConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_tool_call(AgentToolCall self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_agent_tool_key(AgentToolKey self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_agent_tool_rule(AgentToolRule self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_command(AppCommand self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_app_error(AppError self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_attempt_state(AttemptState self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_agent_approval_binding(
+    AgentApprovalBinding self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_agent_artifact_content(
+    AgentArtifactContent self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_agent_context_selection(
+    AgentContextSelection self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_agent_context_usage(
+    AgentContextUsage self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_agent_derived_context(
+    AgentDerivedContext self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_agent_endpoint_config(
+    AgentEndpointConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_agent_export_bundle(
+    AgentExportBundle self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_agent_profile(
+    AgentProfile self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_agent_provider_usage(
+    AgentProviderUsage self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_agent_server_config(
+    AgentServerConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_agent_tool_key(
+    AgentToolKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_app_command(
+    AppCommand self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_context_choice_reason(
+    ContextChoiceReason self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_i_64(
+    PlatformInt64 self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_pdf_limits(
+    PdfLimits self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_pdf_worker_result(
+    PdfWorkerResult self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_tool_support(
+    ToolSupport self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_context_choice_reason(
+    ContextChoiceReason self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_context_purpose(
+    ContextPurpose self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_core_error(CoreError self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_credential_reply(
+    CredentialReply self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_f_32(double self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_isize(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_agent_artifact(
+    List<AgentArtifact> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_agent_attempt(
+    List<AgentAttempt> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_agent_conversation(
+    List<AgentConversation> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_agent_conversation_summary(
+    List<AgentConversationSummary> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_agent_derived_context(
+    List<AgentDerivedContext> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_agent_endpoint_config(
+    List<AgentEndpointConfig> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_agent_message(
+    List<AgentMessage> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_agent_page_reference(
+    List<AgentPageReference> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_agent_profile(
+    List<AgentProfile> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_agent_run(List<AgentRun> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_agent_secret_header(
+    List<AgentSecretHeader> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_agent_server_config(
+    List<AgentServerConfig> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_agent_tool_call(
+    List<AgentToolCall> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_agent_tool_rule(
+    List<AgentToolRule> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_page_text(List<PageText> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_prim_u_8_strict(
@@ -60,22 +1279,161 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_agent_approval_binding(
+    AgentApprovalBinding? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_agent_artifact_content(
+    AgentArtifactContent? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_agent_context_selection(
+    AgentContextSelection? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_agent_context_usage(
+    AgentContextUsage? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_agent_derived_context(
+    AgentDerivedContext? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_agent_export_bundle(
+    AgentExportBundle? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_agent_provider_usage(
+    AgentProviderUsage? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_context_choice_reason(
+    ContextChoiceReason? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_64(
+    PlatformInt64? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_tool_support(
+    ToolSupport? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_page_status(PageStatus self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_page_text(PageText self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pdf_extraction(PdfExtraction self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pdf_failure(PdfFailure self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pdf_limits(PdfLimits self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pdf_worker_reply(
+    PdfWorkerReply self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_pdf_worker_result(
+    PdfWorkerResult self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_permission_rule(
+    PermissionRule self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_platform_reply(PlatformReply self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_profile_mode(ProfileMode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_run_host_request(
+    RunHostRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_run_state(RunState self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_token_estimation(
+    TokenEstimation self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_tool_support(ToolSupport self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_u_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_u_64(BigInt self, SseSerializer serializer);
+
+  @protected
   void sse_encode_u_8(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_unit(void self, SseSerializer serializer);
 
   @protected
-  void sse_encode_i_32(int self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer);
+  void sse_encode_usize(BigInt self, SseSerializer serializer);
 }
 
 // Section: wire_class
 
 class RustLibWire implements BaseWire {
   RustLibWire.fromExternalLibrary(ExternalLibrary lib);
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+        ptr,
+      );
 }
 
 @JS('wasm_bindgen')
@@ -83,4 +1441,14 @@ external RustLibWasmModule get wasmModule;
 
 @JS()
 @anonymous
-extension type RustLibWasmModule._(JSObject _) implements JSObject {}
+extension type RustLibWasmModule._(JSObject _) implements JSObject {
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    int ptr,
+  );
+}

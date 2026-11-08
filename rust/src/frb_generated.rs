@@ -27,6 +27,7 @@
 
 // Section: imports
 
+use crate::api::agent::*;
 use flutter_rust_bridge::for_generated::byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
 use flutter_rust_bridge::for_generated::{transform_result_dco, Lifetimeable, Lockable};
 use flutter_rust_bridge::{Handler, IntoIntoDart};
@@ -39,7 +40,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1918914929;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 693943912;
 
 // Section: executor
 
@@ -47,6 +48,289 @@ flutter_rust_bridge::frb_generated_default_handler!();
 
 // Section: wire_funcs
 
+fn wire__crate__api__agent__agent_command_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "agent_command",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_handle = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<AgentHandle>,
+            >>::sse_decode(&mut deserializer);
+            let api_command = <crate::application::dto::AppCommand>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::error::CoreError>(
+                    (move || async move {
+                        let mut api_handle_guard = None;
+                        let decode_indices_ =
+                            flutter_rust_bridge::for_generated::lockable_compute_decode_order(
+                                vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                    &api_handle,
+                                    0,
+                                    false,
+                                )],
+                            );
+                        for i in decode_indices_ {
+                            match i {
+                                0 => {
+                                    api_handle_guard =
+                                        Some(api_handle.lockable_decode_async_ref().await)
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        let api_handle_guard = api_handle_guard.unwrap();
+                        let output_ok =
+                            crate::api::agent::agent_command(&*api_handle_guard, api_command)
+                                .await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__agent__agent_events_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "agent_events",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_handle = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<AgentHandle>,
+            >>::sse_decode(&mut deserializer);
+            let api_after_sequence = <u64>::sse_decode(&mut deserializer);
+            let api_sink = <StreamSink<
+                crate::application::dto::AgentAppEvent,
+                flutter_rust_bridge::for_generated::SseCodec,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::error::CoreError>(
+                    (move || async move {
+                        let mut api_handle_guard = None;
+                        let decode_indices_ =
+                            flutter_rust_bridge::for_generated::lockable_compute_decode_order(
+                                vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                    &api_handle,
+                                    0,
+                                    false,
+                                )],
+                            );
+                        for i in decode_indices_ {
+                            match i {
+                                0 => {
+                                    api_handle_guard =
+                                        Some(api_handle.lockable_decode_async_ref().await)
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        let api_handle_guard = api_handle_guard.unwrap();
+                        let output_ok = crate::api::agent::agent_events(
+                            &*api_handle_guard,
+                            api_after_sequence,
+                            api_sink,
+                        )
+                        .await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__agent__agent_snapshot_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "agent_snapshot",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_handle = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<AgentHandle>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::error::CoreError>(
+                    (move || async move {
+                        let mut api_handle_guard = None;
+                        let decode_indices_ =
+                            flutter_rust_bridge::for_generated::lockable_compute_decode_order(
+                                vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                    &api_handle,
+                                    0,
+                                    false,
+                                )],
+                            );
+                        for i in decode_indices_ {
+                            match i {
+                                0 => {
+                                    api_handle_guard =
+                                        Some(api_handle.lockable_decode_async_ref().await)
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        let api_handle_guard = api_handle_guard.unwrap();
+                        let output_ok =
+                            crate::api::agent::agent_snapshot(&*api_handle_guard).await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__agent__close_agent_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "close_agent",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_handle = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<AgentHandle>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::error::CoreError>(
+                    (move || async move {
+                        let mut api_handle_guard = None;
+                        let decode_indices_ =
+                            flutter_rust_bridge::for_generated::lockable_compute_decode_order(
+                                vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                    &api_handle,
+                                    0,
+                                    false,
+                                )],
+                            );
+                        for i in decode_indices_ {
+                            match i {
+                                0 => {
+                                    api_handle_guard =
+                                        Some(api_handle.lockable_decode_async_ref().await)
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        let api_handle_guard = api_handle_guard.unwrap();
+                        let output_ok = crate::api::agent::close_agent(&*api_handle_guard).await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__pdf__extract_pdf_worker_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "extract_pdf_worker",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_input_fd_path = <String>::sse_decode(&mut deserializer);
+            let api_output_fd_path = <String>::sse_decode(&mut deserializer);
+            let api_limits = <crate::model::PdfLimits>::sse_decode(&mut deserializer);
+            let api_request_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::error::AppError>((move || {
+                    let output_ok = crate::api::pdf::extract_pdf_worker(
+                        api_input_fd_path,
+                        api_output_fd_path,
+                        api_limits,
+                        api_request_id,
+                    )?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__simple__greet_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -111,14 +395,1314 @@ fn wire__crate__api__simple__init_app_impl(
         },
     )
 }
+fn wire__crate__api__agent__open_agent_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "open_agent",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_data_dir = <String>::sse_decode(&mut deserializer);
+            let api_resolve_credential =
+                decode_DartFn_Inputs_String_Output_credential_reply_AnyhowException(
+                    <flutter_rust_bridge::DartOpaque>::sse_decode(&mut deserializer),
+                );
+            let api_set_service_active =
+                decode_DartFn_Inputs_run_host_request_Output_platform_reply_AnyhowException(
+                    <flutter_rust_bridge::DartOpaque>::sse_decode(&mut deserializer),
+                );
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::error::CoreError>(
+                    (move || async move {
+                        let output_ok = crate::api::agent::open_agent(
+                            api_data_dir,
+                            api_resolve_credential,
+                            api_set_service_active,
+                        )
+                        .await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__pdf__validate_pdf_worker_result_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "validate_pdf_worker_result",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_result = <crate::model::PdfWorkerResult>::sse_decode(&mut deserializer);
+            let api_request_id = <String>::sse_decode(&mut deserializer);
+            let api_limits = <crate::model::PdfLimits>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Ok::<_, ()>(crate::api::pdf::validate_pdf_worker_result(
+                        api_result,
+                        api_request_id,
+                        api_limits,
+                    ))?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+
+// Section: related_funcs
+
+fn decode_DartFn_Inputs_String_Output_credential_reply_AnyhowException(
+    dart_opaque: flutter_rust_bridge::DartOpaque,
+) -> impl Fn(String) -> flutter_rust_bridge::DartFnFuture<crate::application::CredentialReply> {
+    use flutter_rust_bridge::IntoDart;
+
+    async fn body(
+        dart_opaque: flutter_rust_bridge::DartOpaque,
+        arg0: String,
+    ) -> crate::application::CredentialReply {
+        let args = vec![arg0.into_into_dart().into_dart()];
+        let message = FLUTTER_RUST_BRIDGE_HANDLER
+            .dart_fn_invoke(dart_opaque, args)
+            .await;
+
+        let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+        let action = deserializer.cursor.read_u8().unwrap();
+        let ans = match action {
+            0 => std::result::Result::Ok(<crate::application::CredentialReply>::sse_decode(
+                &mut deserializer,
+            )),
+            1 => std::result::Result::Err(
+                <flutter_rust_bridge::for_generated::anyhow::Error>::sse_decode(&mut deserializer),
+            ),
+            _ => unreachable!(),
+        };
+        deserializer.end();
+        let ans = ans.expect("Dart throws exception but Rust side assume it is not failable");
+        ans
+    }
+
+    move |arg0: String| {
+        flutter_rust_bridge::for_generated::convert_into_dart_fn_future(body(
+            dart_opaque.clone(),
+            arg0,
+        ))
+    }
+}
+fn decode_DartFn_Inputs_run_host_request_Output_platform_reply_AnyhowException(
+    dart_opaque: flutter_rust_bridge::DartOpaque,
+) -> impl Fn(
+    crate::model::RunHostRequest,
+) -> flutter_rust_bridge::DartFnFuture<crate::model::PlatformReply> {
+    use flutter_rust_bridge::IntoDart;
+
+    async fn body(
+        dart_opaque: flutter_rust_bridge::DartOpaque,
+        arg0: crate::model::RunHostRequest,
+    ) -> crate::model::PlatformReply {
+        let args = vec![arg0.into_into_dart().into_dart()];
+        let message = FLUTTER_RUST_BRIDGE_HANDLER
+            .dart_fn_invoke(dart_opaque, args)
+            .await;
+
+        let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+        let action = deserializer.cursor.read_u8().unwrap();
+        let ans = match action {
+            0 => std::result::Result::Ok(<crate::model::PlatformReply>::sse_decode(
+                &mut deserializer,
+            )),
+            1 => std::result::Result::Err(
+                <flutter_rust_bridge::for_generated::anyhow::Error>::sse_decode(&mut deserializer),
+            ),
+            _ => unreachable!(),
+        };
+        deserializer.end();
+        let ans = ans.expect("Dart throws exception but Rust side assume it is not failable");
+        ans
+    }
+
+    move |arg0: crate::model::RunHostRequest| {
+        flutter_rust_bridge::for_generated::convert_into_dart_fn_future(body(
+            dart_opaque.clone(),
+            arg0,
+        ))
+    }
+}
+flutter_rust_bridge::frb_generated_moi_arc_impl_value!(
+    flutter_rust_bridge::for_generated::RustAutoOpaqueInner<AgentHandle>
+);
 
 // Section: dart2rust
+
+impl SseDecode for flutter_rust_bridge::for_generated::anyhow::Error {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <String>::sse_decode(deserializer);
+        return flutter_rust_bridge::for_generated::anyhow::anyhow!("{}", inner);
+    }
+}
+
+impl SseDecode for AgentHandle {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <RustOpaqueMoi<
+            flutter_rust_bridge::for_generated::RustAutoOpaqueInner<AgentHandle>,
+        >>::sse_decode(deserializer);
+        return flutter_rust_bridge::for_generated::rust_auto_opaque_decode_owned(inner);
+    }
+}
+
+impl SseDecode for flutter_rust_bridge::DartOpaque {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <usize>::sse_decode(deserializer);
+        return unsafe { flutter_rust_bridge::for_generated::sse_decode_dart_opaque(inner) };
+    }
+}
+
+impl SseDecode
+    for RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<AgentHandle>>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <usize>::sse_decode(deserializer);
+        return decode_rust_opaque_moi(inner);
+    }
+}
+
+impl SseDecode
+    for StreamSink<
+        crate::application::dto::AgentAppEvent,
+        flutter_rust_bridge::for_generated::SseCodec,
+    >
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <String>::sse_decode(deserializer);
+        return StreamSink::deserialize(inner);
+    }
+}
 
 impl SseDecode for String {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut inner = <Vec<u8>>::sse_decode(deserializer);
         return String::from_utf8(inner).unwrap();
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentAppEvent {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_sequence = <u64>::sse_decode(deserializer);
+        let mut var_conversationId = <String>::sse_decode(deserializer);
+        return crate::application::dto::AgentAppEvent {
+            sequence: var_sequence,
+            conversation_id: var_conversationId,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentAppSnapshot {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_artifacts =
+            <Vec<crate::application::dto::AgentArtifact>>::sse_decode(deserializer);
+        let mut var_retentionLimitBytes = <u64>::sse_decode(deserializer);
+        let mut var_sequence = <u64>::sse_decode(deserializer);
+        let mut var_endpoints =
+            <Vec<crate::application::dto::AgentEndpointConfig>>::sse_decode(deserializer);
+        let mut var_servers =
+            <Vec<crate::application::dto::AgentServerConfig>>::sse_decode(deserializer);
+        let mut var_profiles =
+            <Vec<crate::application::dto::AgentProfile>>::sse_decode(deserializer);
+        let mut var_conversations =
+            <Vec<crate::application::dto::AgentConversation>>::sse_decode(deserializer);
+        let mut var_runs = <Vec<crate::application::dto::AgentRun>>::sse_decode(deserializer);
+        let mut var_rules = <Vec<crate::application::dto::AgentToolRule>>::sse_decode(deserializer);
+        return crate::application::dto::AgentAppSnapshot {
+            artifacts: var_artifacts,
+            retention_limit_bytes: var_retentionLimitBytes,
+            sequence: var_sequence,
+            endpoints: var_endpoints,
+            servers: var_servers,
+            profiles: var_profiles,
+            conversations: var_conversations,
+            runs: var_runs,
+            rules: var_rules,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentApprovalBinding {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_attemptId = <String>::sse_decode(deserializer);
+        let mut var_key = <crate::application::dto::AgentToolKey>::sse_decode(deserializer);
+        let mut var_providerCallId = <String>::sse_decode(deserializer);
+        let mut var_definitionDigest = <String>::sse_decode(deserializer);
+        let mut var_argumentsDigest = <String>::sse_decode(deserializer);
+        let mut var_argumentsJson = <String>::sse_decode(deserializer);
+        let mut var_schemaJson = <String>::sse_decode(deserializer);
+        let mut var_destinationDigest = <String>::sse_decode(deserializer);
+        return crate::application::dto::AgentApprovalBinding {
+            attempt_id: var_attemptId,
+            key: var_key,
+            provider_call_id: var_providerCallId,
+            definition_digest: var_definitionDigest,
+            arguments_digest: var_argumentsDigest,
+            arguments_json: var_argumentsJson,
+            schema_json: var_schemaJson,
+            destination_digest: var_destinationDigest,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentArtifact {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_conversationId = <String>::sse_decode(deserializer);
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_bytes = <u64>::sse_decode(deserializer);
+        return crate::application::dto::AgentArtifact {
+            id: var_id,
+            conversation_id: var_conversationId,
+            name: var_name,
+            bytes: var_bytes,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentArtifactContent {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_summary = <crate::application::dto::AgentArtifact>::sse_decode(deserializer);
+        let mut var_text = <String>::sse_decode(deserializer);
+        let mut var_privatePath = <String>::sse_decode(deserializer);
+        return crate::application::dto::AgentArtifactContent {
+            summary: var_summary,
+            text: var_text,
+            private_path: var_privatePath,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentAttempt {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_state = <crate::model::core::AttemptState>::sse_decode(deserializer);
+        let mut var_call = <crate::application::dto::AgentToolCall>::sse_decode(deserializer);
+        let mut var_binding =
+            <Option<crate::application::dto::AgentApprovalBinding>>::sse_decode(deserializer);
+        return crate::application::dto::AgentAttempt {
+            id: var_id,
+            state: var_state,
+            call: var_call,
+            binding: var_binding,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentCommandReply {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_history =
+            <Vec<crate::application::dto::AgentConversationSummary>>::sse_decode(deserializer);
+        let mut var_exportBundle =
+            <Option<crate::application::dto::AgentExportBundle>>::sse_decode(deserializer);
+        let mut var_models = <Vec<String>>::sse_decode(deserializer);
+        let mut var_toolSupport = <Option<crate::inference::ToolSupport>>::sse_decode(deserializer);
+        let mut var_discoveredTools = <Vec<String>>::sse_decode(deserializer);
+        let mut var_discoveredRules =
+            <Vec<crate::application::dto::AgentToolRule>>::sse_decode(deserializer);
+        let mut var_id = <Option<String>>::sse_decode(deserializer);
+        let mut var_artifact =
+            <Option<crate::application::dto::AgentArtifactContent>>::sse_decode(deserializer);
+        return crate::application::dto::AgentCommandReply {
+            history: var_history,
+            export_bundle: var_exportBundle,
+            models: var_models,
+            tool_support: var_toolSupport,
+            discovered_tools: var_discoveredTools,
+            discovered_rules: var_discoveredRules,
+            id: var_id,
+            artifact: var_artifact,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentContextSelection {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_messageIds = <Vec<String>>::sse_decode(deserializer);
+        let mut var_summaryIds = <Vec<String>>::sse_decode(deserializer);
+        return crate::application::dto::AgentContextSelection {
+            message_ids: var_messageIds,
+            summary_ids: var_summaryIds,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentContextUsage {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_estimation = <crate::agent::context::TokenEstimation>::sse_decode(deserializer);
+        let mut var_estimatedInputTokens = <u64>::sse_decode(deserializer);
+        let mut var_outputReserve = <u32>::sse_decode(deserializer);
+        let mut var_window = <u32>::sse_decode(deserializer);
+        let mut var_rawBytes = <u64>::sse_decode(deserializer);
+        let mut var_rawBytesIsLowerBound = <bool>::sse_decode(deserializer);
+        let mut var_provider =
+            <Option<crate::application::dto::AgentProviderUsage>>::sse_decode(deserializer);
+        let mut var_reason =
+            <Option<crate::agent::context::ContextChoiceReason>>::sse_decode(deserializer);
+        return crate::application::dto::AgentContextUsage {
+            estimation: var_estimation,
+            estimated_input_tokens: var_estimatedInputTokens,
+            output_reserve: var_outputReserve,
+            window: var_window,
+            raw_bytes: var_rawBytes,
+            raw_bytes_is_lower_bound: var_rawBytesIsLowerBound,
+            provider: var_provider,
+            reason: var_reason,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentConversation {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_profile =
+            <crate::application::dto::AgentProfileSnapshot>::sse_decode(deserializer);
+        let mut var_messages =
+            <Vec<crate::application::dto::AgentMessage>>::sse_decode(deserializer);
+        let mut var_summaries =
+            <Vec<crate::application::dto::AgentDerivedContext>>::sse_decode(deserializer);
+        return crate::application::dto::AgentConversation {
+            id: var_id,
+            profile: var_profile,
+            messages: var_messages,
+            summaries: var_summaries,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentConversationSummary {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_title = <String>::sse_decode(deserializer);
+        let mut var_hasUnknownOutcomes = <bool>::sse_decode(deserializer);
+        return crate::application::dto::AgentConversationSummary {
+            id: var_id,
+            title: var_title,
+            has_unknown_outcomes: var_hasUnknownOutcomes,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentDerivedContext {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_runId = <String>::sse_decode(deserializer);
+        let mut var_text = <String>::sse_decode(deserializer);
+        let mut var_selection =
+            <crate::application::dto::AgentContextSelection>::sse_decode(deserializer);
+        let mut var_pageReferences =
+            <Vec<crate::application::dto::AgentPageReference>>::sse_decode(deserializer);
+        let mut var_partialCoverage = <bool>::sse_decode(deserializer);
+        let mut var_unresolvedAttempts = <Vec<String>>::sse_decode(deserializer);
+        return crate::application::dto::AgentDerivedContext {
+            id: var_id,
+            run_id: var_runId,
+            text: var_text,
+            selection: var_selection,
+            page_references: var_pageReferences,
+            partial_coverage: var_partialCoverage,
+            unresolved_attempts: var_unresolvedAttempts,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentEndpointConfig {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_baseUrl = <String>::sse_decode(deserializer);
+        let mut var_model = <String>::sse_decode(deserializer);
+        let mut var_contextTokens = <u32>::sse_decode(deserializer);
+        let mut var_maxOutputTokens = <u32>::sse_decode(deserializer);
+        let mut var_temperature = <f32>::sse_decode(deserializer);
+        let mut var_allowHttp = <bool>::sse_decode(deserializer);
+        let mut var_credential = <Option<String>>::sse_decode(deserializer);
+        return crate::application::dto::AgentEndpointConfig {
+            id: var_id,
+            name: var_name,
+            base_url: var_baseUrl,
+            model: var_model,
+            context_tokens: var_contextTokens,
+            max_output_tokens: var_maxOutputTokens,
+            temperature: var_temperature,
+            allow_http: var_allowHttp,
+            credential: var_credential,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentExportBundle {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_transcript = <crate::application::dto::AgentArtifact>::sse_decode(deserializer);
+        return crate::application::dto::AgentExportBundle {
+            transcript: var_transcript,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentMessage {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_role = <String>::sse_decode(deserializer);
+        let mut var_content = <String>::sse_decode(deserializer);
+        let mut var_calls = <Vec<crate::application::dto::AgentToolCall>>::sse_decode(deserializer);
+        let mut var_callId = <Option<String>>::sse_decode(deserializer);
+        let mut var_sourceEnvelope = <Option<String>>::sse_decode(deserializer);
+        return crate::application::dto::AgentMessage {
+            id: var_id,
+            role: var_role,
+            content: var_content,
+            calls: var_calls,
+            call_id: var_callId,
+            source_envelope: var_sourceEnvelope,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentPageReference {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_attachmentId = <String>::sse_decode(deserializer);
+        let mut var_physicalPage = <u32>::sse_decode(deserializer);
+        return crate::application::dto::AgentPageReference {
+            attachment_id: var_attachmentId,
+            physical_page: var_physicalPage,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentProfile {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_mode = <crate::model::core::ProfileMode>::sse_decode(deserializer);
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_endpointId = <String>::sse_decode(deserializer);
+        let mut var_serverIds = <Vec<String>>::sse_decode(deserializer);
+        let mut var_instructions = <String>::sse_decode(deserializer);
+        let mut var_limits = <crate::application::dto::AgentRunLimits>::sse_decode(deserializer);
+        return crate::application::dto::AgentProfile {
+            mode: var_mode,
+            id: var_id,
+            name: var_name,
+            endpoint_id: var_endpointId,
+            server_ids: var_serverIds,
+            instructions: var_instructions,
+            limits: var_limits,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentProfileSnapshot {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_inferenceDestination = <Option<String>>::sse_decode(deserializer);
+        let mut var_mode = <crate::model::core::ProfileMode>::sse_decode(deserializer);
+        let mut var_profileId = <String>::sse_decode(deserializer);
+        let mut var_revision = <i64>::sse_decode(deserializer);
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_endpoint =
+            <crate::application::dto::AgentEndpointConfig>::sse_decode(deserializer);
+        let mut var_servers =
+            <Vec<crate::application::dto::AgentServerConfig>>::sse_decode(deserializer);
+        let mut var_instructions = <String>::sse_decode(deserializer);
+        let mut var_limits = <crate::application::dto::AgentRunLimits>::sse_decode(deserializer);
+        return crate::application::dto::AgentProfileSnapshot {
+            inference_destination: var_inferenceDestination,
+            mode: var_mode,
+            profile_id: var_profileId,
+            revision: var_revision,
+            name: var_name,
+            endpoint: var_endpoint,
+            servers: var_servers,
+            instructions: var_instructions,
+            limits: var_limits,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentProviderUsage {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_promptTokens = <u64>::sse_decode(deserializer);
+        let mut var_completionTokens = <u64>::sse_decode(deserializer);
+        return crate::application::dto::AgentProviderUsage {
+            prompt_tokens: var_promptTokens,
+            completion_tokens: var_completionTokens,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentRun {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_conversationId = <String>::sse_decode(deserializer);
+        let mut var_profile =
+            <crate::application::dto::AgentProfileSnapshot>::sse_decode(deserializer);
+        let mut var_state = <crate::model::core::RunState>::sse_decode(deserializer);
+        let mut var_inferenceCount = <u32>::sse_decode(deserializer);
+        let mut var_attemptCount = <u32>::sse_decode(deserializer);
+        let mut var_activeMs = <u64>::sse_decode(deserializer);
+        let mut var_partialText = <String>::sse_decode(deserializer);
+        let mut var_failure = <Option<String>>::sse_decode(deserializer);
+        let mut var_attempts =
+            <Vec<crate::application::dto::AgentAttempt>>::sse_decode(deserializer);
+        let mut var_context = <crate::application::dto::AgentRunContext>::sse_decode(deserializer);
+        return crate::application::dto::AgentRun {
+            id: var_id,
+            conversation_id: var_conversationId,
+            profile: var_profile,
+            state: var_state,
+            inference_count: var_inferenceCount,
+            attempt_count: var_attemptCount,
+            active_ms: var_activeMs,
+            partial_text: var_partialText,
+            failure: var_failure,
+            attempts: var_attempts,
+            context: var_context,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentRunContext {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_purpose = <crate::agent::context::ContextPurpose>::sse_decode(deserializer);
+        let mut var_selection =
+            <Option<crate::application::dto::AgentContextSelection>>::sse_decode(deserializer);
+        let mut var_selectionThroughOrdinal = <Option<i64>>::sse_decode(deserializer);
+        let mut var_usage =
+            <Option<crate::application::dto::AgentContextUsage>>::sse_decode(deserializer);
+        let mut var_derivedEntry = <Option<String>>::sse_decode(deserializer);
+        let mut var_summary =
+            <Option<crate::application::dto::AgentDerivedContext>>::sse_decode(deserializer);
+        return crate::application::dto::AgentRunContext {
+            purpose: var_purpose,
+            selection: var_selection,
+            selection_through_ordinal: var_selectionThroughOrdinal,
+            usage: var_usage,
+            derived_entry: var_derivedEntry,
+            summary: var_summary,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentRunLimits {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_maxInferenceRequests = <u32>::sse_decode(deserializer);
+        let mut var_maxToolAttempts = <u32>::sse_decode(deserializer);
+        let mut var_activeTimeoutMs = <u64>::sse_decode(deserializer);
+        return crate::application::dto::AgentRunLimits {
+            max_inference_requests: var_maxInferenceRequests,
+            max_tool_attempts: var_maxToolAttempts,
+            active_timeout_ms: var_activeTimeoutMs,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentSecretHeader {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_credential = <String>::sse_decode(deserializer);
+        return crate::application::dto::AgentSecretHeader {
+            name: var_name,
+            credential: var_credential,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentServerConfig {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_url = <String>::sse_decode(deserializer);
+        let mut var_allowHttp = <bool>::sse_decode(deserializer);
+        let mut var_secretHeaders =
+            <Vec<crate::application::dto::AgentSecretHeader>>::sse_decode(deserializer);
+        return crate::application::dto::AgentServerConfig {
+            id: var_id,
+            name: var_name,
+            url: var_url,
+            allow_http: var_allowHttp,
+            secret_headers: var_secretHeaders,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentToolCall {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_key = <crate::application::dto::AgentToolKey>::sse_decode(deserializer);
+        let mut var_providerCallId = <String>::sse_decode(deserializer);
+        let mut var_argumentsJson = <String>::sse_decode(deserializer);
+        let mut var_sourceEnvelope = <Option<String>>::sse_decode(deserializer);
+        return crate::application::dto::AgentToolCall {
+            key: var_key,
+            provider_call_id: var_providerCallId,
+            arguments_json: var_argumentsJson,
+            source_envelope: var_sourceEnvelope,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentToolKey {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_profileId = <String>::sse_decode(deserializer);
+        let mut var_serverId = <Option<String>>::sse_decode(deserializer);
+        let mut var_name = <String>::sse_decode(deserializer);
+        return crate::application::dto::AgentToolKey {
+            profile_id: var_profileId,
+            server_id: var_serverId,
+            name: var_name,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentToolRule {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_key = <crate::application::dto::AgentToolKey>::sse_decode(deserializer);
+        let mut var_schemaJson = <String>::sse_decode(deserializer);
+        let mut var_schemaDigest = <String>::sse_decode(deserializer);
+        let mut var_destinationDigest = <String>::sse_decode(deserializer);
+        let mut var_rule = <crate::model::core::PermissionRule>::sse_decode(deserializer);
+        return crate::application::dto::AgentToolRule {
+            key: var_key,
+            schema_json: var_schemaJson,
+            schema_digest: var_schemaDigest,
+            destination_digest: var_destinationDigest,
+            rule: var_rule,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AppCommand {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_query = <String>::sse_decode(deserializer);
+                let mut var_offset = <u32>::sse_decode(deserializer);
+                let mut var_limit = <u32>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::SearchConversations {
+                    query: var_query,
+                    offset: var_offset,
+                    limit: var_limit,
+                };
+            }
+            1 => {
+                let mut var_conversationId = <String>::sse_decode(deserializer);
+                let mut var_title = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::RenameConversation {
+                    conversation_id: var_conversationId,
+                    title: var_title,
+                };
+            }
+            2 => {
+                let mut var_conversationId = <String>::sse_decode(deserializer);
+                let mut var_confirmedUnknown = <bool>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::DeleteConversation {
+                    conversation_id: var_conversationId,
+                    confirmed_unknown: var_confirmedUnknown,
+                };
+            }
+            3 => {
+                let mut var_conversationId = <String>::sse_decode(deserializer);
+                let mut var_includeToolPayloads = <bool>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::ExportTranscript {
+                    conversation_id: var_conversationId,
+                    include_tool_payloads: var_includeToolPayloads,
+                };
+            }
+            4 => {
+                let mut var_endpointId = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::DiscoverModels {
+                    endpoint_id: var_endpointId,
+                };
+            }
+            5 => {
+                let mut var_endpointId = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::ProbeEndpoint {
+                    endpoint_id: var_endpointId,
+                };
+            }
+            6 => {
+                let mut var_profileId = <String>::sse_decode(deserializer);
+                let mut var_serverId = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::DiscoverServer {
+                    profile_id: var_profileId,
+                    server_id: var_serverId,
+                };
+            }
+            7 => {
+                let mut var_conversationId = <String>::sse_decode(deserializer);
+                let mut var_name = <String>::sse_decode(deserializer);
+                let mut var_content = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::CreateArtifact {
+                    conversation_id: var_conversationId,
+                    name: var_name,
+                    content: var_content,
+                };
+            }
+            8 => {
+                let mut var_conversationId = <String>::sse_decode(deserializer);
+                let mut var_artifactId = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::ReadArtifact {
+                    conversation_id: var_conversationId,
+                    artifact_id: var_artifactId,
+                };
+            }
+            9 => {
+                let mut var_conversationId = <String>::sse_decode(deserializer);
+                let mut var_artifactId = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::DeleteArtifact {
+                    conversation_id: var_conversationId,
+                    artifact_id: var_artifactId,
+                };
+            }
+            10 => {
+                return crate::application::dto::AppCommand::NewId;
+            }
+            11 => {
+                let mut var_endpoint =
+                    <crate::application::dto::AgentEndpointConfig>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::SaveEndpoint {
+                    endpoint: var_endpoint,
+                };
+            }
+            12 => {
+                let mut var_server =
+                    <crate::application::dto::AgentServerConfig>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::SaveServer { server: var_server };
+            }
+            13 => {
+                let mut var_profile =
+                    <crate::application::dto::AgentProfile>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::SaveProfile {
+                    profile: var_profile,
+                };
+            }
+            14 => {
+                let mut var_profileId = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::CreateConversation {
+                    profile_id: var_profileId,
+                };
+            }
+            15 => {
+                let mut var_conversationId = <String>::sse_decode(deserializer);
+                let mut var_profileId = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::ApplyProfile {
+                    conversation_id: var_conversationId,
+                    profile_id: var_profileId,
+                };
+            }
+            16 => {
+                let mut var_key = <crate::application::dto::AgentToolKey>::sse_decode(deserializer);
+                let mut var_schemaDigest = <String>::sse_decode(deserializer);
+                let mut var_destinationDigest = <String>::sse_decode(deserializer);
+                let mut var_rule = <crate::model::core::PermissionRule>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::SetRule {
+                    key: var_key,
+                    schema_digest: var_schemaDigest,
+                    destination_digest: var_destinationDigest,
+                    rule: var_rule,
+                };
+            }
+            17 => {
+                let mut var_conversationId = <String>::sse_decode(deserializer);
+                let mut var_text = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::StartTurn {
+                    conversation_id: var_conversationId,
+                    text: var_text,
+                };
+            }
+            18 => {
+                let mut var_runId = <String>::sse_decode(deserializer);
+                let mut var_generation = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::PlatformPause {
+                    run_id: var_runId,
+                    generation: var_generation,
+                };
+            }
+            19 => {
+                let mut var_runId = <String>::sse_decode(deserializer);
+                let mut var_generation = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::PlatformStop {
+                    run_id: var_runId,
+                    generation: var_generation,
+                };
+            }
+            20 => {
+                let mut var_runId = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::CancelRun { run_id: var_runId };
+            }
+            21 => {
+                let mut var_runId = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::ResumeRun { run_id: var_runId };
+            }
+            22 => {
+                let mut var_binding =
+                    <crate::application::dto::AgentApprovalBinding>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::Approve {
+                    binding: var_binding,
+                };
+            }
+            23 => {
+                let mut var_attemptId = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::Deny {
+                    attempt_id: var_attemptId,
+                };
+            }
+            24 => {
+                let mut var_conversationId = <String>::sse_decode(deserializer);
+                let mut var_selection =
+                    <crate::application::dto::AgentContextSelection>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::SummarizeContext {
+                    conversation_id: var_conversationId,
+                    selection: var_selection,
+                };
+            }
+            25 => {
+                let mut var_runId = <String>::sse_decode(deserializer);
+                let mut var_selection =
+                    <crate::application::dto::AgentContextSelection>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::ApplyContextSelection {
+                    run_id: var_runId,
+                    selection: var_selection,
+                };
+            }
+            26 => {
+                let mut var_conversationId = <String>::sse_decode(deserializer);
+                let mut var_snapshotRevision = <i64>::sse_decode(deserializer);
+                let mut var_destination = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::AcknowledgeContextDisclosure {
+                    conversation_id: var_conversationId,
+                    snapshot_revision: var_snapshotRevision,
+                    destination: var_destination,
+                };
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for crate::error::AppError {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_field0 = <crate::error::PdfFailure>::sse_decode(deserializer);
+        return crate::error::AppError(var_field0);
+    }
+}
+
+impl SseDecode for crate::model::core::AttemptState {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::model::core::AttemptState::Proposed,
+            1 => crate::model::core::AttemptState::Denied,
+            2 => crate::model::core::AttemptState::Approved,
+            3 => crate::model::core::AttemptState::Dispatching,
+            4 => crate::model::core::AttemptState::Succeeded,
+            5 => crate::model::core::AttemptState::Failed,
+            6 => crate::model::core::AttemptState::OutcomeUnknown,
+            _ => unreachable!("Invalid variant for AttemptState: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for bool {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u8().unwrap() != 0
+    }
+}
+
+impl SseDecode for crate::agent::context::ContextChoiceReason {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::agent::context::ContextChoiceReason::WindowExceeded,
+            1 => crate::agent::context::ContextChoiceReason::RawLimit,
+            2 => crate::agent::context::ContextChoiceReason::InvalidHistory,
+            3 => crate::agent::context::ContextChoiceReason::DisclosureRequired,
+            4 => crate::agent::context::ContextChoiceReason::ProviderRejected,
+            _ => unreachable!("Invalid variant for ContextChoiceReason: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::agent::context::ContextPurpose {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::agent::context::ContextPurpose::Turn,
+            1 => crate::agent::context::ContextPurpose::Summary,
+            _ => unreachable!("Invalid variant for ContextPurpose: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::error::CoreError {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::error::CoreError::InvalidInput,
+            1 => crate::error::CoreError::Configuration,
+            2 => crate::error::CoreError::Authentication,
+            3 => crate::error::CoreError::RateLimited,
+            4 => crate::error::CoreError::ToolUnsupported,
+            5 => crate::error::CoreError::DiscoveryUnavailable,
+            6 => crate::error::CoreError::ContextLength,
+            7 => crate::error::CoreError::UnavailableTransport,
+            8 => crate::error::CoreError::Protocol,
+            9 => crate::error::CoreError::Limit,
+            10 => crate::error::CoreError::Storage,
+            11 => crate::error::CoreError::Cancelled,
+            12 => crate::error::CoreError::Conflict,
+            _ => unreachable!("Invalid variant for CoreError: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::application::CredentialReply {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                return crate::application::CredentialReply::Value(var_field0);
+            }
+            1 => {
+                return crate::application::CredentialReply::Missing;
+            }
+            2 => {
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                return crate::application::CredentialReply::Failed(var_field0);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for f32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_f32::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for i32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_i32::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for i64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_i64::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for isize {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_i64::<NativeEndian>().unwrap() as _
+    }
+}
+
+impl SseDecode for Vec<String> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<String>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentArtifact> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::application::dto::AgentArtifact>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentAttempt> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::application::dto::AgentAttempt>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentConversation> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::application::dto::AgentConversation>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentConversationSummary> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(
+                <crate::application::dto::AgentConversationSummary>::sse_decode(deserializer),
+            );
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentDerivedContext> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::application::dto::AgentDerivedContext>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentEndpointConfig> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::application::dto::AgentEndpointConfig>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentMessage> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::application::dto::AgentMessage>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentPageReference> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::application::dto::AgentPageReference>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentProfile> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::application::dto::AgentProfile>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentRun> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::application::dto::AgentRun>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentSecretHeader> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::application::dto::AgentSecretHeader>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentServerConfig> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::application::dto::AgentServerConfig>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentToolCall> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::application::dto::AgentToolCall>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentToolRule> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::application::dto::AgentToolRule>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::model::PageText> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::model::PageText>::sse_decode(deserializer));
+        }
+        return ans_;
     }
 }
 
@@ -134,6 +1718,366 @@ impl SseDecode for Vec<u8> {
     }
 }
 
+impl SseDecode for Option<String> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<String>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::application::dto::AgentApprovalBinding> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::application::dto::AgentApprovalBinding>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::application::dto::AgentArtifactContent> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::application::dto::AgentArtifactContent>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::application::dto::AgentContextSelection> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(
+                <crate::application::dto::AgentContextSelection>::sse_decode(deserializer),
+            );
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::application::dto::AgentContextUsage> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::application::dto::AgentContextUsage>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::application::dto::AgentDerivedContext> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::application::dto::AgentDerivedContext>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::application::dto::AgentExportBundle> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::application::dto::AgentExportBundle>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::application::dto::AgentProviderUsage> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::application::dto::AgentProviderUsage>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::agent::context::ContextChoiceReason> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::agent::context::ContextChoiceReason>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<i64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<i64>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::inference::ToolSupport> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::inference::ToolSupport>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for crate::model::PageStatus {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::model::PageStatus::Text,
+            1 => crate::model::PageStatus::NoExtractableText,
+            2 => crate::model::PageStatus::Failed,
+            _ => unreachable!("Invalid variant for PageStatus: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::model::PageText {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_physicalPage = <u32>::sse_decode(deserializer);
+        let mut var_text = <String>::sse_decode(deserializer);
+        let mut var_status = <crate::model::PageStatus>::sse_decode(deserializer);
+        return crate::model::PageText {
+            physical_page: var_physicalPage,
+            text: var_text,
+            status: var_status,
+        };
+    }
+}
+
+impl SseDecode for crate::model::PdfExtraction {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_pages = <Vec<crate::model::PageText>>::sse_decode(deserializer);
+        let mut var_complete = <bool>::sse_decode(deserializer);
+        return crate::model::PdfExtraction {
+            pages: var_pages,
+            complete: var_complete,
+        };
+    }
+}
+
+impl SseDecode for crate::error::PdfFailure {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::error::PdfFailure::Busy,
+            1 => crate::error::PdfFailure::Limit,
+            2 => crate::error::PdfFailure::InvalidInput,
+            3 => crate::error::PdfFailure::UnsupportedEncrypted,
+            4 => crate::error::PdfFailure::Timeout,
+            5 => crate::error::PdfFailure::WorkerDied,
+            6 => crate::error::PdfFailure::Protocol,
+            7 => crate::error::PdfFailure::Unavailable,
+            8 => crate::error::PdfFailure::Cancelled,
+            _ => unreachable!("Invalid variant for PdfFailure: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::model::PdfLimits {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_maxInputBytes = <u32>::sse_decode(deserializer);
+        let mut var_maxPages = <u32>::sse_decode(deserializer);
+        let mut var_maxTextBytes = <u32>::sse_decode(deserializer);
+        let mut var_maxDecompressedBytes = <u32>::sse_decode(deserializer);
+        return crate::model::PdfLimits {
+            max_input_bytes: var_maxInputBytes,
+            max_pages: var_maxPages,
+            max_text_bytes: var_maxTextBytes,
+            max_decompressed_bytes: var_maxDecompressedBytes,
+        };
+    }
+}
+
+impl SseDecode for crate::model::PdfWorkerReply {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_field0 = <crate::model::PdfWorkerResult>::sse_decode(deserializer);
+                return crate::model::PdfWorkerReply::Extracted(var_field0);
+            }
+            1 => {
+                let mut var_field0 = <crate::error::PdfFailure>::sse_decode(deserializer);
+                return crate::model::PdfWorkerReply::Failed(var_field0);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for crate::model::PdfWorkerResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_requestId = <String>::sse_decode(deserializer);
+        let mut var_extraction = <crate::model::PdfExtraction>::sse_decode(deserializer);
+        return crate::model::PdfWorkerResult {
+            request_id: var_requestId,
+            extraction: var_extraction,
+        };
+    }
+}
+
+impl SseDecode for crate::model::core::PermissionRule {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::model::core::PermissionRule::Ask,
+            1 => crate::model::core::PermissionRule::Allow,
+            2 => crate::model::core::PermissionRule::Block,
+            _ => unreachable!("Invalid variant for PermissionRule: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::model::PlatformReply {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                return crate::model::PlatformReply::Ok;
+            }
+            1 => {
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                return crate::model::PlatformReply::Failed(var_field0);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for crate::model::core::ProfileMode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::model::core::ProfileMode::Agent,
+            1 => crate::model::core::ProfileMode::ChatOnly,
+            _ => unreachable!("Invalid variant for ProfileMode: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::model::RunHostRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_runId = <String>::sse_decode(deserializer);
+        let mut var_generation = <String>::sse_decode(deserializer);
+        let mut var_conversationId = <String>::sse_decode(deserializer);
+        let mut var_active = <bool>::sse_decode(deserializer);
+        let mut var_waitingApproval = <bool>::sse_decode(deserializer);
+        return crate::model::RunHostRequest {
+            run_id: var_runId,
+            generation: var_generation,
+            conversation_id: var_conversationId,
+            active: var_active,
+            waiting_approval: var_waitingApproval,
+        };
+    }
+}
+
+impl SseDecode for crate::model::core::RunState {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::model::core::RunState::Running,
+            1 => crate::model::core::RunState::WaitingApproval,
+            2 => crate::model::core::RunState::Paused,
+            3 => crate::model::core::RunState::Completed,
+            4 => crate::model::core::RunState::Cancelled,
+            5 => crate::model::core::RunState::Failed,
+            6 => crate::model::core::RunState::Interrupted,
+            _ => unreachable!("Invalid variant for RunState: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::agent::context::TokenEstimation {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::agent::context::TokenEstimation::ConservativeUtf8Bytes,
+            _ => unreachable!("Invalid variant for TokenEstimation: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::inference::ToolSupport {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::inference::ToolSupport::Supported,
+            1 => crate::inference::ToolSupport::Unsupported,
+            2 => crate::inference::ToolSupport::Inconclusive,
+            _ => unreachable!("Invalid variant for ToolSupport: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for u32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u32::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for u64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u64::<NativeEndian>().unwrap()
+    }
+}
+
 impl SseDecode for u8 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -146,17 +2090,10 @@ impl SseDecode for () {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {}
 }
 
-impl SseDecode for i32 {
+impl SseDecode for usize {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_i32::<NativeEndian>().unwrap()
-    }
-}
-
-impl SseDecode for bool {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_u8().unwrap() != 0
+        deserializer.cursor.read_u64::<NativeEndian>().unwrap() as _
     }
 }
 
@@ -169,7 +2106,19 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        2 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        1 => wire__crate__api__agent__agent_command_impl(port, ptr, rust_vec_len, data_len),
+        2 => wire__crate__api__agent__agent_events_impl(port, ptr, rust_vec_len, data_len),
+        3 => wire__crate__api__agent__agent_snapshot_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__agent__close_agent_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__pdf__extract_pdf_worker_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__agent__open_agent_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__pdf__validate_pdf_worker_result_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
         _ => unreachable!(),
     }
 }
@@ -182,17 +2131,2167 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__crate__api__simple__greet_impl(ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__simple__greet_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
 
 // Section: rust2dart
 
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<AgentHandle> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        flutter_rust_bridge::for_generated::rust_auto_opaque_encode::<_, MoiArc<_>>(self.0)
+            .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for FrbWrapper<AgentHandle> {}
+
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<AgentHandle>> for AgentHandle {
+    fn into_into_dart(self) -> FrbWrapper<AgentHandle> {
+        self.into()
+    }
+}
+
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentAppEvent {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.sequence.into_into_dart().into_dart(),
+            self.conversation_id.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentAppEvent
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentAppEvent>
+    for crate::application::dto::AgentAppEvent
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentAppEvent {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentAppSnapshot {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.artifacts.into_into_dart().into_dart(),
+            self.retention_limit_bytes.into_into_dart().into_dart(),
+            self.sequence.into_into_dart().into_dart(),
+            self.endpoints.into_into_dart().into_dart(),
+            self.servers.into_into_dart().into_dart(),
+            self.profiles.into_into_dart().into_dart(),
+            self.conversations.into_into_dart().into_dart(),
+            self.runs.into_into_dart().into_dart(),
+            self.rules.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentAppSnapshot
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentAppSnapshot>
+    for crate::application::dto::AgentAppSnapshot
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentAppSnapshot {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentApprovalBinding {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.attempt_id.into_into_dart().into_dart(),
+            self.key.into_into_dart().into_dart(),
+            self.provider_call_id.into_into_dart().into_dart(),
+            self.definition_digest.into_into_dart().into_dart(),
+            self.arguments_digest.into_into_dart().into_dart(),
+            self.arguments_json.into_into_dart().into_dart(),
+            self.schema_json.into_into_dart().into_dart(),
+            self.destination_digest.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentApprovalBinding
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentApprovalBinding>
+    for crate::application::dto::AgentApprovalBinding
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentApprovalBinding {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentArtifact {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.conversation_id.into_into_dart().into_dart(),
+            self.name.into_into_dart().into_dart(),
+            self.bytes.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentArtifact
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentArtifact>
+    for crate::application::dto::AgentArtifact
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentArtifact {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentArtifactContent {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.summary.into_into_dart().into_dart(),
+            self.text.into_into_dart().into_dart(),
+            self.private_path.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentArtifactContent
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentArtifactContent>
+    for crate::application::dto::AgentArtifactContent
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentArtifactContent {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentAttempt {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.state.into_into_dart().into_dart(),
+            self.call.into_into_dart().into_dart(),
+            self.binding.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentAttempt
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentAttempt>
+    for crate::application::dto::AgentAttempt
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentAttempt {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentCommandReply {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.history.into_into_dart().into_dart(),
+            self.export_bundle.into_into_dart().into_dart(),
+            self.models.into_into_dart().into_dart(),
+            self.tool_support.into_into_dart().into_dart(),
+            self.discovered_tools.into_into_dart().into_dart(),
+            self.discovered_rules.into_into_dart().into_dart(),
+            self.id.into_into_dart().into_dart(),
+            self.artifact.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentCommandReply
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentCommandReply>
+    for crate::application::dto::AgentCommandReply
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentCommandReply {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentContextSelection {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.message_ids.into_into_dart().into_dart(),
+            self.summary_ids.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentContextSelection
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentContextSelection>
+    for crate::application::dto::AgentContextSelection
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentContextSelection {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentContextUsage {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.estimation.into_into_dart().into_dart(),
+            self.estimated_input_tokens.into_into_dart().into_dart(),
+            self.output_reserve.into_into_dart().into_dart(),
+            self.window.into_into_dart().into_dart(),
+            self.raw_bytes.into_into_dart().into_dart(),
+            self.raw_bytes_is_lower_bound.into_into_dart().into_dart(),
+            self.provider.into_into_dart().into_dart(),
+            self.reason.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentContextUsage
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentContextUsage>
+    for crate::application::dto::AgentContextUsage
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentContextUsage {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentConversation {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.profile.into_into_dart().into_dart(),
+            self.messages.into_into_dart().into_dart(),
+            self.summaries.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentConversation
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentConversation>
+    for crate::application::dto::AgentConversation
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentConversation {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentConversationSummary {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.title.into_into_dart().into_dart(),
+            self.has_unknown_outcomes.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentConversationSummary
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentConversationSummary>
+    for crate::application::dto::AgentConversationSummary
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentConversationSummary {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentDerivedContext {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.run_id.into_into_dart().into_dart(),
+            self.text.into_into_dart().into_dart(),
+            self.selection.into_into_dart().into_dart(),
+            self.page_references.into_into_dart().into_dart(),
+            self.partial_coverage.into_into_dart().into_dart(),
+            self.unresolved_attempts.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentDerivedContext
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentDerivedContext>
+    for crate::application::dto::AgentDerivedContext
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentDerivedContext {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentEndpointConfig {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.name.into_into_dart().into_dart(),
+            self.base_url.into_into_dart().into_dart(),
+            self.model.into_into_dart().into_dart(),
+            self.context_tokens.into_into_dart().into_dart(),
+            self.max_output_tokens.into_into_dart().into_dart(),
+            self.temperature.into_into_dart().into_dart(),
+            self.allow_http.into_into_dart().into_dart(),
+            self.credential.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentEndpointConfig
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentEndpointConfig>
+    for crate::application::dto::AgentEndpointConfig
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentEndpointConfig {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentExportBundle {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [self.transcript.into_into_dart().into_dart()].into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentExportBundle
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentExportBundle>
+    for crate::application::dto::AgentExportBundle
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentExportBundle {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentMessage {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.role.into_into_dart().into_dart(),
+            self.content.into_into_dart().into_dart(),
+            self.calls.into_into_dart().into_dart(),
+            self.call_id.into_into_dart().into_dart(),
+            self.source_envelope.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentMessage
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentMessage>
+    for crate::application::dto::AgentMessage
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentMessage {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentPageReference {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.attachment_id.into_into_dart().into_dart(),
+            self.physical_page.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentPageReference
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentPageReference>
+    for crate::application::dto::AgentPageReference
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentPageReference {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentProfile {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.mode.into_into_dart().into_dart(),
+            self.id.into_into_dart().into_dart(),
+            self.name.into_into_dart().into_dart(),
+            self.endpoint_id.into_into_dart().into_dart(),
+            self.server_ids.into_into_dart().into_dart(),
+            self.instructions.into_into_dart().into_dart(),
+            self.limits.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentProfile
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentProfile>
+    for crate::application::dto::AgentProfile
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentProfile {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentProfileSnapshot {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.inference_destination.into_into_dart().into_dart(),
+            self.mode.into_into_dart().into_dart(),
+            self.profile_id.into_into_dart().into_dart(),
+            self.revision.into_into_dart().into_dart(),
+            self.name.into_into_dart().into_dart(),
+            self.endpoint.into_into_dart().into_dart(),
+            self.servers.into_into_dart().into_dart(),
+            self.instructions.into_into_dart().into_dart(),
+            self.limits.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentProfileSnapshot
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentProfileSnapshot>
+    for crate::application::dto::AgentProfileSnapshot
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentProfileSnapshot {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentProviderUsage {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.prompt_tokens.into_into_dart().into_dart(),
+            self.completion_tokens.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentProviderUsage
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentProviderUsage>
+    for crate::application::dto::AgentProviderUsage
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentProviderUsage {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentRun {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.conversation_id.into_into_dart().into_dart(),
+            self.profile.into_into_dart().into_dart(),
+            self.state.into_into_dart().into_dart(),
+            self.inference_count.into_into_dart().into_dart(),
+            self.attempt_count.into_into_dart().into_dart(),
+            self.active_ms.into_into_dart().into_dart(),
+            self.partial_text.into_into_dart().into_dart(),
+            self.failure.into_into_dart().into_dart(),
+            self.attempts.into_into_dart().into_dart(),
+            self.context.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentRun
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentRun>
+    for crate::application::dto::AgentRun
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentRun {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentRunContext {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.purpose.into_into_dart().into_dart(),
+            self.selection.into_into_dart().into_dart(),
+            self.selection_through_ordinal.into_into_dart().into_dart(),
+            self.usage.into_into_dart().into_dart(),
+            self.derived_entry.into_into_dart().into_dart(),
+            self.summary.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentRunContext
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentRunContext>
+    for crate::application::dto::AgentRunContext
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentRunContext {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentRunLimits {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.max_inference_requests.into_into_dart().into_dart(),
+            self.max_tool_attempts.into_into_dart().into_dart(),
+            self.active_timeout_ms.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentRunLimits
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentRunLimits>
+    for crate::application::dto::AgentRunLimits
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentRunLimits {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentSecretHeader {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.name.into_into_dart().into_dart(),
+            self.credential.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentSecretHeader
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentSecretHeader>
+    for crate::application::dto::AgentSecretHeader
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentSecretHeader {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentServerConfig {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.name.into_into_dart().into_dart(),
+            self.url.into_into_dart().into_dart(),
+            self.allow_http.into_into_dart().into_dart(),
+            self.secret_headers.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentServerConfig
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentServerConfig>
+    for crate::application::dto::AgentServerConfig
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentServerConfig {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentToolCall {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.key.into_into_dart().into_dart(),
+            self.provider_call_id.into_into_dart().into_dart(),
+            self.arguments_json.into_into_dart().into_dart(),
+            self.source_envelope.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentToolCall
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentToolCall>
+    for crate::application::dto::AgentToolCall
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentToolCall {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentToolKey {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.profile_id.into_into_dart().into_dart(),
+            self.server_id.into_into_dart().into_dart(),
+            self.name.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentToolKey
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentToolKey>
+    for crate::application::dto::AgentToolKey
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentToolKey {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentToolRule {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.key.into_into_dart().into_dart(),
+            self.schema_json.into_into_dart().into_dart(),
+            self.schema_digest.into_into_dart().into_dart(),
+            self.destination_digest.into_into_dart().into_dart(),
+            self.rule.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentToolRule
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentToolRule>
+    for crate::application::dto::AgentToolRule
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentToolRule {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AppCommand {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::application::dto::AppCommand::SearchConversations {
+                query,
+                offset,
+                limit,
+            } => [
+                0.into_dart(),
+                query.into_into_dart().into_dart(),
+                offset.into_into_dart().into_dart(),
+                limit.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::application::dto::AppCommand::RenameConversation {
+                conversation_id,
+                title,
+            } => [
+                1.into_dart(),
+                conversation_id.into_into_dart().into_dart(),
+                title.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::application::dto::AppCommand::DeleteConversation {
+                conversation_id,
+                confirmed_unknown,
+            } => [
+                2.into_dart(),
+                conversation_id.into_into_dart().into_dart(),
+                confirmed_unknown.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::application::dto::AppCommand::ExportTranscript {
+                conversation_id,
+                include_tool_payloads,
+            } => [
+                3.into_dart(),
+                conversation_id.into_into_dart().into_dart(),
+                include_tool_payloads.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::application::dto::AppCommand::DiscoverModels { endpoint_id } => {
+                [4.into_dart(), endpoint_id.into_into_dart().into_dart()].into_dart()
+            }
+            crate::application::dto::AppCommand::ProbeEndpoint { endpoint_id } => {
+                [5.into_dart(), endpoint_id.into_into_dart().into_dart()].into_dart()
+            }
+            crate::application::dto::AppCommand::DiscoverServer {
+                profile_id,
+                server_id,
+            } => [
+                6.into_dart(),
+                profile_id.into_into_dart().into_dart(),
+                server_id.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::application::dto::AppCommand::CreateArtifact {
+                conversation_id,
+                name,
+                content,
+            } => [
+                7.into_dart(),
+                conversation_id.into_into_dart().into_dart(),
+                name.into_into_dart().into_dart(),
+                content.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::application::dto::AppCommand::ReadArtifact {
+                conversation_id,
+                artifact_id,
+            } => [
+                8.into_dart(),
+                conversation_id.into_into_dart().into_dart(),
+                artifact_id.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::application::dto::AppCommand::DeleteArtifact {
+                conversation_id,
+                artifact_id,
+            } => [
+                9.into_dart(),
+                conversation_id.into_into_dart().into_dart(),
+                artifact_id.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::application::dto::AppCommand::NewId => [10.into_dart()].into_dart(),
+            crate::application::dto::AppCommand::SaveEndpoint { endpoint } => {
+                [11.into_dart(), endpoint.into_into_dart().into_dart()].into_dart()
+            }
+            crate::application::dto::AppCommand::SaveServer { server } => {
+                [12.into_dart(), server.into_into_dart().into_dart()].into_dart()
+            }
+            crate::application::dto::AppCommand::SaveProfile { profile } => {
+                [13.into_dart(), profile.into_into_dart().into_dart()].into_dart()
+            }
+            crate::application::dto::AppCommand::CreateConversation { profile_id } => {
+                [14.into_dart(), profile_id.into_into_dart().into_dart()].into_dart()
+            }
+            crate::application::dto::AppCommand::ApplyProfile {
+                conversation_id,
+                profile_id,
+            } => [
+                15.into_dart(),
+                conversation_id.into_into_dart().into_dart(),
+                profile_id.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::application::dto::AppCommand::SetRule {
+                key,
+                schema_digest,
+                destination_digest,
+                rule,
+            } => [
+                16.into_dart(),
+                key.into_into_dart().into_dart(),
+                schema_digest.into_into_dart().into_dart(),
+                destination_digest.into_into_dart().into_dart(),
+                rule.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::application::dto::AppCommand::StartTurn {
+                conversation_id,
+                text,
+            } => [
+                17.into_dart(),
+                conversation_id.into_into_dart().into_dart(),
+                text.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::application::dto::AppCommand::PlatformPause { run_id, generation } => [
+                18.into_dart(),
+                run_id.into_into_dart().into_dart(),
+                generation.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::application::dto::AppCommand::PlatformStop { run_id, generation } => [
+                19.into_dart(),
+                run_id.into_into_dart().into_dart(),
+                generation.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::application::dto::AppCommand::CancelRun { run_id } => {
+                [20.into_dart(), run_id.into_into_dart().into_dart()].into_dart()
+            }
+            crate::application::dto::AppCommand::ResumeRun { run_id } => {
+                [21.into_dart(), run_id.into_into_dart().into_dart()].into_dart()
+            }
+            crate::application::dto::AppCommand::Approve { binding } => {
+                [22.into_dart(), binding.into_into_dart().into_dart()].into_dart()
+            }
+            crate::application::dto::AppCommand::Deny { attempt_id } => {
+                [23.into_dart(), attempt_id.into_into_dart().into_dart()].into_dart()
+            }
+            crate::application::dto::AppCommand::SummarizeContext {
+                conversation_id,
+                selection,
+            } => [
+                24.into_dart(),
+                conversation_id.into_into_dart().into_dart(),
+                selection.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::application::dto::AppCommand::ApplyContextSelection { run_id, selection } => [
+                25.into_dart(),
+                run_id.into_into_dart().into_dart(),
+                selection.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::application::dto::AppCommand::AcknowledgeContextDisclosure {
+                conversation_id,
+                snapshot_revision,
+                destination,
+            } => [
+                26.into_dart(),
+                conversation_id.into_into_dart().into_dart(),
+                snapshot_revision.into_into_dart().into_dart(),
+                destination.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AppCommand
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AppCommand>
+    for crate::application::dto::AppCommand
+{
+    fn into_into_dart(self) -> crate::application::dto::AppCommand {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::error::AppError {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [self.0.into_into_dart().into_dart()].into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::error::AppError {}
+impl flutter_rust_bridge::IntoIntoDart<crate::error::AppError> for crate::error::AppError {
+    fn into_into_dart(self) -> crate::error::AppError {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::model::core::AttemptState {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Proposed => 0.into_dart(),
+            Self::Denied => 1.into_dart(),
+            Self::Approved => 2.into_dart(),
+            Self::Dispatching => 3.into_dart(),
+            Self::Succeeded => 4.into_dart(),
+            Self::Failed => 5.into_dart(),
+            Self::OutcomeUnknown => 6.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::model::core::AttemptState
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::model::core::AttemptState>
+    for crate::model::core::AttemptState
+{
+    fn into_into_dart(self) -> crate::model::core::AttemptState {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::agent::context::ContextChoiceReason {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::WindowExceeded => 0.into_dart(),
+            Self::RawLimit => 1.into_dart(),
+            Self::InvalidHistory => 2.into_dart(),
+            Self::DisclosureRequired => 3.into_dart(),
+            Self::ProviderRejected => 4.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::agent::context::ContextChoiceReason
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::agent::context::ContextChoiceReason>
+    for crate::agent::context::ContextChoiceReason
+{
+    fn into_into_dart(self) -> crate::agent::context::ContextChoiceReason {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::agent::context::ContextPurpose {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Turn => 0.into_dart(),
+            Self::Summary => 1.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::agent::context::ContextPurpose
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::agent::context::ContextPurpose>
+    for crate::agent::context::ContextPurpose
+{
+    fn into_into_dart(self) -> crate::agent::context::ContextPurpose {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::error::CoreError {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::InvalidInput => 0.into_dart(),
+            Self::Configuration => 1.into_dart(),
+            Self::Authentication => 2.into_dart(),
+            Self::RateLimited => 3.into_dart(),
+            Self::ToolUnsupported => 4.into_dart(),
+            Self::DiscoveryUnavailable => 5.into_dart(),
+            Self::ContextLength => 6.into_dart(),
+            Self::UnavailableTransport => 7.into_dart(),
+            Self::Protocol => 8.into_dart(),
+            Self::Limit => 9.into_dart(),
+            Self::Storage => 10.into_dart(),
+            Self::Cancelled => 11.into_dart(),
+            Self::Conflict => 12.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::error::CoreError {}
+impl flutter_rust_bridge::IntoIntoDart<crate::error::CoreError> for crate::error::CoreError {
+    fn into_into_dart(self) -> crate::error::CoreError {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::CredentialReply {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::application::CredentialReply::Value(field0) => {
+                [0.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::application::CredentialReply::Missing => [1.into_dart()].into_dart(),
+            crate::application::CredentialReply::Failed(field0) => {
+                [2.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::CredentialReply
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::CredentialReply>
+    for crate::application::CredentialReply
+{
+    fn into_into_dart(self) -> crate::application::CredentialReply {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::model::PageStatus {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Text => 0.into_dart(),
+            Self::NoExtractableText => 1.into_dart(),
+            Self::Failed => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::model::PageStatus {}
+impl flutter_rust_bridge::IntoIntoDart<crate::model::PageStatus> for crate::model::PageStatus {
+    fn into_into_dart(self) -> crate::model::PageStatus {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::model::PageText {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.physical_page.into_into_dart().into_dart(),
+            self.text.into_into_dart().into_dart(),
+            self.status.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::model::PageText {}
+impl flutter_rust_bridge::IntoIntoDart<crate::model::PageText> for crate::model::PageText {
+    fn into_into_dart(self) -> crate::model::PageText {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::model::PdfExtraction {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.pages.into_into_dart().into_dart(),
+            self.complete.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::model::PdfExtraction {}
+impl flutter_rust_bridge::IntoIntoDart<crate::model::PdfExtraction>
+    for crate::model::PdfExtraction
+{
+    fn into_into_dart(self) -> crate::model::PdfExtraction {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::error::PdfFailure {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Busy => 0.into_dart(),
+            Self::Limit => 1.into_dart(),
+            Self::InvalidInput => 2.into_dart(),
+            Self::UnsupportedEncrypted => 3.into_dart(),
+            Self::Timeout => 4.into_dart(),
+            Self::WorkerDied => 5.into_dart(),
+            Self::Protocol => 6.into_dart(),
+            Self::Unavailable => 7.into_dart(),
+            Self::Cancelled => 8.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::error::PdfFailure {}
+impl flutter_rust_bridge::IntoIntoDart<crate::error::PdfFailure> for crate::error::PdfFailure {
+    fn into_into_dart(self) -> crate::error::PdfFailure {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::model::PdfLimits {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.max_input_bytes.into_into_dart().into_dart(),
+            self.max_pages.into_into_dart().into_dart(),
+            self.max_text_bytes.into_into_dart().into_dart(),
+            self.max_decompressed_bytes.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::model::PdfLimits {}
+impl flutter_rust_bridge::IntoIntoDart<crate::model::PdfLimits> for crate::model::PdfLimits {
+    fn into_into_dart(self) -> crate::model::PdfLimits {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::model::PdfWorkerReply {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::model::PdfWorkerReply::Extracted(field0) => {
+                [0.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::model::PdfWorkerReply::Failed(field0) => {
+                [1.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::model::PdfWorkerReply {}
+impl flutter_rust_bridge::IntoIntoDart<crate::model::PdfWorkerReply>
+    for crate::model::PdfWorkerReply
+{
+    fn into_into_dart(self) -> crate::model::PdfWorkerReply {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::model::PdfWorkerResult {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.request_id.into_into_dart().into_dart(),
+            self.extraction.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::model::PdfWorkerResult {}
+impl flutter_rust_bridge::IntoIntoDart<crate::model::PdfWorkerResult>
+    for crate::model::PdfWorkerResult
+{
+    fn into_into_dart(self) -> crate::model::PdfWorkerResult {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::model::core::PermissionRule {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Ask => 0.into_dart(),
+            Self::Allow => 1.into_dart(),
+            Self::Block => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::model::core::PermissionRule
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::model::core::PermissionRule>
+    for crate::model::core::PermissionRule
+{
+    fn into_into_dart(self) -> crate::model::core::PermissionRule {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::model::PlatformReply {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::model::PlatformReply::Ok => [0.into_dart()].into_dart(),
+            crate::model::PlatformReply::Failed(field0) => {
+                [1.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::model::PlatformReply {}
+impl flutter_rust_bridge::IntoIntoDart<crate::model::PlatformReply>
+    for crate::model::PlatformReply
+{
+    fn into_into_dart(self) -> crate::model::PlatformReply {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::model::core::ProfileMode {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Agent => 0.into_dart(),
+            Self::ChatOnly => 1.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::model::core::ProfileMode
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::model::core::ProfileMode>
+    for crate::model::core::ProfileMode
+{
+    fn into_into_dart(self) -> crate::model::core::ProfileMode {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::model::RunHostRequest {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.run_id.into_into_dart().into_dart(),
+            self.generation.into_into_dart().into_dart(),
+            self.conversation_id.into_into_dart().into_dart(),
+            self.active.into_into_dart().into_dart(),
+            self.waiting_approval.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::model::RunHostRequest {}
+impl flutter_rust_bridge::IntoIntoDart<crate::model::RunHostRequest>
+    for crate::model::RunHostRequest
+{
+    fn into_into_dart(self) -> crate::model::RunHostRequest {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::model::core::RunState {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Running => 0.into_dart(),
+            Self::WaitingApproval => 1.into_dart(),
+            Self::Paused => 2.into_dart(),
+            Self::Completed => 3.into_dart(),
+            Self::Cancelled => 4.into_dart(),
+            Self::Failed => 5.into_dart(),
+            Self::Interrupted => 6.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::model::core::RunState {}
+impl flutter_rust_bridge::IntoIntoDart<crate::model::core::RunState>
+    for crate::model::core::RunState
+{
+    fn into_into_dart(self) -> crate::model::core::RunState {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::agent::context::TokenEstimation {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::ConservativeUtf8Bytes => 0.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::agent::context::TokenEstimation
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::agent::context::TokenEstimation>
+    for crate::agent::context::TokenEstimation
+{
+    fn into_into_dart(self) -> crate::agent::context::TokenEstimation {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::inference::ToolSupport {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Supported => 0.into_dart(),
+            Self::Unsupported => 1.into_dart(),
+            Self::Inconclusive => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::inference::ToolSupport {}
+impl flutter_rust_bridge::IntoIntoDart<crate::inference::ToolSupport>
+    for crate::inference::ToolSupport
+{
+    fn into_into_dart(self) -> crate::inference::ToolSupport {
+        self
+    }
+}
+
+impl SseEncode for flutter_rust_bridge::for_generated::anyhow::Error {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(format!("{:?}", self), serializer);
+    }
+}
+
+impl SseEncode for AgentHandle {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<AgentHandle>>>::sse_encode(flutter_rust_bridge::for_generated::rust_auto_opaque_encode::<_, MoiArc<_>>(self), serializer);
+    }
+}
+
+impl SseEncode for flutter_rust_bridge::DartOpaque {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <usize>::sse_encode(self.encode(), serializer);
+    }
+}
+
+impl SseEncode
+    for RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<AgentHandle>>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        let (ptr, size) = self.sse_encode_raw();
+        <usize>::sse_encode(ptr, serializer);
+        <i32>::sse_encode(size, serializer);
+    }
+}
+
+impl SseEncode
+    for StreamSink<
+        crate::application::dto::AgentAppEvent,
+        flutter_rust_bridge::for_generated::SseCodec,
+    >
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        unimplemented!("")
+    }
+}
+
 impl SseEncode for String {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <Vec<u8>>::sse_encode(self.into_bytes(), serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentAppEvent {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u64>::sse_encode(self.sequence, serializer);
+        <String>::sse_encode(self.conversation_id, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentAppSnapshot {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Vec<crate::application::dto::AgentArtifact>>::sse_encode(self.artifacts, serializer);
+        <u64>::sse_encode(self.retention_limit_bytes, serializer);
+        <u64>::sse_encode(self.sequence, serializer);
+        <Vec<crate::application::dto::AgentEndpointConfig>>::sse_encode(self.endpoints, serializer);
+        <Vec<crate::application::dto::AgentServerConfig>>::sse_encode(self.servers, serializer);
+        <Vec<crate::application::dto::AgentProfile>>::sse_encode(self.profiles, serializer);
+        <Vec<crate::application::dto::AgentConversation>>::sse_encode(
+            self.conversations,
+            serializer,
+        );
+        <Vec<crate::application::dto::AgentRun>>::sse_encode(self.runs, serializer);
+        <Vec<crate::application::dto::AgentToolRule>>::sse_encode(self.rules, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentApprovalBinding {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.attempt_id, serializer);
+        <crate::application::dto::AgentToolKey>::sse_encode(self.key, serializer);
+        <String>::sse_encode(self.provider_call_id, serializer);
+        <String>::sse_encode(self.definition_digest, serializer);
+        <String>::sse_encode(self.arguments_digest, serializer);
+        <String>::sse_encode(self.arguments_json, serializer);
+        <String>::sse_encode(self.schema_json, serializer);
+        <String>::sse_encode(self.destination_digest, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentArtifact {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.conversation_id, serializer);
+        <String>::sse_encode(self.name, serializer);
+        <u64>::sse_encode(self.bytes, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentArtifactContent {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::application::dto::AgentArtifact>::sse_encode(self.summary, serializer);
+        <String>::sse_encode(self.text, serializer);
+        <String>::sse_encode(self.private_path, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentAttempt {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <crate::model::core::AttemptState>::sse_encode(self.state, serializer);
+        <crate::application::dto::AgentToolCall>::sse_encode(self.call, serializer);
+        <Option<crate::application::dto::AgentApprovalBinding>>::sse_encode(
+            self.binding,
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentCommandReply {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Vec<crate::application::dto::AgentConversationSummary>>::sse_encode(
+            self.history,
+            serializer,
+        );
+        <Option<crate::application::dto::AgentExportBundle>>::sse_encode(
+            self.export_bundle,
+            serializer,
+        );
+        <Vec<String>>::sse_encode(self.models, serializer);
+        <Option<crate::inference::ToolSupport>>::sse_encode(self.tool_support, serializer);
+        <Vec<String>>::sse_encode(self.discovered_tools, serializer);
+        <Vec<crate::application::dto::AgentToolRule>>::sse_encode(
+            self.discovered_rules,
+            serializer,
+        );
+        <Option<String>>::sse_encode(self.id, serializer);
+        <Option<crate::application::dto::AgentArtifactContent>>::sse_encode(
+            self.artifact,
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentContextSelection {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Vec<String>>::sse_encode(self.message_ids, serializer);
+        <Vec<String>>::sse_encode(self.summary_ids, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentContextUsage {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::agent::context::TokenEstimation>::sse_encode(self.estimation, serializer);
+        <u64>::sse_encode(self.estimated_input_tokens, serializer);
+        <u32>::sse_encode(self.output_reserve, serializer);
+        <u32>::sse_encode(self.window, serializer);
+        <u64>::sse_encode(self.raw_bytes, serializer);
+        <bool>::sse_encode(self.raw_bytes_is_lower_bound, serializer);
+        <Option<crate::application::dto::AgentProviderUsage>>::sse_encode(
+            self.provider,
+            serializer,
+        );
+        <Option<crate::agent::context::ContextChoiceReason>>::sse_encode(self.reason, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentConversation {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <crate::application::dto::AgentProfileSnapshot>::sse_encode(self.profile, serializer);
+        <Vec<crate::application::dto::AgentMessage>>::sse_encode(self.messages, serializer);
+        <Vec<crate::application::dto::AgentDerivedContext>>::sse_encode(self.summaries, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentConversationSummary {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.title, serializer);
+        <bool>::sse_encode(self.has_unknown_outcomes, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentDerivedContext {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.run_id, serializer);
+        <String>::sse_encode(self.text, serializer);
+        <crate::application::dto::AgentContextSelection>::sse_encode(self.selection, serializer);
+        <Vec<crate::application::dto::AgentPageReference>>::sse_encode(
+            self.page_references,
+            serializer,
+        );
+        <bool>::sse_encode(self.partial_coverage, serializer);
+        <Vec<String>>::sse_encode(self.unresolved_attempts, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentEndpointConfig {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.name, serializer);
+        <String>::sse_encode(self.base_url, serializer);
+        <String>::sse_encode(self.model, serializer);
+        <u32>::sse_encode(self.context_tokens, serializer);
+        <u32>::sse_encode(self.max_output_tokens, serializer);
+        <f32>::sse_encode(self.temperature, serializer);
+        <bool>::sse_encode(self.allow_http, serializer);
+        <Option<String>>::sse_encode(self.credential, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentExportBundle {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::application::dto::AgentArtifact>::sse_encode(self.transcript, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentMessage {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.role, serializer);
+        <String>::sse_encode(self.content, serializer);
+        <Vec<crate::application::dto::AgentToolCall>>::sse_encode(self.calls, serializer);
+        <Option<String>>::sse_encode(self.call_id, serializer);
+        <Option<String>>::sse_encode(self.source_envelope, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentPageReference {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.attachment_id, serializer);
+        <u32>::sse_encode(self.physical_page, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentProfile {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::model::core::ProfileMode>::sse_encode(self.mode, serializer);
+        <String>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.name, serializer);
+        <String>::sse_encode(self.endpoint_id, serializer);
+        <Vec<String>>::sse_encode(self.server_ids, serializer);
+        <String>::sse_encode(self.instructions, serializer);
+        <crate::application::dto::AgentRunLimits>::sse_encode(self.limits, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentProfileSnapshot {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Option<String>>::sse_encode(self.inference_destination, serializer);
+        <crate::model::core::ProfileMode>::sse_encode(self.mode, serializer);
+        <String>::sse_encode(self.profile_id, serializer);
+        <i64>::sse_encode(self.revision, serializer);
+        <String>::sse_encode(self.name, serializer);
+        <crate::application::dto::AgentEndpointConfig>::sse_encode(self.endpoint, serializer);
+        <Vec<crate::application::dto::AgentServerConfig>>::sse_encode(self.servers, serializer);
+        <String>::sse_encode(self.instructions, serializer);
+        <crate::application::dto::AgentRunLimits>::sse_encode(self.limits, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentProviderUsage {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u64>::sse_encode(self.prompt_tokens, serializer);
+        <u64>::sse_encode(self.completion_tokens, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentRun {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.conversation_id, serializer);
+        <crate::application::dto::AgentProfileSnapshot>::sse_encode(self.profile, serializer);
+        <crate::model::core::RunState>::sse_encode(self.state, serializer);
+        <u32>::sse_encode(self.inference_count, serializer);
+        <u32>::sse_encode(self.attempt_count, serializer);
+        <u64>::sse_encode(self.active_ms, serializer);
+        <String>::sse_encode(self.partial_text, serializer);
+        <Option<String>>::sse_encode(self.failure, serializer);
+        <Vec<crate::application::dto::AgentAttempt>>::sse_encode(self.attempts, serializer);
+        <crate::application::dto::AgentRunContext>::sse_encode(self.context, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentRunContext {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::agent::context::ContextPurpose>::sse_encode(self.purpose, serializer);
+        <Option<crate::application::dto::AgentContextSelection>>::sse_encode(
+            self.selection,
+            serializer,
+        );
+        <Option<i64>>::sse_encode(self.selection_through_ordinal, serializer);
+        <Option<crate::application::dto::AgentContextUsage>>::sse_encode(self.usage, serializer);
+        <Option<String>>::sse_encode(self.derived_entry, serializer);
+        <Option<crate::application::dto::AgentDerivedContext>>::sse_encode(
+            self.summary,
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentRunLimits {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.max_inference_requests, serializer);
+        <u32>::sse_encode(self.max_tool_attempts, serializer);
+        <u64>::sse_encode(self.active_timeout_ms, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentSecretHeader {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.name, serializer);
+        <String>::sse_encode(self.credential, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentServerConfig {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.name, serializer);
+        <String>::sse_encode(self.url, serializer);
+        <bool>::sse_encode(self.allow_http, serializer);
+        <Vec<crate::application::dto::AgentSecretHeader>>::sse_encode(
+            self.secret_headers,
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentToolCall {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::application::dto::AgentToolKey>::sse_encode(self.key, serializer);
+        <String>::sse_encode(self.provider_call_id, serializer);
+        <String>::sse_encode(self.arguments_json, serializer);
+        <Option<String>>::sse_encode(self.source_envelope, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentToolKey {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.profile_id, serializer);
+        <Option<String>>::sse_encode(self.server_id, serializer);
+        <String>::sse_encode(self.name, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentToolRule {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::application::dto::AgentToolKey>::sse_encode(self.key, serializer);
+        <String>::sse_encode(self.schema_json, serializer);
+        <String>::sse_encode(self.schema_digest, serializer);
+        <String>::sse_encode(self.destination_digest, serializer);
+        <crate::model::core::PermissionRule>::sse_encode(self.rule, serializer);
+    }
+}
+
+impl SseEncode for crate::application::dto::AppCommand {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::application::dto::AppCommand::SearchConversations {
+                query,
+                offset,
+                limit,
+            } => {
+                <i32>::sse_encode(0, serializer);
+                <String>::sse_encode(query, serializer);
+                <u32>::sse_encode(offset, serializer);
+                <u32>::sse_encode(limit, serializer);
+            }
+            crate::application::dto::AppCommand::RenameConversation {
+                conversation_id,
+                title,
+            } => {
+                <i32>::sse_encode(1, serializer);
+                <String>::sse_encode(conversation_id, serializer);
+                <String>::sse_encode(title, serializer);
+            }
+            crate::application::dto::AppCommand::DeleteConversation {
+                conversation_id,
+                confirmed_unknown,
+            } => {
+                <i32>::sse_encode(2, serializer);
+                <String>::sse_encode(conversation_id, serializer);
+                <bool>::sse_encode(confirmed_unknown, serializer);
+            }
+            crate::application::dto::AppCommand::ExportTranscript {
+                conversation_id,
+                include_tool_payloads,
+            } => {
+                <i32>::sse_encode(3, serializer);
+                <String>::sse_encode(conversation_id, serializer);
+                <bool>::sse_encode(include_tool_payloads, serializer);
+            }
+            crate::application::dto::AppCommand::DiscoverModels { endpoint_id } => {
+                <i32>::sse_encode(4, serializer);
+                <String>::sse_encode(endpoint_id, serializer);
+            }
+            crate::application::dto::AppCommand::ProbeEndpoint { endpoint_id } => {
+                <i32>::sse_encode(5, serializer);
+                <String>::sse_encode(endpoint_id, serializer);
+            }
+            crate::application::dto::AppCommand::DiscoverServer {
+                profile_id,
+                server_id,
+            } => {
+                <i32>::sse_encode(6, serializer);
+                <String>::sse_encode(profile_id, serializer);
+                <String>::sse_encode(server_id, serializer);
+            }
+            crate::application::dto::AppCommand::CreateArtifact {
+                conversation_id,
+                name,
+                content,
+            } => {
+                <i32>::sse_encode(7, serializer);
+                <String>::sse_encode(conversation_id, serializer);
+                <String>::sse_encode(name, serializer);
+                <String>::sse_encode(content, serializer);
+            }
+            crate::application::dto::AppCommand::ReadArtifact {
+                conversation_id,
+                artifact_id,
+            } => {
+                <i32>::sse_encode(8, serializer);
+                <String>::sse_encode(conversation_id, serializer);
+                <String>::sse_encode(artifact_id, serializer);
+            }
+            crate::application::dto::AppCommand::DeleteArtifact {
+                conversation_id,
+                artifact_id,
+            } => {
+                <i32>::sse_encode(9, serializer);
+                <String>::sse_encode(conversation_id, serializer);
+                <String>::sse_encode(artifact_id, serializer);
+            }
+            crate::application::dto::AppCommand::NewId => {
+                <i32>::sse_encode(10, serializer);
+            }
+            crate::application::dto::AppCommand::SaveEndpoint { endpoint } => {
+                <i32>::sse_encode(11, serializer);
+                <crate::application::dto::AgentEndpointConfig>::sse_encode(endpoint, serializer);
+            }
+            crate::application::dto::AppCommand::SaveServer { server } => {
+                <i32>::sse_encode(12, serializer);
+                <crate::application::dto::AgentServerConfig>::sse_encode(server, serializer);
+            }
+            crate::application::dto::AppCommand::SaveProfile { profile } => {
+                <i32>::sse_encode(13, serializer);
+                <crate::application::dto::AgentProfile>::sse_encode(profile, serializer);
+            }
+            crate::application::dto::AppCommand::CreateConversation { profile_id } => {
+                <i32>::sse_encode(14, serializer);
+                <String>::sse_encode(profile_id, serializer);
+            }
+            crate::application::dto::AppCommand::ApplyProfile {
+                conversation_id,
+                profile_id,
+            } => {
+                <i32>::sse_encode(15, serializer);
+                <String>::sse_encode(conversation_id, serializer);
+                <String>::sse_encode(profile_id, serializer);
+            }
+            crate::application::dto::AppCommand::SetRule {
+                key,
+                schema_digest,
+                destination_digest,
+                rule,
+            } => {
+                <i32>::sse_encode(16, serializer);
+                <crate::application::dto::AgentToolKey>::sse_encode(key, serializer);
+                <String>::sse_encode(schema_digest, serializer);
+                <String>::sse_encode(destination_digest, serializer);
+                <crate::model::core::PermissionRule>::sse_encode(rule, serializer);
+            }
+            crate::application::dto::AppCommand::StartTurn {
+                conversation_id,
+                text,
+            } => {
+                <i32>::sse_encode(17, serializer);
+                <String>::sse_encode(conversation_id, serializer);
+                <String>::sse_encode(text, serializer);
+            }
+            crate::application::dto::AppCommand::PlatformPause { run_id, generation } => {
+                <i32>::sse_encode(18, serializer);
+                <String>::sse_encode(run_id, serializer);
+                <String>::sse_encode(generation, serializer);
+            }
+            crate::application::dto::AppCommand::PlatformStop { run_id, generation } => {
+                <i32>::sse_encode(19, serializer);
+                <String>::sse_encode(run_id, serializer);
+                <String>::sse_encode(generation, serializer);
+            }
+            crate::application::dto::AppCommand::CancelRun { run_id } => {
+                <i32>::sse_encode(20, serializer);
+                <String>::sse_encode(run_id, serializer);
+            }
+            crate::application::dto::AppCommand::ResumeRun { run_id } => {
+                <i32>::sse_encode(21, serializer);
+                <String>::sse_encode(run_id, serializer);
+            }
+            crate::application::dto::AppCommand::Approve { binding } => {
+                <i32>::sse_encode(22, serializer);
+                <crate::application::dto::AgentApprovalBinding>::sse_encode(binding, serializer);
+            }
+            crate::application::dto::AppCommand::Deny { attempt_id } => {
+                <i32>::sse_encode(23, serializer);
+                <String>::sse_encode(attempt_id, serializer);
+            }
+            crate::application::dto::AppCommand::SummarizeContext {
+                conversation_id,
+                selection,
+            } => {
+                <i32>::sse_encode(24, serializer);
+                <String>::sse_encode(conversation_id, serializer);
+                <crate::application::dto::AgentContextSelection>::sse_encode(selection, serializer);
+            }
+            crate::application::dto::AppCommand::ApplyContextSelection { run_id, selection } => {
+                <i32>::sse_encode(25, serializer);
+                <String>::sse_encode(run_id, serializer);
+                <crate::application::dto::AgentContextSelection>::sse_encode(selection, serializer);
+            }
+            crate::application::dto::AppCommand::AcknowledgeContextDisclosure {
+                conversation_id,
+                snapshot_revision,
+                destination,
+            } => {
+                <i32>::sse_encode(26, serializer);
+                <String>::sse_encode(conversation_id, serializer);
+                <i64>::sse_encode(snapshot_revision, serializer);
+                <String>::sse_encode(destination, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for crate::error::AppError {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::error::PdfFailure>::sse_encode(self.0, serializer);
+    }
+}
+
+impl SseEncode for crate::model::core::AttemptState {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::model::core::AttemptState::Proposed => 0,
+                crate::model::core::AttemptState::Denied => 1,
+                crate::model::core::AttemptState::Approved => 2,
+                crate::model::core::AttemptState::Dispatching => 3,
+                crate::model::core::AttemptState::Succeeded => 4,
+                crate::model::core::AttemptState::Failed => 5,
+                crate::model::core::AttemptState::OutcomeUnknown => 6,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for bool {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_u8(self as _).unwrap();
+    }
+}
+
+impl SseEncode for crate::agent::context::ContextChoiceReason {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::agent::context::ContextChoiceReason::WindowExceeded => 0,
+                crate::agent::context::ContextChoiceReason::RawLimit => 1,
+                crate::agent::context::ContextChoiceReason::InvalidHistory => 2,
+                crate::agent::context::ContextChoiceReason::DisclosureRequired => 3,
+                crate::agent::context::ContextChoiceReason::ProviderRejected => 4,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::agent::context::ContextPurpose {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::agent::context::ContextPurpose::Turn => 0,
+                crate::agent::context::ContextPurpose::Summary => 1,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::error::CoreError {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::error::CoreError::InvalidInput => 0,
+                crate::error::CoreError::Configuration => 1,
+                crate::error::CoreError::Authentication => 2,
+                crate::error::CoreError::RateLimited => 3,
+                crate::error::CoreError::ToolUnsupported => 4,
+                crate::error::CoreError::DiscoveryUnavailable => 5,
+                crate::error::CoreError::ContextLength => 6,
+                crate::error::CoreError::UnavailableTransport => 7,
+                crate::error::CoreError::Protocol => 8,
+                crate::error::CoreError::Limit => 9,
+                crate::error::CoreError::Storage => 10,
+                crate::error::CoreError::Cancelled => 11,
+                crate::error::CoreError::Conflict => 12,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::application::CredentialReply {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::application::CredentialReply::Value(field0) => {
+                <i32>::sse_encode(0, serializer);
+                <String>::sse_encode(field0, serializer);
+            }
+            crate::application::CredentialReply::Missing => {
+                <i32>::sse_encode(1, serializer);
+            }
+            crate::application::CredentialReply::Failed(field0) => {
+                <i32>::sse_encode(2, serializer);
+                <String>::sse_encode(field0, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for f32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_f32::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for i32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for i64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_i64::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for isize {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer
+            .cursor
+            .write_i64::<NativeEndian>(self as _)
+            .unwrap();
+    }
+}
+
+impl SseEncode for Vec<String> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <String>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentArtifact> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentArtifact>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentAttempt> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentAttempt>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentConversation> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentConversation>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentConversationSummary> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentConversationSummary>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentDerivedContext> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentDerivedContext>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentEndpointConfig> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentEndpointConfig>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentMessage> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentMessage>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentPageReference> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentPageReference>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentProfile> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentProfile>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentRun> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentRun>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentSecretHeader> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentSecretHeader>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentServerConfig> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentServerConfig>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentToolCall> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentToolCall>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentToolRule> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentToolRule>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::model::PageText> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::model::PageText>::sse_encode(item, serializer);
+        }
     }
 }
 
@@ -203,6 +4302,339 @@ impl SseEncode for Vec<u8> {
         for item in self {
             <u8>::sse_encode(item, serializer);
         }
+    }
+}
+
+impl SseEncode for Option<String> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <String>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::application::dto::AgentApprovalBinding> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::application::dto::AgentApprovalBinding>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::application::dto::AgentArtifactContent> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::application::dto::AgentArtifactContent>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::application::dto::AgentContextSelection> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::application::dto::AgentContextSelection>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::application::dto::AgentContextUsage> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::application::dto::AgentContextUsage>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::application::dto::AgentDerivedContext> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::application::dto::AgentDerivedContext>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::application::dto::AgentExportBundle> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::application::dto::AgentExportBundle>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::application::dto::AgentProviderUsage> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::application::dto::AgentProviderUsage>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::agent::context::ContextChoiceReason> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::agent::context::ContextChoiceReason>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<i64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <i64>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::inference::ToolSupport> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::inference::ToolSupport>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for crate::model::PageStatus {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::model::PageStatus::Text => 0,
+                crate::model::PageStatus::NoExtractableText => 1,
+                crate::model::PageStatus::Failed => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::model::PageText {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.physical_page, serializer);
+        <String>::sse_encode(self.text, serializer);
+        <crate::model::PageStatus>::sse_encode(self.status, serializer);
+    }
+}
+
+impl SseEncode for crate::model::PdfExtraction {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Vec<crate::model::PageText>>::sse_encode(self.pages, serializer);
+        <bool>::sse_encode(self.complete, serializer);
+    }
+}
+
+impl SseEncode for crate::error::PdfFailure {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::error::PdfFailure::Busy => 0,
+                crate::error::PdfFailure::Limit => 1,
+                crate::error::PdfFailure::InvalidInput => 2,
+                crate::error::PdfFailure::UnsupportedEncrypted => 3,
+                crate::error::PdfFailure::Timeout => 4,
+                crate::error::PdfFailure::WorkerDied => 5,
+                crate::error::PdfFailure::Protocol => 6,
+                crate::error::PdfFailure::Unavailable => 7,
+                crate::error::PdfFailure::Cancelled => 8,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::model::PdfLimits {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.max_input_bytes, serializer);
+        <u32>::sse_encode(self.max_pages, serializer);
+        <u32>::sse_encode(self.max_text_bytes, serializer);
+        <u32>::sse_encode(self.max_decompressed_bytes, serializer);
+    }
+}
+
+impl SseEncode for crate::model::PdfWorkerReply {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::model::PdfWorkerReply::Extracted(field0) => {
+                <i32>::sse_encode(0, serializer);
+                <crate::model::PdfWorkerResult>::sse_encode(field0, serializer);
+            }
+            crate::model::PdfWorkerReply::Failed(field0) => {
+                <i32>::sse_encode(1, serializer);
+                <crate::error::PdfFailure>::sse_encode(field0, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for crate::model::PdfWorkerResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.request_id, serializer);
+        <crate::model::PdfExtraction>::sse_encode(self.extraction, serializer);
+    }
+}
+
+impl SseEncode for crate::model::core::PermissionRule {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::model::core::PermissionRule::Ask => 0,
+                crate::model::core::PermissionRule::Allow => 1,
+                crate::model::core::PermissionRule::Block => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::model::PlatformReply {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::model::PlatformReply::Ok => {
+                <i32>::sse_encode(0, serializer);
+            }
+            crate::model::PlatformReply::Failed(field0) => {
+                <i32>::sse_encode(1, serializer);
+                <String>::sse_encode(field0, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for crate::model::core::ProfileMode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::model::core::ProfileMode::Agent => 0,
+                crate::model::core::ProfileMode::ChatOnly => 1,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::model::RunHostRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.run_id, serializer);
+        <String>::sse_encode(self.generation, serializer);
+        <String>::sse_encode(self.conversation_id, serializer);
+        <bool>::sse_encode(self.active, serializer);
+        <bool>::sse_encode(self.waiting_approval, serializer);
+    }
+}
+
+impl SseEncode for crate::model::core::RunState {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::model::core::RunState::Running => 0,
+                crate::model::core::RunState::WaitingApproval => 1,
+                crate::model::core::RunState::Paused => 2,
+                crate::model::core::RunState::Completed => 3,
+                crate::model::core::RunState::Cancelled => 4,
+                crate::model::core::RunState::Failed => 5,
+                crate::model::core::RunState::Interrupted => 6,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::agent::context::TokenEstimation {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::agent::context::TokenEstimation::ConservativeUtf8Bytes => 0,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::inference::ToolSupport {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::inference::ToolSupport::Supported => 0,
+                crate::inference::ToolSupport::Unsupported => 1,
+                crate::inference::ToolSupport::Inconclusive => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for u32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_u32::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for u64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_u64::<NativeEndian>(self).unwrap();
     }
 }
 
@@ -218,17 +4650,13 @@ impl SseEncode for () {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {}
 }
 
-impl SseEncode for i32 {
+impl SseEncode for usize {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
-    }
-}
-
-impl SseEncode for bool {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_u8(self as _).unwrap();
+        serializer
+            .cursor
+            .write_u64::<NativeEndian>(self as _)
+            .unwrap();
     }
 }
 
@@ -240,6 +4668,7 @@ mod io {
     // Section: imports
 
     use super::*;
+    use crate::api::agent::*;
     use flutter_rust_bridge::for_generated::byteorder::{
         NativeEndian, ReadBytesExt, WriteBytesExt,
     };
@@ -249,6 +4678,20 @@ mod io {
     // Section: boilerplate
 
     flutter_rust_bridge::frb_generated_boilerplate_io!();
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn frbgen_chat_tool_harness_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+        ptr: *const std::ffi::c_void,
+    ) {
+        MoiArc::<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<AgentHandle>>::increment_strong_count(ptr as _);
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn frbgen_chat_tool_harness_rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+        ptr: *const std::ffi::c_void,
+    ) {
+        MoiArc::<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<AgentHandle>>::decrement_strong_count(ptr as _);
+    }
 }
 #[cfg(not(target_family = "wasm"))]
 pub use io::*;
@@ -262,6 +4705,7 @@ mod web {
     // Section: imports
 
     use super::*;
+    use crate::api::agent::*;
     use flutter_rust_bridge::for_generated::byteorder::{
         NativeEndian, ReadBytesExt, WriteBytesExt,
     };
@@ -273,6 +4717,20 @@ mod web {
     // Section: boilerplate
 
     flutter_rust_bridge::frb_generated_boilerplate_web!();
+
+    #[wasm_bindgen]
+    pub fn rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+        ptr: *const std::ffi::c_void,
+    ) {
+        MoiArc::<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<AgentHandle>>::increment_strong_count(ptr as _);
+    }
+
+    #[wasm_bindgen]
+    pub fn rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+        ptr: *const std::ffi::c_void,
+    ) {
+        MoiArc::<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<AgentHandle>>::decrement_strong_count(ptr as _);
+    }
 }
 #[cfg(target_family = "wasm")]
 pub use web::*;

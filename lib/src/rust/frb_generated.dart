@@ -3,12 +3,21 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
+import 'agent/context.dart';
+import 'api/agent.dart';
+import 'api/pdf.dart';
 import 'api/simple.dart';
+import 'application.dart';
+import 'application/dto.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'error.dart';
 import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
+import 'inference.dart';
+import 'model.dart';
+import 'model/core.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 /// Main entrypoint of the Rust API
@@ -66,7 +75,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -1918914929;
+  int get rustContentHash => 693943912;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -78,9 +87,52 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<AgentCommandReply> crateApiAgentAgentCommand({
+    required AgentHandle handle,
+    required AppCommand command,
+  });
+
+  Stream<AgentAppEvent> crateApiAgentAgentEvents({
+    required AgentHandle handle,
+    required BigInt afterSequence,
+  });
+
+  Future<AgentAppSnapshot> crateApiAgentAgentSnapshot({
+    required AgentHandle handle,
+  });
+
+  Future<void> crateApiAgentCloseAgent({required AgentHandle handle});
+
+  Future<void> crateApiPdfExtractPdfWorker({
+    required String inputFdPath,
+    required String outputFdPath,
+    required PdfLimits limits,
+    required String requestId,
+  });
+
   String crateApiSimpleGreet({required String name});
 
   Future<void> crateApiSimpleInitApp();
+
+  Future<AgentHandle> crateApiAgentOpenAgent({
+    required String dataDir,
+    required FutureOr<CredentialReply> Function(String) resolveCredential,
+    required FutureOr<PlatformReply> Function(RunHostRequest) setServiceActive,
+  });
+
+  Future<PdfWorkerReply> crateApiPdfValidatePdfWorkerResult({
+    required PdfWorkerResult result,
+    required String requestId,
+    required PdfLimits limits,
+  });
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_AgentHandle;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_AgentHandle;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_AgentHandlePtr;
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -92,13 +144,195 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
+  Future<AgentCommandReply> crateApiAgentAgentCommand({
+    required AgentHandle handle,
+    required AppCommand command,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+            handle,
+            serializer,
+          );
+          sse_encode_box_autoadd_app_command(command, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_agent_command_reply,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiAgentAgentCommandConstMeta,
+        argValues: [handle, command],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiAgentAgentCommandConstMeta => const TaskConstMeta(
+    debugName: "agent_command",
+    argNames: ["handle", "command"],
+  );
+
+  @override
+  Stream<AgentAppEvent> crateApiAgentAgentEvents({
+    required AgentHandle handle,
+    required BigInt afterSequence,
+  }) {
+    final sink = RustStreamSink<AgentAppEvent>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+              handle,
+              serializer,
+            );
+            sse_encode_u_64(afterSequence, serializer);
+            sse_encode_StreamSink_agent_app_event_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 2,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: sse_decode_core_error,
+          ),
+          constMeta: kCrateApiAgentAgentEventsConstMeta,
+          argValues: [handle, afterSequence, sink],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateApiAgentAgentEventsConstMeta => const TaskConstMeta(
+    debugName: "agent_events",
+    argNames: ["handle", "afterSequence", "sink"],
+  );
+
+  @override
+  Future<AgentAppSnapshot> crateApiAgentAgentSnapshot({
+    required AgentHandle handle,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+            handle,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_agent_app_snapshot,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiAgentAgentSnapshotConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiAgentAgentSnapshotConstMeta =>
+      const TaskConstMeta(debugName: "agent_snapshot", argNames: ["handle"]);
+
+  @override
+  Future<void> crateApiAgentCloseAgent({required AgentHandle handle}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+            handle,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiAgentCloseAgentConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiAgentCloseAgentConstMeta =>
+      const TaskConstMeta(debugName: "close_agent", argNames: ["handle"]);
+
+  @override
+  Future<void> crateApiPdfExtractPdfWorker({
+    required String inputFdPath,
+    required String outputFdPath,
+    required PdfLimits limits,
+    required String requestId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(inputFdPath, serializer);
+          sse_encode_String(outputFdPath, serializer);
+          sse_encode_box_autoadd_pdf_limits(limits, serializer);
+          sse_encode_String(requestId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_app_error,
+        ),
+        constMeta: kCrateApiPdfExtractPdfWorkerConstMeta,
+        argValues: [inputFdPath, outputFdPath, limits, requestId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPdfExtractPdfWorkerConstMeta =>
+      const TaskConstMeta(
+        debugName: "extract_pdf_worker",
+        argNames: ["inputFdPath", "outputFdPath", "limits", "requestId"],
+      );
+
+  @override
   String crateApiSimpleGreet({required String name}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(name, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -123,7 +357,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 7,
             port: port_,
           );
         },
@@ -141,6 +375,229 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiSimpleInitAppConstMeta =>
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
+  @override
+  Future<AgentHandle> crateApiAgentOpenAgent({
+    required String dataDir,
+    required FutureOr<CredentialReply> Function(String) resolveCredential,
+    required FutureOr<PlatformReply> Function(RunHostRequest) setServiceActive,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dataDir, serializer);
+          sse_encode_DartFn_Inputs_String_Output_credential_reply_AnyhowException(
+            resolveCredential,
+            serializer,
+          );
+          sse_encode_DartFn_Inputs_run_host_request_Output_platform_reply_AnyhowException(
+            setServiceActive,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiAgentOpenAgentConstMeta,
+        argValues: [dataDir, resolveCredential, setServiceActive],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiAgentOpenAgentConstMeta => const TaskConstMeta(
+    debugName: "open_agent",
+    argNames: ["dataDir", "resolveCredential", "setServiceActive"],
+  );
+
+  @override
+  Future<PdfWorkerReply> crateApiPdfValidatePdfWorkerResult({
+    required PdfWorkerResult result,
+    required String requestId,
+    required PdfLimits limits,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_pdf_worker_result(result, serializer);
+          sse_encode_String(requestId, serializer);
+          sse_encode_box_autoadd_pdf_limits(limits, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_pdf_worker_reply,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiPdfValidatePdfWorkerResultConstMeta,
+        argValues: [result, requestId, limits],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPdfValidatePdfWorkerResultConstMeta =>
+      const TaskConstMeta(
+        debugName: "validate_pdf_worker_result",
+        argNames: ["result", "requestId", "limits"],
+      );
+
+  Future<void> Function(int, dynamic)
+  encode_DartFn_Inputs_String_Output_credential_reply_AnyhowException(
+    FutureOr<CredentialReply> Function(String) raw,
+  ) {
+    return (callId, rawArg0) async {
+      final arg0 = dco_decode_String(rawArg0);
+
+      Box<CredentialReply>? rawOutput;
+      Box<AnyhowException>? rawError;
+      try {
+        rawOutput = Box(await raw(arg0));
+      } catch (e, s) {
+        rawError = Box(AnyhowException("$e\n\n$s"));
+      }
+
+      final serializer = SseSerializer(generalizedFrbRustBinding);
+      assert((rawOutput != null) ^ (rawError != null));
+      if (rawOutput != null) {
+        serializer.buffer.putUint8(0);
+        sse_encode_credential_reply(rawOutput.value, serializer);
+      } else {
+        serializer.buffer.putUint8(1);
+        sse_encode_AnyhowException(rawError!.value, serializer);
+      }
+      final output = serializer.intoRaw();
+
+      generalizedFrbRustBinding.dartFnDeliverOutput(
+        callId: callId,
+        ptr: output.ptr,
+        rustVecLen: output.rustVecLen,
+        dataLen: output.dataLen,
+      );
+    };
+  }
+
+  Future<void> Function(int, dynamic)
+  encode_DartFn_Inputs_run_host_request_Output_platform_reply_AnyhowException(
+    FutureOr<PlatformReply> Function(RunHostRequest) raw,
+  ) {
+    return (callId, rawArg0) async {
+      final arg0 = dco_decode_run_host_request(rawArg0);
+
+      Box<PlatformReply>? rawOutput;
+      Box<AnyhowException>? rawError;
+      try {
+        rawOutput = Box(await raw(arg0));
+      } catch (e, s) {
+        rawError = Box(AnyhowException("$e\n\n$s"));
+      }
+
+      final serializer = SseSerializer(generalizedFrbRustBinding);
+      assert((rawOutput != null) ^ (rawError != null));
+      if (rawOutput != null) {
+        serializer.buffer.putUint8(0);
+        sse_encode_platform_reply(rawOutput.value, serializer);
+      } else {
+        serializer.buffer.putUint8(1);
+        sse_encode_AnyhowException(rawError!.value, serializer);
+      }
+      final output = serializer.intoRaw();
+
+      generalizedFrbRustBinding.dartFnDeliverOutput(
+        callId: callId,
+        ptr: output.ptr,
+        rustVecLen: output.rustVecLen,
+        dataLen: output.dataLen,
+      );
+    };
+  }
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_AgentHandle => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_AgentHandle => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle;
+
+  @protected
+  AnyhowException dco_decode_AnyhowException(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return AnyhowException(raw as String);
+  }
+
+  @protected
+  AgentHandle
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return AgentHandleImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  AgentHandle
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return AgentHandleImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  FutureOr<CredentialReply> Function(String)
+  dco_decode_DartFn_Inputs_String_Output_credential_reply_AnyhowException(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError('');
+  }
+
+  @protected
+  FutureOr<PlatformReply> Function(RunHostRequest)
+  dco_decode_DartFn_Inputs_run_host_request_Output_platform_reply_AnyhowException(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError('');
+  }
+
+  @protected
+  Object dco_decode_DartOpaque(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return decodeDartOpaque(raw, generalizedFrbRustBinding);
+  }
+
+  @protected
+  AgentHandle
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return AgentHandleImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  RustStreamSink<AgentAppEvent> dco_decode_StreamSink_agent_app_event_Sse(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError();
+  }
+
   @protected
   String dco_decode_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -148,9 +605,1078 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AgentAppEvent dco_decode_agent_app_event(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return AgentAppEvent(
+      sequence: dco_decode_u_64(arr[0]),
+      conversationId: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  AgentAppSnapshot dco_decode_agent_app_snapshot(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return AgentAppSnapshot(
+      artifacts: dco_decode_list_agent_artifact(arr[0]),
+      retentionLimitBytes: dco_decode_u_64(arr[1]),
+      sequence: dco_decode_u_64(arr[2]),
+      endpoints: dco_decode_list_agent_endpoint_config(arr[3]),
+      servers: dco_decode_list_agent_server_config(arr[4]),
+      profiles: dco_decode_list_agent_profile(arr[5]),
+      conversations: dco_decode_list_agent_conversation(arr[6]),
+      runs: dco_decode_list_agent_run(arr[7]),
+      rules: dco_decode_list_agent_tool_rule(arr[8]),
+    );
+  }
+
+  @protected
+  AgentApprovalBinding dco_decode_agent_approval_binding(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    return AgentApprovalBinding(
+      attemptId: dco_decode_String(arr[0]),
+      key: dco_decode_agent_tool_key(arr[1]),
+      providerCallId: dco_decode_String(arr[2]),
+      definitionDigest: dco_decode_String(arr[3]),
+      argumentsDigest: dco_decode_String(arr[4]),
+      argumentsJson: dco_decode_String(arr[5]),
+      schemaJson: dco_decode_String(arr[6]),
+      destinationDigest: dco_decode_String(arr[7]),
+    );
+  }
+
+  @protected
+  AgentArtifact dco_decode_agent_artifact(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return AgentArtifact(
+      id: dco_decode_String(arr[0]),
+      conversationId: dco_decode_String(arr[1]),
+      name: dco_decode_String(arr[2]),
+      bytes: dco_decode_u_64(arr[3]),
+    );
+  }
+
+  @protected
+  AgentArtifactContent dco_decode_agent_artifact_content(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return AgentArtifactContent(
+      summary: dco_decode_agent_artifact(arr[0]),
+      text: dco_decode_String(arr[1]),
+      privatePath: dco_decode_String(arr[2]),
+    );
+  }
+
+  @protected
+  AgentAttempt dco_decode_agent_attempt(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return AgentAttempt(
+      id: dco_decode_String(arr[0]),
+      state: dco_decode_attempt_state(arr[1]),
+      call: dco_decode_agent_tool_call(arr[2]),
+      binding: dco_decode_opt_box_autoadd_agent_approval_binding(arr[3]),
+    );
+  }
+
+  @protected
+  AgentCommandReply dco_decode_agent_command_reply(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    return AgentCommandReply(
+      history: dco_decode_list_agent_conversation_summary(arr[0]),
+      exportBundle: dco_decode_opt_box_autoadd_agent_export_bundle(arr[1]),
+      models: dco_decode_list_String(arr[2]),
+      toolSupport: dco_decode_opt_box_autoadd_tool_support(arr[3]),
+      discoveredTools: dco_decode_list_String(arr[4]),
+      discoveredRules: dco_decode_list_agent_tool_rule(arr[5]),
+      id: dco_decode_opt_String(arr[6]),
+      artifact: dco_decode_opt_box_autoadd_agent_artifact_content(arr[7]),
+    );
+  }
+
+  @protected
+  AgentContextSelection dco_decode_agent_context_selection(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return AgentContextSelection(
+      messageIds: dco_decode_list_String(arr[0]),
+      summaryIds: dco_decode_list_String(arr[1]),
+    );
+  }
+
+  @protected
+  AgentContextUsage dco_decode_agent_context_usage(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    return AgentContextUsage(
+      estimation: dco_decode_token_estimation(arr[0]),
+      estimatedInputTokens: dco_decode_u_64(arr[1]),
+      outputReserve: dco_decode_u_32(arr[2]),
+      window: dco_decode_u_32(arr[3]),
+      rawBytes: dco_decode_u_64(arr[4]),
+      rawBytesIsLowerBound: dco_decode_bool(arr[5]),
+      provider: dco_decode_opt_box_autoadd_agent_provider_usage(arr[6]),
+      reason: dco_decode_opt_box_autoadd_context_choice_reason(arr[7]),
+    );
+  }
+
+  @protected
+  AgentConversation dco_decode_agent_conversation(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return AgentConversation(
+      id: dco_decode_String(arr[0]),
+      profile: dco_decode_agent_profile_snapshot(arr[1]),
+      messages: dco_decode_list_agent_message(arr[2]),
+      summaries: dco_decode_list_agent_derived_context(arr[3]),
+    );
+  }
+
+  @protected
+  AgentConversationSummary dco_decode_agent_conversation_summary(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return AgentConversationSummary(
+      id: dco_decode_String(arr[0]),
+      title: dco_decode_String(arr[1]),
+      hasUnknownOutcomes: dco_decode_bool(arr[2]),
+    );
+  }
+
+  @protected
+  AgentDerivedContext dco_decode_agent_derived_context(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return AgentDerivedContext(
+      id: dco_decode_String(arr[0]),
+      runId: dco_decode_String(arr[1]),
+      text: dco_decode_String(arr[2]),
+      selection: dco_decode_agent_context_selection(arr[3]),
+      pageReferences: dco_decode_list_agent_page_reference(arr[4]),
+      partialCoverage: dco_decode_bool(arr[5]),
+      unresolvedAttempts: dco_decode_list_String(arr[6]),
+    );
+  }
+
+  @protected
+  AgentEndpointConfig dco_decode_agent_endpoint_config(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return AgentEndpointConfig(
+      id: dco_decode_String(arr[0]),
+      name: dco_decode_String(arr[1]),
+      baseUrl: dco_decode_String(arr[2]),
+      model: dco_decode_String(arr[3]),
+      contextTokens: dco_decode_u_32(arr[4]),
+      maxOutputTokens: dco_decode_u_32(arr[5]),
+      temperature: dco_decode_f_32(arr[6]),
+      allowHttp: dco_decode_bool(arr[7]),
+      credential: dco_decode_opt_String(arr[8]),
+    );
+  }
+
+  @protected
+  AgentExportBundle dco_decode_agent_export_bundle(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 1)
+      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
+    return AgentExportBundle(transcript: dco_decode_agent_artifact(arr[0]));
+  }
+
+  @protected
+  AgentMessage dco_decode_agent_message(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return AgentMessage(
+      id: dco_decode_String(arr[0]),
+      role: dco_decode_String(arr[1]),
+      content: dco_decode_String(arr[2]),
+      calls: dco_decode_list_agent_tool_call(arr[3]),
+      callId: dco_decode_opt_String(arr[4]),
+      sourceEnvelope: dco_decode_opt_String(arr[5]),
+    );
+  }
+
+  @protected
+  AgentPageReference dco_decode_agent_page_reference(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return AgentPageReference(
+      attachmentId: dco_decode_String(arr[0]),
+      physicalPage: dco_decode_u_32(arr[1]),
+    );
+  }
+
+  @protected
+  AgentProfile dco_decode_agent_profile(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return AgentProfile(
+      mode: dco_decode_profile_mode(arr[0]),
+      id: dco_decode_String(arr[1]),
+      name: dco_decode_String(arr[2]),
+      endpointId: dco_decode_String(arr[3]),
+      serverIds: dco_decode_list_String(arr[4]),
+      instructions: dco_decode_String(arr[5]),
+      limits: dco_decode_agent_run_limits(arr[6]),
+    );
+  }
+
+  @protected
+  AgentProfileSnapshot dco_decode_agent_profile_snapshot(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return AgentProfileSnapshot(
+      inferenceDestination: dco_decode_opt_String(arr[0]),
+      mode: dco_decode_profile_mode(arr[1]),
+      profileId: dco_decode_String(arr[2]),
+      revision: dco_decode_i_64(arr[3]),
+      name: dco_decode_String(arr[4]),
+      endpoint: dco_decode_agent_endpoint_config(arr[5]),
+      servers: dco_decode_list_agent_server_config(arr[6]),
+      instructions: dco_decode_String(arr[7]),
+      limits: dco_decode_agent_run_limits(arr[8]),
+    );
+  }
+
+  @protected
+  AgentProviderUsage dco_decode_agent_provider_usage(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return AgentProviderUsage(
+      promptTokens: dco_decode_u_64(arr[0]),
+      completionTokens: dco_decode_u_64(arr[1]),
+    );
+  }
+
+  @protected
+  AgentRun dco_decode_agent_run(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
+    return AgentRun(
+      id: dco_decode_String(arr[0]),
+      conversationId: dco_decode_String(arr[1]),
+      profile: dco_decode_agent_profile_snapshot(arr[2]),
+      state: dco_decode_run_state(arr[3]),
+      inferenceCount: dco_decode_u_32(arr[4]),
+      attemptCount: dco_decode_u_32(arr[5]),
+      activeMs: dco_decode_u_64(arr[6]),
+      partialText: dco_decode_String(arr[7]),
+      failure: dco_decode_opt_String(arr[8]),
+      attempts: dco_decode_list_agent_attempt(arr[9]),
+      context: dco_decode_agent_run_context(arr[10]),
+    );
+  }
+
+  @protected
+  AgentRunContext dco_decode_agent_run_context(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return AgentRunContext(
+      purpose: dco_decode_context_purpose(arr[0]),
+      selection: dco_decode_opt_box_autoadd_agent_context_selection(arr[1]),
+      selectionThroughOrdinal: dco_decode_opt_box_autoadd_i_64(arr[2]),
+      usage: dco_decode_opt_box_autoadd_agent_context_usage(arr[3]),
+      derivedEntry: dco_decode_opt_String(arr[4]),
+      summary: dco_decode_opt_box_autoadd_agent_derived_context(arr[5]),
+    );
+  }
+
+  @protected
+  AgentRunLimits dco_decode_agent_run_limits(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return AgentRunLimits(
+      maxInferenceRequests: dco_decode_u_32(arr[0]),
+      maxToolAttempts: dco_decode_u_32(arr[1]),
+      activeTimeoutMs: dco_decode_u_64(arr[2]),
+    );
+  }
+
+  @protected
+  AgentSecretHeader dco_decode_agent_secret_header(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return AgentSecretHeader(
+      name: dco_decode_String(arr[0]),
+      credential: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  AgentServerConfig dco_decode_agent_server_config(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return AgentServerConfig(
+      id: dco_decode_String(arr[0]),
+      name: dco_decode_String(arr[1]),
+      url: dco_decode_String(arr[2]),
+      allowHttp: dco_decode_bool(arr[3]),
+      secretHeaders: dco_decode_list_agent_secret_header(arr[4]),
+    );
+  }
+
+  @protected
+  AgentToolCall dco_decode_agent_tool_call(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return AgentToolCall(
+      key: dco_decode_agent_tool_key(arr[0]),
+      providerCallId: dco_decode_String(arr[1]),
+      argumentsJson: dco_decode_String(arr[2]),
+      sourceEnvelope: dco_decode_opt_String(arr[3]),
+    );
+  }
+
+  @protected
+  AgentToolKey dco_decode_agent_tool_key(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return AgentToolKey(
+      profileId: dco_decode_String(arr[0]),
+      serverId: dco_decode_opt_String(arr[1]),
+      name: dco_decode_String(arr[2]),
+    );
+  }
+
+  @protected
+  AgentToolRule dco_decode_agent_tool_rule(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return AgentToolRule(
+      key: dco_decode_agent_tool_key(arr[0]),
+      schemaJson: dco_decode_String(arr[1]),
+      schemaDigest: dco_decode_String(arr[2]),
+      destinationDigest: dco_decode_String(arr[3]),
+      rule: dco_decode_permission_rule(arr[4]),
+    );
+  }
+
+  @protected
+  AppCommand dco_decode_app_command(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return AppCommand_SearchConversations(
+          query: dco_decode_String(raw[1]),
+          offset: dco_decode_u_32(raw[2]),
+          limit: dco_decode_u_32(raw[3]),
+        );
+      case 1:
+        return AppCommand_RenameConversation(
+          conversationId: dco_decode_String(raw[1]),
+          title: dco_decode_String(raw[2]),
+        );
+      case 2:
+        return AppCommand_DeleteConversation(
+          conversationId: dco_decode_String(raw[1]),
+          confirmedUnknown: dco_decode_bool(raw[2]),
+        );
+      case 3:
+        return AppCommand_ExportTranscript(
+          conversationId: dco_decode_String(raw[1]),
+          includeToolPayloads: dco_decode_bool(raw[2]),
+        );
+      case 4:
+        return AppCommand_DiscoverModels(endpointId: dco_decode_String(raw[1]));
+      case 5:
+        return AppCommand_ProbeEndpoint(endpointId: dco_decode_String(raw[1]));
+      case 6:
+        return AppCommand_DiscoverServer(
+          profileId: dco_decode_String(raw[1]),
+          serverId: dco_decode_String(raw[2]),
+        );
+      case 7:
+        return AppCommand_CreateArtifact(
+          conversationId: dco_decode_String(raw[1]),
+          name: dco_decode_String(raw[2]),
+          content: dco_decode_String(raw[3]),
+        );
+      case 8:
+        return AppCommand_ReadArtifact(
+          conversationId: dco_decode_String(raw[1]),
+          artifactId: dco_decode_String(raw[2]),
+        );
+      case 9:
+        return AppCommand_DeleteArtifact(
+          conversationId: dco_decode_String(raw[1]),
+          artifactId: dco_decode_String(raw[2]),
+        );
+      case 10:
+        return AppCommand_NewId();
+      case 11:
+        return AppCommand_SaveEndpoint(
+          endpoint: dco_decode_box_autoadd_agent_endpoint_config(raw[1]),
+        );
+      case 12:
+        return AppCommand_SaveServer(
+          server: dco_decode_box_autoadd_agent_server_config(raw[1]),
+        );
+      case 13:
+        return AppCommand_SaveProfile(
+          profile: dco_decode_box_autoadd_agent_profile(raw[1]),
+        );
+      case 14:
+        return AppCommand_CreateConversation(
+          profileId: dco_decode_String(raw[1]),
+        );
+      case 15:
+        return AppCommand_ApplyProfile(
+          conversationId: dco_decode_String(raw[1]),
+          profileId: dco_decode_String(raw[2]),
+        );
+      case 16:
+        return AppCommand_SetRule(
+          key: dco_decode_box_autoadd_agent_tool_key(raw[1]),
+          schemaDigest: dco_decode_String(raw[2]),
+          destinationDigest: dco_decode_String(raw[3]),
+          rule: dco_decode_permission_rule(raw[4]),
+        );
+      case 17:
+        return AppCommand_StartTurn(
+          conversationId: dco_decode_String(raw[1]),
+          text: dco_decode_String(raw[2]),
+        );
+      case 18:
+        return AppCommand_PlatformPause(
+          runId: dco_decode_String(raw[1]),
+          generation: dco_decode_String(raw[2]),
+        );
+      case 19:
+        return AppCommand_PlatformStop(
+          runId: dco_decode_String(raw[1]),
+          generation: dco_decode_String(raw[2]),
+        );
+      case 20:
+        return AppCommand_CancelRun(runId: dco_decode_String(raw[1]));
+      case 21:
+        return AppCommand_ResumeRun(runId: dco_decode_String(raw[1]));
+      case 22:
+        return AppCommand_Approve(
+          binding: dco_decode_box_autoadd_agent_approval_binding(raw[1]),
+        );
+      case 23:
+        return AppCommand_Deny(attemptId: dco_decode_String(raw[1]));
+      case 24:
+        return AppCommand_SummarizeContext(
+          conversationId: dco_decode_String(raw[1]),
+          selection: dco_decode_box_autoadd_agent_context_selection(raw[2]),
+        );
+      case 25:
+        return AppCommand_ApplyContextSelection(
+          runId: dco_decode_String(raw[1]),
+          selection: dco_decode_box_autoadd_agent_context_selection(raw[2]),
+        );
+      case 26:
+        return AppCommand_AcknowledgeContextDisclosure(
+          conversationId: dco_decode_String(raw[1]),
+          snapshotRevision: dco_decode_i_64(raw[2]),
+          destination: dco_decode_String(raw[3]),
+        );
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  AppError dco_decode_app_error(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 1)
+      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
+    return AppError(field0: dco_decode_pdf_failure(arr[0]));
+  }
+
+  @protected
+  AttemptState dco_decode_attempt_state(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return AttemptState.values[raw as int];
+  }
+
+  @protected
+  bool dco_decode_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as bool;
+  }
+
+  @protected
+  AgentApprovalBinding dco_decode_box_autoadd_agent_approval_binding(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_agent_approval_binding(raw);
+  }
+
+  @protected
+  AgentArtifactContent dco_decode_box_autoadd_agent_artifact_content(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_agent_artifact_content(raw);
+  }
+
+  @protected
+  AgentContextSelection dco_decode_box_autoadd_agent_context_selection(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_agent_context_selection(raw);
+  }
+
+  @protected
+  AgentContextUsage dco_decode_box_autoadd_agent_context_usage(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_agent_context_usage(raw);
+  }
+
+  @protected
+  AgentDerivedContext dco_decode_box_autoadd_agent_derived_context(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_agent_derived_context(raw);
+  }
+
+  @protected
+  AgentEndpointConfig dco_decode_box_autoadd_agent_endpoint_config(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_agent_endpoint_config(raw);
+  }
+
+  @protected
+  AgentExportBundle dco_decode_box_autoadd_agent_export_bundle(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_agent_export_bundle(raw);
+  }
+
+  @protected
+  AgentProfile dco_decode_box_autoadd_agent_profile(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_agent_profile(raw);
+  }
+
+  @protected
+  AgentProviderUsage dco_decode_box_autoadd_agent_provider_usage(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_agent_provider_usage(raw);
+  }
+
+  @protected
+  AgentServerConfig dco_decode_box_autoadd_agent_server_config(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_agent_server_config(raw);
+  }
+
+  @protected
+  AgentToolKey dco_decode_box_autoadd_agent_tool_key(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_agent_tool_key(raw);
+  }
+
+  @protected
+  AppCommand dco_decode_box_autoadd_app_command(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_app_command(raw);
+  }
+
+  @protected
+  ContextChoiceReason dco_decode_box_autoadd_context_choice_reason(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_context_choice_reason(raw);
+  }
+
+  @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_i_64(raw);
+  }
+
+  @protected
+  PdfLimits dco_decode_box_autoadd_pdf_limits(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_pdf_limits(raw);
+  }
+
+  @protected
+  PdfWorkerResult dco_decode_box_autoadd_pdf_worker_result(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_pdf_worker_result(raw);
+  }
+
+  @protected
+  ToolSupport dco_decode_box_autoadd_tool_support(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_tool_support(raw);
+  }
+
+  @protected
+  ContextChoiceReason dco_decode_context_choice_reason(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return ContextChoiceReason.values[raw as int];
+  }
+
+  @protected
+  ContextPurpose dco_decode_context_purpose(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return ContextPurpose.values[raw as int];
+  }
+
+  @protected
+  CoreError dco_decode_core_error(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return CoreError.values[raw as int];
+  }
+
+  @protected
+  CredentialReply dco_decode_credential_reply(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return CredentialReply_Value(dco_decode_String(raw[1]));
+      case 1:
+        return CredentialReply_Missing();
+      case 2:
+        return CredentialReply_Failed(dco_decode_String(raw[1]));
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  double dco_decode_f_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as double;
+  }
+
+  @protected
+  int dco_decode_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
+  }
+
+  @protected
+  PlatformInt64 dco_decode_isize(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
+  }
+
+  @protected
+  List<String> dco_decode_list_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_String).toList();
+  }
+
+  @protected
+  List<AgentArtifact> dco_decode_list_agent_artifact(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_agent_artifact).toList();
+  }
+
+  @protected
+  List<AgentAttempt> dco_decode_list_agent_attempt(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_agent_attempt).toList();
+  }
+
+  @protected
+  List<AgentConversation> dco_decode_list_agent_conversation(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_agent_conversation).toList();
+  }
+
+  @protected
+  List<AgentConversationSummary> dco_decode_list_agent_conversation_summary(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_agent_conversation_summary)
+        .toList();
+  }
+
+  @protected
+  List<AgentDerivedContext> dco_decode_list_agent_derived_context(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_agent_derived_context)
+        .toList();
+  }
+
+  @protected
+  List<AgentEndpointConfig> dco_decode_list_agent_endpoint_config(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_agent_endpoint_config)
+        .toList();
+  }
+
+  @protected
+  List<AgentMessage> dco_decode_list_agent_message(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_agent_message).toList();
+  }
+
+  @protected
+  List<AgentPageReference> dco_decode_list_agent_page_reference(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_agent_page_reference).toList();
+  }
+
+  @protected
+  List<AgentProfile> dco_decode_list_agent_profile(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_agent_profile).toList();
+  }
+
+  @protected
+  List<AgentRun> dco_decode_list_agent_run(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_agent_run).toList();
+  }
+
+  @protected
+  List<AgentSecretHeader> dco_decode_list_agent_secret_header(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_agent_secret_header).toList();
+  }
+
+  @protected
+  List<AgentServerConfig> dco_decode_list_agent_server_config(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_agent_server_config).toList();
+  }
+
+  @protected
+  List<AgentToolCall> dco_decode_list_agent_tool_call(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_agent_tool_call).toList();
+  }
+
+  @protected
+  List<AgentToolRule> dco_decode_list_agent_tool_rule(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_agent_tool_rule).toList();
+  }
+
+  @protected
+  List<PageText> dco_decode_list_page_text(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_page_text).toList();
+  }
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as Uint8List;
+  }
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  AgentApprovalBinding? dco_decode_opt_box_autoadd_agent_approval_binding(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_agent_approval_binding(raw);
+  }
+
+  @protected
+  AgentArtifactContent? dco_decode_opt_box_autoadd_agent_artifact_content(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_agent_artifact_content(raw);
+  }
+
+  @protected
+  AgentContextSelection? dco_decode_opt_box_autoadd_agent_context_selection(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_agent_context_selection(raw);
+  }
+
+  @protected
+  AgentContextUsage? dco_decode_opt_box_autoadd_agent_context_usage(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_agent_context_usage(raw);
+  }
+
+  @protected
+  AgentDerivedContext? dco_decode_opt_box_autoadd_agent_derived_context(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_agent_derived_context(raw);
+  }
+
+  @protected
+  AgentExportBundle? dco_decode_opt_box_autoadd_agent_export_bundle(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_agent_export_bundle(raw);
+  }
+
+  @protected
+  AgentProviderUsage? dco_decode_opt_box_autoadd_agent_provider_usage(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_agent_provider_usage(raw);
+  }
+
+  @protected
+  ContextChoiceReason? dco_decode_opt_box_autoadd_context_choice_reason(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_context_choice_reason(raw);
+  }
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_i_64(raw);
+  }
+
+  @protected
+  ToolSupport? dco_decode_opt_box_autoadd_tool_support(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_tool_support(raw);
+  }
+
+  @protected
+  PageStatus dco_decode_page_status(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return PageStatus.values[raw as int];
+  }
+
+  @protected
+  PageText dco_decode_page_text(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return PageText(
+      physicalPage: dco_decode_u_32(arr[0]),
+      text: dco_decode_String(arr[1]),
+      status: dco_decode_page_status(arr[2]),
+    );
+  }
+
+  @protected
+  PdfExtraction dco_decode_pdf_extraction(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return PdfExtraction(
+      pages: dco_decode_list_page_text(arr[0]),
+      complete: dco_decode_bool(arr[1]),
+    );
+  }
+
+  @protected
+  PdfFailure dco_decode_pdf_failure(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return PdfFailure.values[raw as int];
+  }
+
+  @protected
+  PdfLimits dco_decode_pdf_limits(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return PdfLimits(
+      maxInputBytes: dco_decode_u_32(arr[0]),
+      maxPages: dco_decode_u_32(arr[1]),
+      maxTextBytes: dco_decode_u_32(arr[2]),
+      maxDecompressedBytes: dco_decode_u_32(arr[3]),
+    );
+  }
+
+  @protected
+  PdfWorkerReply dco_decode_pdf_worker_reply(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return PdfWorkerReply_Extracted(
+          dco_decode_box_autoadd_pdf_worker_result(raw[1]),
+        );
+      case 1:
+        return PdfWorkerReply_Failed(dco_decode_pdf_failure(raw[1]));
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  PdfWorkerResult dco_decode_pdf_worker_result(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return PdfWorkerResult(
+      requestId: dco_decode_String(arr[0]),
+      extraction: dco_decode_pdf_extraction(arr[1]),
+    );
+  }
+
+  @protected
+  PermissionRule dco_decode_permission_rule(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return PermissionRule.values[raw as int];
+  }
+
+  @protected
+  PlatformReply dco_decode_platform_reply(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return PlatformReply_Ok();
+      case 1:
+        return PlatformReply_Failed(dco_decode_String(raw[1]));
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  ProfileMode dco_decode_profile_mode(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return ProfileMode.values[raw as int];
+  }
+
+  @protected
+  RunHostRequest dco_decode_run_host_request(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return RunHostRequest(
+      runId: dco_decode_String(arr[0]),
+      generation: dco_decode_String(arr[1]),
+      conversationId: dco_decode_String(arr[2]),
+      active: dco_decode_bool(arr[3]),
+      waitingApproval: dco_decode_bool(arr[4]),
+    );
+  }
+
+  @protected
+  RunState dco_decode_run_state(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return RunState.values[raw as int];
+  }
+
+  @protected
+  TokenEstimation dco_decode_token_estimation(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return TokenEstimation.values[raw as int];
+  }
+
+  @protected
+  ToolSupport dco_decode_tool_support(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return ToolSupport.values[raw as int];
+  }
+
+  @protected
+  int dco_decode_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  BigInt dco_decode_u_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeU64(raw);
   }
 
   @protected
@@ -166,6 +1692,70 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  BigInt dco_decode_usize(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeU64(raw);
+  }
+
+  @protected
+  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_String(deserializer);
+    return AnyhowException(inner);
+  }
+
+  @protected
+  AgentHandle
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return AgentHandleImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  AgentHandle
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return AgentHandleImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  Object sse_decode_DartOpaque(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_isize(deserializer);
+    return decodeDartOpaque(inner, generalizedFrbRustBinding);
+  }
+
+  @protected
+  AgentHandle
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return AgentHandleImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  RustStreamSink<AgentAppEvent> sse_decode_StreamSink_agent_app_event_Sse(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    throw UnimplementedError('Unreachable ()');
+  }
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_list_prim_u_8_strict(deserializer);
@@ -173,10 +1763,1422 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AgentAppEvent sse_decode_agent_app_event(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_sequence = sse_decode_u_64(deserializer);
+    var var_conversationId = sse_decode_String(deserializer);
+    return AgentAppEvent(
+      sequence: var_sequence,
+      conversationId: var_conversationId,
+    );
+  }
+
+  @protected
+  AgentAppSnapshot sse_decode_agent_app_snapshot(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_artifacts = sse_decode_list_agent_artifact(deserializer);
+    var var_retentionLimitBytes = sse_decode_u_64(deserializer);
+    var var_sequence = sse_decode_u_64(deserializer);
+    var var_endpoints = sse_decode_list_agent_endpoint_config(deserializer);
+    var var_servers = sse_decode_list_agent_server_config(deserializer);
+    var var_profiles = sse_decode_list_agent_profile(deserializer);
+    var var_conversations = sse_decode_list_agent_conversation(deserializer);
+    var var_runs = sse_decode_list_agent_run(deserializer);
+    var var_rules = sse_decode_list_agent_tool_rule(deserializer);
+    return AgentAppSnapshot(
+      artifacts: var_artifacts,
+      retentionLimitBytes: var_retentionLimitBytes,
+      sequence: var_sequence,
+      endpoints: var_endpoints,
+      servers: var_servers,
+      profiles: var_profiles,
+      conversations: var_conversations,
+      runs: var_runs,
+      rules: var_rules,
+    );
+  }
+
+  @protected
+  AgentApprovalBinding sse_decode_agent_approval_binding(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_attemptId = sse_decode_String(deserializer);
+    var var_key = sse_decode_agent_tool_key(deserializer);
+    var var_providerCallId = sse_decode_String(deserializer);
+    var var_definitionDigest = sse_decode_String(deserializer);
+    var var_argumentsDigest = sse_decode_String(deserializer);
+    var var_argumentsJson = sse_decode_String(deserializer);
+    var var_schemaJson = sse_decode_String(deserializer);
+    var var_destinationDigest = sse_decode_String(deserializer);
+    return AgentApprovalBinding(
+      attemptId: var_attemptId,
+      key: var_key,
+      providerCallId: var_providerCallId,
+      definitionDigest: var_definitionDigest,
+      argumentsDigest: var_argumentsDigest,
+      argumentsJson: var_argumentsJson,
+      schemaJson: var_schemaJson,
+      destinationDigest: var_destinationDigest,
+    );
+  }
+
+  @protected
+  AgentArtifact sse_decode_agent_artifact(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_conversationId = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_bytes = sse_decode_u_64(deserializer);
+    return AgentArtifact(
+      id: var_id,
+      conversationId: var_conversationId,
+      name: var_name,
+      bytes: var_bytes,
+    );
+  }
+
+  @protected
+  AgentArtifactContent sse_decode_agent_artifact_content(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_summary = sse_decode_agent_artifact(deserializer);
+    var var_text = sse_decode_String(deserializer);
+    var var_privatePath = sse_decode_String(deserializer);
+    return AgentArtifactContent(
+      summary: var_summary,
+      text: var_text,
+      privatePath: var_privatePath,
+    );
+  }
+
+  @protected
+  AgentAttempt sse_decode_agent_attempt(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_state = sse_decode_attempt_state(deserializer);
+    var var_call = sse_decode_agent_tool_call(deserializer);
+    var var_binding = sse_decode_opt_box_autoadd_agent_approval_binding(
+      deserializer,
+    );
+    return AgentAttempt(
+      id: var_id,
+      state: var_state,
+      call: var_call,
+      binding: var_binding,
+    );
+  }
+
+  @protected
+  AgentCommandReply sse_decode_agent_command_reply(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_history = sse_decode_list_agent_conversation_summary(deserializer);
+    var var_exportBundle = sse_decode_opt_box_autoadd_agent_export_bundle(
+      deserializer,
+    );
+    var var_models = sse_decode_list_String(deserializer);
+    var var_toolSupport = sse_decode_opt_box_autoadd_tool_support(deserializer);
+    var var_discoveredTools = sse_decode_list_String(deserializer);
+    var var_discoveredRules = sse_decode_list_agent_tool_rule(deserializer);
+    var var_id = sse_decode_opt_String(deserializer);
+    var var_artifact = sse_decode_opt_box_autoadd_agent_artifact_content(
+      deserializer,
+    );
+    return AgentCommandReply(
+      history: var_history,
+      exportBundle: var_exportBundle,
+      models: var_models,
+      toolSupport: var_toolSupport,
+      discoveredTools: var_discoveredTools,
+      discoveredRules: var_discoveredRules,
+      id: var_id,
+      artifact: var_artifact,
+    );
+  }
+
+  @protected
+  AgentContextSelection sse_decode_agent_context_selection(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_messageIds = sse_decode_list_String(deserializer);
+    var var_summaryIds = sse_decode_list_String(deserializer);
+    return AgentContextSelection(
+      messageIds: var_messageIds,
+      summaryIds: var_summaryIds,
+    );
+  }
+
+  @protected
+  AgentContextUsage sse_decode_agent_context_usage(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_estimation = sse_decode_token_estimation(deserializer);
+    var var_estimatedInputTokens = sse_decode_u_64(deserializer);
+    var var_outputReserve = sse_decode_u_32(deserializer);
+    var var_window = sse_decode_u_32(deserializer);
+    var var_rawBytes = sse_decode_u_64(deserializer);
+    var var_rawBytesIsLowerBound = sse_decode_bool(deserializer);
+    var var_provider = sse_decode_opt_box_autoadd_agent_provider_usage(
+      deserializer,
+    );
+    var var_reason = sse_decode_opt_box_autoadd_context_choice_reason(
+      deserializer,
+    );
+    return AgentContextUsage(
+      estimation: var_estimation,
+      estimatedInputTokens: var_estimatedInputTokens,
+      outputReserve: var_outputReserve,
+      window: var_window,
+      rawBytes: var_rawBytes,
+      rawBytesIsLowerBound: var_rawBytesIsLowerBound,
+      provider: var_provider,
+      reason: var_reason,
+    );
+  }
+
+  @protected
+  AgentConversation sse_decode_agent_conversation(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_profile = sse_decode_agent_profile_snapshot(deserializer);
+    var var_messages = sse_decode_list_agent_message(deserializer);
+    var var_summaries = sse_decode_list_agent_derived_context(deserializer);
+    return AgentConversation(
+      id: var_id,
+      profile: var_profile,
+      messages: var_messages,
+      summaries: var_summaries,
+    );
+  }
+
+  @protected
+  AgentConversationSummary sse_decode_agent_conversation_summary(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_title = sse_decode_String(deserializer);
+    var var_hasUnknownOutcomes = sse_decode_bool(deserializer);
+    return AgentConversationSummary(
+      id: var_id,
+      title: var_title,
+      hasUnknownOutcomes: var_hasUnknownOutcomes,
+    );
+  }
+
+  @protected
+  AgentDerivedContext sse_decode_agent_derived_context(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_runId = sse_decode_String(deserializer);
+    var var_text = sse_decode_String(deserializer);
+    var var_selection = sse_decode_agent_context_selection(deserializer);
+    var var_pageReferences = sse_decode_list_agent_page_reference(deserializer);
+    var var_partialCoverage = sse_decode_bool(deserializer);
+    var var_unresolvedAttempts = sse_decode_list_String(deserializer);
+    return AgentDerivedContext(
+      id: var_id,
+      runId: var_runId,
+      text: var_text,
+      selection: var_selection,
+      pageReferences: var_pageReferences,
+      partialCoverage: var_partialCoverage,
+      unresolvedAttempts: var_unresolvedAttempts,
+    );
+  }
+
+  @protected
+  AgentEndpointConfig sse_decode_agent_endpoint_config(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_baseUrl = sse_decode_String(deserializer);
+    var var_model = sse_decode_String(deserializer);
+    var var_contextTokens = sse_decode_u_32(deserializer);
+    var var_maxOutputTokens = sse_decode_u_32(deserializer);
+    var var_temperature = sse_decode_f_32(deserializer);
+    var var_allowHttp = sse_decode_bool(deserializer);
+    var var_credential = sse_decode_opt_String(deserializer);
+    return AgentEndpointConfig(
+      id: var_id,
+      name: var_name,
+      baseUrl: var_baseUrl,
+      model: var_model,
+      contextTokens: var_contextTokens,
+      maxOutputTokens: var_maxOutputTokens,
+      temperature: var_temperature,
+      allowHttp: var_allowHttp,
+      credential: var_credential,
+    );
+  }
+
+  @protected
+  AgentExportBundle sse_decode_agent_export_bundle(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_transcript = sse_decode_agent_artifact(deserializer);
+    return AgentExportBundle(transcript: var_transcript);
+  }
+
+  @protected
+  AgentMessage sse_decode_agent_message(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_role = sse_decode_String(deserializer);
+    var var_content = sse_decode_String(deserializer);
+    var var_calls = sse_decode_list_agent_tool_call(deserializer);
+    var var_callId = sse_decode_opt_String(deserializer);
+    var var_sourceEnvelope = sse_decode_opt_String(deserializer);
+    return AgentMessage(
+      id: var_id,
+      role: var_role,
+      content: var_content,
+      calls: var_calls,
+      callId: var_callId,
+      sourceEnvelope: var_sourceEnvelope,
+    );
+  }
+
+  @protected
+  AgentPageReference sse_decode_agent_page_reference(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_attachmentId = sse_decode_String(deserializer);
+    var var_physicalPage = sse_decode_u_32(deserializer);
+    return AgentPageReference(
+      attachmentId: var_attachmentId,
+      physicalPage: var_physicalPage,
+    );
+  }
+
+  @protected
+  AgentProfile sse_decode_agent_profile(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_mode = sse_decode_profile_mode(deserializer);
+    var var_id = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_endpointId = sse_decode_String(deserializer);
+    var var_serverIds = sse_decode_list_String(deserializer);
+    var var_instructions = sse_decode_String(deserializer);
+    var var_limits = sse_decode_agent_run_limits(deserializer);
+    return AgentProfile(
+      mode: var_mode,
+      id: var_id,
+      name: var_name,
+      endpointId: var_endpointId,
+      serverIds: var_serverIds,
+      instructions: var_instructions,
+      limits: var_limits,
+    );
+  }
+
+  @protected
+  AgentProfileSnapshot sse_decode_agent_profile_snapshot(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_inferenceDestination = sse_decode_opt_String(deserializer);
+    var var_mode = sse_decode_profile_mode(deserializer);
+    var var_profileId = sse_decode_String(deserializer);
+    var var_revision = sse_decode_i_64(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_endpoint = sse_decode_agent_endpoint_config(deserializer);
+    var var_servers = sse_decode_list_agent_server_config(deserializer);
+    var var_instructions = sse_decode_String(deserializer);
+    var var_limits = sse_decode_agent_run_limits(deserializer);
+    return AgentProfileSnapshot(
+      inferenceDestination: var_inferenceDestination,
+      mode: var_mode,
+      profileId: var_profileId,
+      revision: var_revision,
+      name: var_name,
+      endpoint: var_endpoint,
+      servers: var_servers,
+      instructions: var_instructions,
+      limits: var_limits,
+    );
+  }
+
+  @protected
+  AgentProviderUsage sse_decode_agent_provider_usage(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_promptTokens = sse_decode_u_64(deserializer);
+    var var_completionTokens = sse_decode_u_64(deserializer);
+    return AgentProviderUsage(
+      promptTokens: var_promptTokens,
+      completionTokens: var_completionTokens,
+    );
+  }
+
+  @protected
+  AgentRun sse_decode_agent_run(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_conversationId = sse_decode_String(deserializer);
+    var var_profile = sse_decode_agent_profile_snapshot(deserializer);
+    var var_state = sse_decode_run_state(deserializer);
+    var var_inferenceCount = sse_decode_u_32(deserializer);
+    var var_attemptCount = sse_decode_u_32(deserializer);
+    var var_activeMs = sse_decode_u_64(deserializer);
+    var var_partialText = sse_decode_String(deserializer);
+    var var_failure = sse_decode_opt_String(deserializer);
+    var var_attempts = sse_decode_list_agent_attempt(deserializer);
+    var var_context = sse_decode_agent_run_context(deserializer);
+    return AgentRun(
+      id: var_id,
+      conversationId: var_conversationId,
+      profile: var_profile,
+      state: var_state,
+      inferenceCount: var_inferenceCount,
+      attemptCount: var_attemptCount,
+      activeMs: var_activeMs,
+      partialText: var_partialText,
+      failure: var_failure,
+      attempts: var_attempts,
+      context: var_context,
+    );
+  }
+
+  @protected
+  AgentRunContext sse_decode_agent_run_context(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_purpose = sse_decode_context_purpose(deserializer);
+    var var_selection = sse_decode_opt_box_autoadd_agent_context_selection(
+      deserializer,
+    );
+    var var_selectionThroughOrdinal = sse_decode_opt_box_autoadd_i_64(
+      deserializer,
+    );
+    var var_usage = sse_decode_opt_box_autoadd_agent_context_usage(
+      deserializer,
+    );
+    var var_derivedEntry = sse_decode_opt_String(deserializer);
+    var var_summary = sse_decode_opt_box_autoadd_agent_derived_context(
+      deserializer,
+    );
+    return AgentRunContext(
+      purpose: var_purpose,
+      selection: var_selection,
+      selectionThroughOrdinal: var_selectionThroughOrdinal,
+      usage: var_usage,
+      derivedEntry: var_derivedEntry,
+      summary: var_summary,
+    );
+  }
+
+  @protected
+  AgentRunLimits sse_decode_agent_run_limits(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_maxInferenceRequests = sse_decode_u_32(deserializer);
+    var var_maxToolAttempts = sse_decode_u_32(deserializer);
+    var var_activeTimeoutMs = sse_decode_u_64(deserializer);
+    return AgentRunLimits(
+      maxInferenceRequests: var_maxInferenceRequests,
+      maxToolAttempts: var_maxToolAttempts,
+      activeTimeoutMs: var_activeTimeoutMs,
+    );
+  }
+
+  @protected
+  AgentSecretHeader sse_decode_agent_secret_header(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_name = sse_decode_String(deserializer);
+    var var_credential = sse_decode_String(deserializer);
+    return AgentSecretHeader(name: var_name, credential: var_credential);
+  }
+
+  @protected
+  AgentServerConfig sse_decode_agent_server_config(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_url = sse_decode_String(deserializer);
+    var var_allowHttp = sse_decode_bool(deserializer);
+    var var_secretHeaders = sse_decode_list_agent_secret_header(deserializer);
+    return AgentServerConfig(
+      id: var_id,
+      name: var_name,
+      url: var_url,
+      allowHttp: var_allowHttp,
+      secretHeaders: var_secretHeaders,
+    );
+  }
+
+  @protected
+  AgentToolCall sse_decode_agent_tool_call(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_key = sse_decode_agent_tool_key(deserializer);
+    var var_providerCallId = sse_decode_String(deserializer);
+    var var_argumentsJson = sse_decode_String(deserializer);
+    var var_sourceEnvelope = sse_decode_opt_String(deserializer);
+    return AgentToolCall(
+      key: var_key,
+      providerCallId: var_providerCallId,
+      argumentsJson: var_argumentsJson,
+      sourceEnvelope: var_sourceEnvelope,
+    );
+  }
+
+  @protected
+  AgentToolKey sse_decode_agent_tool_key(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_profileId = sse_decode_String(deserializer);
+    var var_serverId = sse_decode_opt_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    return AgentToolKey(
+      profileId: var_profileId,
+      serverId: var_serverId,
+      name: var_name,
+    );
+  }
+
+  @protected
+  AgentToolRule sse_decode_agent_tool_rule(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_key = sse_decode_agent_tool_key(deserializer);
+    var var_schemaJson = sse_decode_String(deserializer);
+    var var_schemaDigest = sse_decode_String(deserializer);
+    var var_destinationDigest = sse_decode_String(deserializer);
+    var var_rule = sse_decode_permission_rule(deserializer);
+    return AgentToolRule(
+      key: var_key,
+      schemaJson: var_schemaJson,
+      schemaDigest: var_schemaDigest,
+      destinationDigest: var_destinationDigest,
+      rule: var_rule,
+    );
+  }
+
+  @protected
+  AppCommand sse_decode_app_command(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_query = sse_decode_String(deserializer);
+        var var_offset = sse_decode_u_32(deserializer);
+        var var_limit = sse_decode_u_32(deserializer);
+        return AppCommand_SearchConversations(
+          query: var_query,
+          offset: var_offset,
+          limit: var_limit,
+        );
+      case 1:
+        var var_conversationId = sse_decode_String(deserializer);
+        var var_title = sse_decode_String(deserializer);
+        return AppCommand_RenameConversation(
+          conversationId: var_conversationId,
+          title: var_title,
+        );
+      case 2:
+        var var_conversationId = sse_decode_String(deserializer);
+        var var_confirmedUnknown = sse_decode_bool(deserializer);
+        return AppCommand_DeleteConversation(
+          conversationId: var_conversationId,
+          confirmedUnknown: var_confirmedUnknown,
+        );
+      case 3:
+        var var_conversationId = sse_decode_String(deserializer);
+        var var_includeToolPayloads = sse_decode_bool(deserializer);
+        return AppCommand_ExportTranscript(
+          conversationId: var_conversationId,
+          includeToolPayloads: var_includeToolPayloads,
+        );
+      case 4:
+        var var_endpointId = sse_decode_String(deserializer);
+        return AppCommand_DiscoverModels(endpointId: var_endpointId);
+      case 5:
+        var var_endpointId = sse_decode_String(deserializer);
+        return AppCommand_ProbeEndpoint(endpointId: var_endpointId);
+      case 6:
+        var var_profileId = sse_decode_String(deserializer);
+        var var_serverId = sse_decode_String(deserializer);
+        return AppCommand_DiscoverServer(
+          profileId: var_profileId,
+          serverId: var_serverId,
+        );
+      case 7:
+        var var_conversationId = sse_decode_String(deserializer);
+        var var_name = sse_decode_String(deserializer);
+        var var_content = sse_decode_String(deserializer);
+        return AppCommand_CreateArtifact(
+          conversationId: var_conversationId,
+          name: var_name,
+          content: var_content,
+        );
+      case 8:
+        var var_conversationId = sse_decode_String(deserializer);
+        var var_artifactId = sse_decode_String(deserializer);
+        return AppCommand_ReadArtifact(
+          conversationId: var_conversationId,
+          artifactId: var_artifactId,
+        );
+      case 9:
+        var var_conversationId = sse_decode_String(deserializer);
+        var var_artifactId = sse_decode_String(deserializer);
+        return AppCommand_DeleteArtifact(
+          conversationId: var_conversationId,
+          artifactId: var_artifactId,
+        );
+      case 10:
+        return AppCommand_NewId();
+      case 11:
+        var var_endpoint = sse_decode_box_autoadd_agent_endpoint_config(
+          deserializer,
+        );
+        return AppCommand_SaveEndpoint(endpoint: var_endpoint);
+      case 12:
+        var var_server = sse_decode_box_autoadd_agent_server_config(
+          deserializer,
+        );
+        return AppCommand_SaveServer(server: var_server);
+      case 13:
+        var var_profile = sse_decode_box_autoadd_agent_profile(deserializer);
+        return AppCommand_SaveProfile(profile: var_profile);
+      case 14:
+        var var_profileId = sse_decode_String(deserializer);
+        return AppCommand_CreateConversation(profileId: var_profileId);
+      case 15:
+        var var_conversationId = sse_decode_String(deserializer);
+        var var_profileId = sse_decode_String(deserializer);
+        return AppCommand_ApplyProfile(
+          conversationId: var_conversationId,
+          profileId: var_profileId,
+        );
+      case 16:
+        var var_key = sse_decode_box_autoadd_agent_tool_key(deserializer);
+        var var_schemaDigest = sse_decode_String(deserializer);
+        var var_destinationDigest = sse_decode_String(deserializer);
+        var var_rule = sse_decode_permission_rule(deserializer);
+        return AppCommand_SetRule(
+          key: var_key,
+          schemaDigest: var_schemaDigest,
+          destinationDigest: var_destinationDigest,
+          rule: var_rule,
+        );
+      case 17:
+        var var_conversationId = sse_decode_String(deserializer);
+        var var_text = sse_decode_String(deserializer);
+        return AppCommand_StartTurn(
+          conversationId: var_conversationId,
+          text: var_text,
+        );
+      case 18:
+        var var_runId = sse_decode_String(deserializer);
+        var var_generation = sse_decode_String(deserializer);
+        return AppCommand_PlatformPause(
+          runId: var_runId,
+          generation: var_generation,
+        );
+      case 19:
+        var var_runId = sse_decode_String(deserializer);
+        var var_generation = sse_decode_String(deserializer);
+        return AppCommand_PlatformStop(
+          runId: var_runId,
+          generation: var_generation,
+        );
+      case 20:
+        var var_runId = sse_decode_String(deserializer);
+        return AppCommand_CancelRun(runId: var_runId);
+      case 21:
+        var var_runId = sse_decode_String(deserializer);
+        return AppCommand_ResumeRun(runId: var_runId);
+      case 22:
+        var var_binding = sse_decode_box_autoadd_agent_approval_binding(
+          deserializer,
+        );
+        return AppCommand_Approve(binding: var_binding);
+      case 23:
+        var var_attemptId = sse_decode_String(deserializer);
+        return AppCommand_Deny(attemptId: var_attemptId);
+      case 24:
+        var var_conversationId = sse_decode_String(deserializer);
+        var var_selection = sse_decode_box_autoadd_agent_context_selection(
+          deserializer,
+        );
+        return AppCommand_SummarizeContext(
+          conversationId: var_conversationId,
+          selection: var_selection,
+        );
+      case 25:
+        var var_runId = sse_decode_String(deserializer);
+        var var_selection = sse_decode_box_autoadd_agent_context_selection(
+          deserializer,
+        );
+        return AppCommand_ApplyContextSelection(
+          runId: var_runId,
+          selection: var_selection,
+        );
+      case 26:
+        var var_conversationId = sse_decode_String(deserializer);
+        var var_snapshotRevision = sse_decode_i_64(deserializer);
+        var var_destination = sse_decode_String(deserializer);
+        return AppCommand_AcknowledgeContextDisclosure(
+          conversationId: var_conversationId,
+          snapshotRevision: var_snapshotRevision,
+          destination: var_destination,
+        );
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  AppError sse_decode_app_error(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_field0 = sse_decode_pdf_failure(deserializer);
+    return AppError(field0: var_field0);
+  }
+
+  @protected
+  AttemptState sse_decode_attempt_state(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return AttemptState.values[inner];
+  }
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint8() != 0;
+  }
+
+  @protected
+  AgentApprovalBinding sse_decode_box_autoadd_agent_approval_binding(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_agent_approval_binding(deserializer));
+  }
+
+  @protected
+  AgentArtifactContent sse_decode_box_autoadd_agent_artifact_content(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_agent_artifact_content(deserializer));
+  }
+
+  @protected
+  AgentContextSelection sse_decode_box_autoadd_agent_context_selection(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_agent_context_selection(deserializer));
+  }
+
+  @protected
+  AgentContextUsage sse_decode_box_autoadd_agent_context_usage(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_agent_context_usage(deserializer));
+  }
+
+  @protected
+  AgentDerivedContext sse_decode_box_autoadd_agent_derived_context(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_agent_derived_context(deserializer));
+  }
+
+  @protected
+  AgentEndpointConfig sse_decode_box_autoadd_agent_endpoint_config(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_agent_endpoint_config(deserializer));
+  }
+
+  @protected
+  AgentExportBundle sse_decode_box_autoadd_agent_export_bundle(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_agent_export_bundle(deserializer));
+  }
+
+  @protected
+  AgentProfile sse_decode_box_autoadd_agent_profile(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_agent_profile(deserializer));
+  }
+
+  @protected
+  AgentProviderUsage sse_decode_box_autoadd_agent_provider_usage(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_agent_provider_usage(deserializer));
+  }
+
+  @protected
+  AgentServerConfig sse_decode_box_autoadd_agent_server_config(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_agent_server_config(deserializer));
+  }
+
+  @protected
+  AgentToolKey sse_decode_box_autoadd_agent_tool_key(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_agent_tool_key(deserializer));
+  }
+
+  @protected
+  AppCommand sse_decode_box_autoadd_app_command(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_app_command(deserializer));
+  }
+
+  @protected
+  ContextChoiceReason sse_decode_box_autoadd_context_choice_reason(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_context_choice_reason(deserializer));
+  }
+
+  @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_i_64(deserializer));
+  }
+
+  @protected
+  PdfLimits sse_decode_box_autoadd_pdf_limits(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_pdf_limits(deserializer));
+  }
+
+  @protected
+  PdfWorkerResult sse_decode_box_autoadd_pdf_worker_result(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_pdf_worker_result(deserializer));
+  }
+
+  @protected
+  ToolSupport sse_decode_box_autoadd_tool_support(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_tool_support(deserializer));
+  }
+
+  @protected
+  ContextChoiceReason sse_decode_context_choice_reason(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return ContextChoiceReason.values[inner];
+  }
+
+  @protected
+  ContextPurpose sse_decode_context_purpose(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return ContextPurpose.values[inner];
+  }
+
+  @protected
+  CoreError sse_decode_core_error(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return CoreError.values[inner];
+  }
+
+  @protected
+  CredentialReply sse_decode_credential_reply(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_field0 = sse_decode_String(deserializer);
+        return CredentialReply_Value(var_field0);
+      case 1:
+        return CredentialReply_Missing();
+      case 2:
+        var var_field0 = sse_decode_String(deserializer);
+        return CredentialReply_Failed(var_field0);
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  double sse_decode_f_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getFloat32();
+  }
+
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getInt32();
+  }
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
+  }
+
+  @protected
+  PlatformInt64 sse_decode_isize(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
+  }
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <String>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AgentArtifact> sse_decode_list_agent_artifact(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentArtifact>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_artifact(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AgentAttempt> sse_decode_list_agent_attempt(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentAttempt>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_attempt(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AgentConversation> sse_decode_list_agent_conversation(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentConversation>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_conversation(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AgentConversationSummary> sse_decode_list_agent_conversation_summary(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentConversationSummary>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_conversation_summary(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AgentDerivedContext> sse_decode_list_agent_derived_context(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentDerivedContext>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_derived_context(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AgentEndpointConfig> sse_decode_list_agent_endpoint_config(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentEndpointConfig>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_endpoint_config(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AgentMessage> sse_decode_list_agent_message(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentMessage>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_message(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AgentPageReference> sse_decode_list_agent_page_reference(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentPageReference>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_page_reference(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AgentProfile> sse_decode_list_agent_profile(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentProfile>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_profile(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AgentRun> sse_decode_list_agent_run(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentRun>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_run(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AgentSecretHeader> sse_decode_list_agent_secret_header(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentSecretHeader>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_secret_header(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AgentServerConfig> sse_decode_list_agent_server_config(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentServerConfig>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_server_config(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AgentToolCall> sse_decode_list_agent_tool_call(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentToolCall>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_tool_call(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AgentToolRule> sse_decode_list_agent_tool_rule(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentToolRule>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_tool_rule(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<PageText> sse_decode_list_page_text(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <PageText>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_page_text(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var len_ = sse_decode_i_32(deserializer);
     return deserializer.buffer.getUint8List(len_);
+  }
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  AgentApprovalBinding? sse_decode_opt_box_autoadd_agent_approval_binding(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_agent_approval_binding(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  AgentArtifactContent? sse_decode_opt_box_autoadd_agent_artifact_content(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_agent_artifact_content(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  AgentContextSelection? sse_decode_opt_box_autoadd_agent_context_selection(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_agent_context_selection(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  AgentContextUsage? sse_decode_opt_box_autoadd_agent_context_usage(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_agent_context_usage(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  AgentDerivedContext? sse_decode_opt_box_autoadd_agent_derived_context(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_agent_derived_context(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  AgentExportBundle? sse_decode_opt_box_autoadd_agent_export_bundle(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_agent_export_bundle(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  AgentProviderUsage? sse_decode_opt_box_autoadd_agent_provider_usage(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_agent_provider_usage(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  ContextChoiceReason? sse_decode_opt_box_autoadd_context_choice_reason(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_context_choice_reason(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_i_64(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  ToolSupport? sse_decode_opt_box_autoadd_tool_support(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_tool_support(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  PageStatus sse_decode_page_status(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return PageStatus.values[inner];
+  }
+
+  @protected
+  PageText sse_decode_page_text(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_physicalPage = sse_decode_u_32(deserializer);
+    var var_text = sse_decode_String(deserializer);
+    var var_status = sse_decode_page_status(deserializer);
+    return PageText(
+      physicalPage: var_physicalPage,
+      text: var_text,
+      status: var_status,
+    );
+  }
+
+  @protected
+  PdfExtraction sse_decode_pdf_extraction(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_pages = sse_decode_list_page_text(deserializer);
+    var var_complete = sse_decode_bool(deserializer);
+    return PdfExtraction(pages: var_pages, complete: var_complete);
+  }
+
+  @protected
+  PdfFailure sse_decode_pdf_failure(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return PdfFailure.values[inner];
+  }
+
+  @protected
+  PdfLimits sse_decode_pdf_limits(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_maxInputBytes = sse_decode_u_32(deserializer);
+    var var_maxPages = sse_decode_u_32(deserializer);
+    var var_maxTextBytes = sse_decode_u_32(deserializer);
+    var var_maxDecompressedBytes = sse_decode_u_32(deserializer);
+    return PdfLimits(
+      maxInputBytes: var_maxInputBytes,
+      maxPages: var_maxPages,
+      maxTextBytes: var_maxTextBytes,
+      maxDecompressedBytes: var_maxDecompressedBytes,
+    );
+  }
+
+  @protected
+  PdfWorkerReply sse_decode_pdf_worker_reply(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_field0 = sse_decode_box_autoadd_pdf_worker_result(deserializer);
+        return PdfWorkerReply_Extracted(var_field0);
+      case 1:
+        var var_field0 = sse_decode_pdf_failure(deserializer);
+        return PdfWorkerReply_Failed(var_field0);
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  PdfWorkerResult sse_decode_pdf_worker_result(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_requestId = sse_decode_String(deserializer);
+    var var_extraction = sse_decode_pdf_extraction(deserializer);
+    return PdfWorkerResult(
+      requestId: var_requestId,
+      extraction: var_extraction,
+    );
+  }
+
+  @protected
+  PermissionRule sse_decode_permission_rule(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return PermissionRule.values[inner];
+  }
+
+  @protected
+  PlatformReply sse_decode_platform_reply(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        return PlatformReply_Ok();
+      case 1:
+        var var_field0 = sse_decode_String(deserializer);
+        return PlatformReply_Failed(var_field0);
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  ProfileMode sse_decode_profile_mode(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return ProfileMode.values[inner];
+  }
+
+  @protected
+  RunHostRequest sse_decode_run_host_request(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_runId = sse_decode_String(deserializer);
+    var var_generation = sse_decode_String(deserializer);
+    var var_conversationId = sse_decode_String(deserializer);
+    var var_active = sse_decode_bool(deserializer);
+    var var_waitingApproval = sse_decode_bool(deserializer);
+    return RunHostRequest(
+      runId: var_runId,
+      generation: var_generation,
+      conversationId: var_conversationId,
+      active: var_active,
+      waitingApproval: var_waitingApproval,
+    );
+  }
+
+  @protected
+  RunState sse_decode_run_state(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return RunState.values[inner];
+  }
+
+  @protected
+  TokenEstimation sse_decode_token_estimation(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return TokenEstimation.values[inner];
+  }
+
+  @protected
+  ToolSupport sse_decode_tool_support(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return ToolSupport.values[inner];
+  }
+
+  @protected
+  int sse_decode_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint32();
+  }
+
+  @protected
+  BigInt sse_decode_u_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getBigUint64();
   }
 
   @protected
@@ -191,21 +3193,1053 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  int sse_decode_i_32(SseDeserializer deserializer) {
+  BigInt sse_decode_usize(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getInt32();
+    return deserializer.buffer.getBigUint64();
   }
 
   @protected
-  bool sse_decode_bool(SseDeserializer deserializer) {
+  void sse_encode_AnyhowException(
+    AnyhowException self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint8() != 0;
+    sse_encode_String(self.message, serializer);
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    AgentHandle self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as AgentHandleImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    AgentHandle self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as AgentHandleImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_DartFn_Inputs_String_Output_credential_reply_AnyhowException(
+    FutureOr<CredentialReply> Function(String) self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_DartOpaque(
+      encode_DartFn_Inputs_String_Output_credential_reply_AnyhowException(self),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_DartFn_Inputs_run_host_request_Output_platform_reply_AnyhowException(
+    FutureOr<PlatformReply> Function(RunHostRequest) self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_DartOpaque(
+      encode_DartFn_Inputs_run_host_request_Output_platform_reply_AnyhowException(
+        self,
+      ),
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_DartOpaque(Object self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_isize(
+      PlatformPointerUtil.ptrToPlatformInt64(
+        encodeDartOpaque(
+          self,
+          portManager.dartHandlerPort,
+          generalizedFrbRustBinding,
+        ),
+      ),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAgentHandle(
+    AgentHandle self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as AgentHandleImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_StreamSink_agent_app_event_Sse(
+    RustStreamSink<AgentAppEvent> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(
+      self.setupAndSerialize(
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_agent_app_event,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+      ),
+      serializer,
+    );
   }
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer);
+  }
+
+  @protected
+  void sse_encode_agent_app_event(
+    AgentAppEvent self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.sequence, serializer);
+    sse_encode_String(self.conversationId, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_app_snapshot(
+    AgentAppSnapshot self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_agent_artifact(self.artifacts, serializer);
+    sse_encode_u_64(self.retentionLimitBytes, serializer);
+    sse_encode_u_64(self.sequence, serializer);
+    sse_encode_list_agent_endpoint_config(self.endpoints, serializer);
+    sse_encode_list_agent_server_config(self.servers, serializer);
+    sse_encode_list_agent_profile(self.profiles, serializer);
+    sse_encode_list_agent_conversation(self.conversations, serializer);
+    sse_encode_list_agent_run(self.runs, serializer);
+    sse_encode_list_agent_tool_rule(self.rules, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_approval_binding(
+    AgentApprovalBinding self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.attemptId, serializer);
+    sse_encode_agent_tool_key(self.key, serializer);
+    sse_encode_String(self.providerCallId, serializer);
+    sse_encode_String(self.definitionDigest, serializer);
+    sse_encode_String(self.argumentsDigest, serializer);
+    sse_encode_String(self.argumentsJson, serializer);
+    sse_encode_String(self.schemaJson, serializer);
+    sse_encode_String(self.destinationDigest, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_artifact(AgentArtifact self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.conversationId, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_u_64(self.bytes, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_artifact_content(
+    AgentArtifactContent self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_artifact(self.summary, serializer);
+    sse_encode_String(self.text, serializer);
+    sse_encode_String(self.privatePath, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_attempt(AgentAttempt self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_attempt_state(self.state, serializer);
+    sse_encode_agent_tool_call(self.call, serializer);
+    sse_encode_opt_box_autoadd_agent_approval_binding(self.binding, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_command_reply(
+    AgentCommandReply self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_agent_conversation_summary(self.history, serializer);
+    sse_encode_opt_box_autoadd_agent_export_bundle(
+      self.exportBundle,
+      serializer,
+    );
+    sse_encode_list_String(self.models, serializer);
+    sse_encode_opt_box_autoadd_tool_support(self.toolSupport, serializer);
+    sse_encode_list_String(self.discoveredTools, serializer);
+    sse_encode_list_agent_tool_rule(self.discoveredRules, serializer);
+    sse_encode_opt_String(self.id, serializer);
+    sse_encode_opt_box_autoadd_agent_artifact_content(
+      self.artifact,
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_agent_context_selection(
+    AgentContextSelection self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_String(self.messageIds, serializer);
+    sse_encode_list_String(self.summaryIds, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_context_usage(
+    AgentContextUsage self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_token_estimation(self.estimation, serializer);
+    sse_encode_u_64(self.estimatedInputTokens, serializer);
+    sse_encode_u_32(self.outputReserve, serializer);
+    sse_encode_u_32(self.window, serializer);
+    sse_encode_u_64(self.rawBytes, serializer);
+    sse_encode_bool(self.rawBytesIsLowerBound, serializer);
+    sse_encode_opt_box_autoadd_agent_provider_usage(self.provider, serializer);
+    sse_encode_opt_box_autoadd_context_choice_reason(self.reason, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_conversation(
+    AgentConversation self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_agent_profile_snapshot(self.profile, serializer);
+    sse_encode_list_agent_message(self.messages, serializer);
+    sse_encode_list_agent_derived_context(self.summaries, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_conversation_summary(
+    AgentConversationSummary self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.title, serializer);
+    sse_encode_bool(self.hasUnknownOutcomes, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_derived_context(
+    AgentDerivedContext self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.runId, serializer);
+    sse_encode_String(self.text, serializer);
+    sse_encode_agent_context_selection(self.selection, serializer);
+    sse_encode_list_agent_page_reference(self.pageReferences, serializer);
+    sse_encode_bool(self.partialCoverage, serializer);
+    sse_encode_list_String(self.unresolvedAttempts, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_endpoint_config(
+    AgentEndpointConfig self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.baseUrl, serializer);
+    sse_encode_String(self.model, serializer);
+    sse_encode_u_32(self.contextTokens, serializer);
+    sse_encode_u_32(self.maxOutputTokens, serializer);
+    sse_encode_f_32(self.temperature, serializer);
+    sse_encode_bool(self.allowHttp, serializer);
+    sse_encode_opt_String(self.credential, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_export_bundle(
+    AgentExportBundle self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_artifact(self.transcript, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_message(AgentMessage self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.role, serializer);
+    sse_encode_String(self.content, serializer);
+    sse_encode_list_agent_tool_call(self.calls, serializer);
+    sse_encode_opt_String(self.callId, serializer);
+    sse_encode_opt_String(self.sourceEnvelope, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_page_reference(
+    AgentPageReference self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.attachmentId, serializer);
+    sse_encode_u_32(self.physicalPage, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_profile(AgentProfile self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_profile_mode(self.mode, serializer);
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.endpointId, serializer);
+    sse_encode_list_String(self.serverIds, serializer);
+    sse_encode_String(self.instructions, serializer);
+    sse_encode_agent_run_limits(self.limits, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_profile_snapshot(
+    AgentProfileSnapshot self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_opt_String(self.inferenceDestination, serializer);
+    sse_encode_profile_mode(self.mode, serializer);
+    sse_encode_String(self.profileId, serializer);
+    sse_encode_i_64(self.revision, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_agent_endpoint_config(self.endpoint, serializer);
+    sse_encode_list_agent_server_config(self.servers, serializer);
+    sse_encode_String(self.instructions, serializer);
+    sse_encode_agent_run_limits(self.limits, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_provider_usage(
+    AgentProviderUsage self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.promptTokens, serializer);
+    sse_encode_u_64(self.completionTokens, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_run(AgentRun self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.conversationId, serializer);
+    sse_encode_agent_profile_snapshot(self.profile, serializer);
+    sse_encode_run_state(self.state, serializer);
+    sse_encode_u_32(self.inferenceCount, serializer);
+    sse_encode_u_32(self.attemptCount, serializer);
+    sse_encode_u_64(self.activeMs, serializer);
+    sse_encode_String(self.partialText, serializer);
+    sse_encode_opt_String(self.failure, serializer);
+    sse_encode_list_agent_attempt(self.attempts, serializer);
+    sse_encode_agent_run_context(self.context, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_run_context(
+    AgentRunContext self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_context_purpose(self.purpose, serializer);
+    sse_encode_opt_box_autoadd_agent_context_selection(
+      self.selection,
+      serializer,
+    );
+    sse_encode_opt_box_autoadd_i_64(self.selectionThroughOrdinal, serializer);
+    sse_encode_opt_box_autoadd_agent_context_usage(self.usage, serializer);
+    sse_encode_opt_String(self.derivedEntry, serializer);
+    sse_encode_opt_box_autoadd_agent_derived_context(self.summary, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_run_limits(
+    AgentRunLimits self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.maxInferenceRequests, serializer);
+    sse_encode_u_32(self.maxToolAttempts, serializer);
+    sse_encode_u_64(self.activeTimeoutMs, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_secret_header(
+    AgentSecretHeader self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.credential, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_server_config(
+    AgentServerConfig self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.url, serializer);
+    sse_encode_bool(self.allowHttp, serializer);
+    sse_encode_list_agent_secret_header(self.secretHeaders, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_tool_call(
+    AgentToolCall self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_tool_key(self.key, serializer);
+    sse_encode_String(self.providerCallId, serializer);
+    sse_encode_String(self.argumentsJson, serializer);
+    sse_encode_opt_String(self.sourceEnvelope, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_tool_key(AgentToolKey self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.profileId, serializer);
+    sse_encode_opt_String(self.serverId, serializer);
+    sse_encode_String(self.name, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_tool_rule(
+    AgentToolRule self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_tool_key(self.key, serializer);
+    sse_encode_String(self.schemaJson, serializer);
+    sse_encode_String(self.schemaDigest, serializer);
+    sse_encode_String(self.destinationDigest, serializer);
+    sse_encode_permission_rule(self.rule, serializer);
+  }
+
+  @protected
+  void sse_encode_app_command(AppCommand self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case AppCommand_SearchConversations(
+        query: final query,
+        offset: final offset,
+        limit: final limit,
+      ):
+        sse_encode_i_32(0, serializer);
+        sse_encode_String(query, serializer);
+        sse_encode_u_32(offset, serializer);
+        sse_encode_u_32(limit, serializer);
+      case AppCommand_RenameConversation(
+        conversationId: final conversationId,
+        title: final title,
+      ):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(conversationId, serializer);
+        sse_encode_String(title, serializer);
+      case AppCommand_DeleteConversation(
+        conversationId: final conversationId,
+        confirmedUnknown: final confirmedUnknown,
+      ):
+        sse_encode_i_32(2, serializer);
+        sse_encode_String(conversationId, serializer);
+        sse_encode_bool(confirmedUnknown, serializer);
+      case AppCommand_ExportTranscript(
+        conversationId: final conversationId,
+        includeToolPayloads: final includeToolPayloads,
+      ):
+        sse_encode_i_32(3, serializer);
+        sse_encode_String(conversationId, serializer);
+        sse_encode_bool(includeToolPayloads, serializer);
+      case AppCommand_DiscoverModels(endpointId: final endpointId):
+        sse_encode_i_32(4, serializer);
+        sse_encode_String(endpointId, serializer);
+      case AppCommand_ProbeEndpoint(endpointId: final endpointId):
+        sse_encode_i_32(5, serializer);
+        sse_encode_String(endpointId, serializer);
+      case AppCommand_DiscoverServer(
+        profileId: final profileId,
+        serverId: final serverId,
+      ):
+        sse_encode_i_32(6, serializer);
+        sse_encode_String(profileId, serializer);
+        sse_encode_String(serverId, serializer);
+      case AppCommand_CreateArtifact(
+        conversationId: final conversationId,
+        name: final name,
+        content: final content,
+      ):
+        sse_encode_i_32(7, serializer);
+        sse_encode_String(conversationId, serializer);
+        sse_encode_String(name, serializer);
+        sse_encode_String(content, serializer);
+      case AppCommand_ReadArtifact(
+        conversationId: final conversationId,
+        artifactId: final artifactId,
+      ):
+        sse_encode_i_32(8, serializer);
+        sse_encode_String(conversationId, serializer);
+        sse_encode_String(artifactId, serializer);
+      case AppCommand_DeleteArtifact(
+        conversationId: final conversationId,
+        artifactId: final artifactId,
+      ):
+        sse_encode_i_32(9, serializer);
+        sse_encode_String(conversationId, serializer);
+        sse_encode_String(artifactId, serializer);
+      case AppCommand_NewId():
+        sse_encode_i_32(10, serializer);
+      case AppCommand_SaveEndpoint(endpoint: final endpoint):
+        sse_encode_i_32(11, serializer);
+        sse_encode_box_autoadd_agent_endpoint_config(endpoint, serializer);
+      case AppCommand_SaveServer(server: final server):
+        sse_encode_i_32(12, serializer);
+        sse_encode_box_autoadd_agent_server_config(server, serializer);
+      case AppCommand_SaveProfile(profile: final profile):
+        sse_encode_i_32(13, serializer);
+        sse_encode_box_autoadd_agent_profile(profile, serializer);
+      case AppCommand_CreateConversation(profileId: final profileId):
+        sse_encode_i_32(14, serializer);
+        sse_encode_String(profileId, serializer);
+      case AppCommand_ApplyProfile(
+        conversationId: final conversationId,
+        profileId: final profileId,
+      ):
+        sse_encode_i_32(15, serializer);
+        sse_encode_String(conversationId, serializer);
+        sse_encode_String(profileId, serializer);
+      case AppCommand_SetRule(
+        key: final key,
+        schemaDigest: final schemaDigest,
+        destinationDigest: final destinationDigest,
+        rule: final rule,
+      ):
+        sse_encode_i_32(16, serializer);
+        sse_encode_box_autoadd_agent_tool_key(key, serializer);
+        sse_encode_String(schemaDigest, serializer);
+        sse_encode_String(destinationDigest, serializer);
+        sse_encode_permission_rule(rule, serializer);
+      case AppCommand_StartTurn(
+        conversationId: final conversationId,
+        text: final text,
+      ):
+        sse_encode_i_32(17, serializer);
+        sse_encode_String(conversationId, serializer);
+        sse_encode_String(text, serializer);
+      case AppCommand_PlatformPause(
+        runId: final runId,
+        generation: final generation,
+      ):
+        sse_encode_i_32(18, serializer);
+        sse_encode_String(runId, serializer);
+        sse_encode_String(generation, serializer);
+      case AppCommand_PlatformStop(
+        runId: final runId,
+        generation: final generation,
+      ):
+        sse_encode_i_32(19, serializer);
+        sse_encode_String(runId, serializer);
+        sse_encode_String(generation, serializer);
+      case AppCommand_CancelRun(runId: final runId):
+        sse_encode_i_32(20, serializer);
+        sse_encode_String(runId, serializer);
+      case AppCommand_ResumeRun(runId: final runId):
+        sse_encode_i_32(21, serializer);
+        sse_encode_String(runId, serializer);
+      case AppCommand_Approve(binding: final binding):
+        sse_encode_i_32(22, serializer);
+        sse_encode_box_autoadd_agent_approval_binding(binding, serializer);
+      case AppCommand_Deny(attemptId: final attemptId):
+        sse_encode_i_32(23, serializer);
+        sse_encode_String(attemptId, serializer);
+      case AppCommand_SummarizeContext(
+        conversationId: final conversationId,
+        selection: final selection,
+      ):
+        sse_encode_i_32(24, serializer);
+        sse_encode_String(conversationId, serializer);
+        sse_encode_box_autoadd_agent_context_selection(selection, serializer);
+      case AppCommand_ApplyContextSelection(
+        runId: final runId,
+        selection: final selection,
+      ):
+        sse_encode_i_32(25, serializer);
+        sse_encode_String(runId, serializer);
+        sse_encode_box_autoadd_agent_context_selection(selection, serializer);
+      case AppCommand_AcknowledgeContextDisclosure(
+        conversationId: final conversationId,
+        snapshotRevision: final snapshotRevision,
+        destination: final destination,
+      ):
+        sse_encode_i_32(26, serializer);
+        sse_encode_String(conversationId, serializer);
+        sse_encode_i_64(snapshotRevision, serializer);
+        sse_encode_String(destination, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_app_error(AppError self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_pdf_failure(self.field0, serializer);
+  }
+
+  @protected
+  void sse_encode_attempt_state(AttemptState self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint8(self ? 1 : 0);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_agent_approval_binding(
+    AgentApprovalBinding self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_approval_binding(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_agent_artifact_content(
+    AgentArtifactContent self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_artifact_content(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_agent_context_selection(
+    AgentContextSelection self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_context_selection(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_agent_context_usage(
+    AgentContextUsage self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_context_usage(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_agent_derived_context(
+    AgentDerivedContext self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_derived_context(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_agent_endpoint_config(
+    AgentEndpointConfig self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_endpoint_config(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_agent_export_bundle(
+    AgentExportBundle self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_export_bundle(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_agent_profile(
+    AgentProfile self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_profile(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_agent_provider_usage(
+    AgentProviderUsage self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_provider_usage(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_agent_server_config(
+    AgentServerConfig self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_server_config(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_agent_tool_key(
+    AgentToolKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_tool_key(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_app_command(
+    AppCommand self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_app_command(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_context_choice_reason(
+    ContextChoiceReason self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_context_choice_reason(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_i_64(
+    PlatformInt64 self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_64(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_pdf_limits(
+    PdfLimits self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_pdf_limits(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_pdf_worker_result(
+    PdfWorkerResult self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_pdf_worker_result(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_tool_support(
+    ToolSupport self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_tool_support(self, serializer);
+  }
+
+  @protected
+  void sse_encode_context_choice_reason(
+    ContextChoiceReason self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_context_purpose(
+    ContextPurpose self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_core_error(CoreError self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_credential_reply(
+    CredentialReply self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case CredentialReply_Value(field0: final field0):
+        sse_encode_i_32(0, serializer);
+        sse_encode_String(field0, serializer);
+      case CredentialReply_Missing():
+        sse_encode_i_32(1, serializer);
+      case CredentialReply_Failed(field0: final field0):
+        sse_encode_i_32(2, serializer);
+        sse_encode_String(field0, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_f_32(double self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putFloat32(self);
+  }
+
+  @protected
+  void sse_encode_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putInt32(self);
+  }
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
+  }
+
+  @protected
+  void sse_encode_isize(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
+  }
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_artifact(
+    List<AgentArtifact> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_artifact(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_attempt(
+    List<AgentAttempt> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_attempt(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_conversation(
+    List<AgentConversation> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_conversation(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_conversation_summary(
+    List<AgentConversationSummary> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_conversation_summary(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_derived_context(
+    List<AgentDerivedContext> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_derived_context(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_endpoint_config(
+    List<AgentEndpointConfig> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_endpoint_config(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_message(
+    List<AgentMessage> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_message(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_page_reference(
+    List<AgentPageReference> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_page_reference(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_profile(
+    List<AgentProfile> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_profile(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_run(
+    List<AgentRun> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_run(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_secret_header(
+    List<AgentSecretHeader> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_secret_header(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_server_config(
+    List<AgentServerConfig> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_server_config(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_tool_call(
+    List<AgentToolCall> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_tool_call(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_tool_rule(
+    List<AgentToolRule> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_tool_rule(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_page_text(
+    List<PageText> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_page_text(item, serializer);
+    }
   }
 
   @protected
@@ -216,6 +4250,281 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     serializer.buffer.putUint8List(self);
+  }
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_agent_approval_binding(
+    AgentApprovalBinding? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_agent_approval_binding(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_agent_artifact_content(
+    AgentArtifactContent? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_agent_artifact_content(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_agent_context_selection(
+    AgentContextSelection? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_agent_context_selection(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_agent_context_usage(
+    AgentContextUsage? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_agent_context_usage(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_agent_derived_context(
+    AgentDerivedContext? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_agent_derived_context(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_agent_export_bundle(
+    AgentExportBundle? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_agent_export_bundle(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_agent_provider_usage(
+    AgentProviderUsage? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_agent_provider_usage(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_context_choice_reason(
+    ContextChoiceReason? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_context_choice_reason(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_64(
+    PlatformInt64? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_i_64(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_tool_support(
+    ToolSupport? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_tool_support(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_page_status(PageStatus self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_page_text(PageText self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.physicalPage, serializer);
+    sse_encode_String(self.text, serializer);
+    sse_encode_page_status(self.status, serializer);
+  }
+
+  @protected
+  void sse_encode_pdf_extraction(PdfExtraction self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_page_text(self.pages, serializer);
+    sse_encode_bool(self.complete, serializer);
+  }
+
+  @protected
+  void sse_encode_pdf_failure(PdfFailure self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_pdf_limits(PdfLimits self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.maxInputBytes, serializer);
+    sse_encode_u_32(self.maxPages, serializer);
+    sse_encode_u_32(self.maxTextBytes, serializer);
+    sse_encode_u_32(self.maxDecompressedBytes, serializer);
+  }
+
+  @protected
+  void sse_encode_pdf_worker_reply(
+    PdfWorkerReply self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case PdfWorkerReply_Extracted(field0: final field0):
+        sse_encode_i_32(0, serializer);
+        sse_encode_box_autoadd_pdf_worker_result(field0, serializer);
+      case PdfWorkerReply_Failed(field0: final field0):
+        sse_encode_i_32(1, serializer);
+        sse_encode_pdf_failure(field0, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_pdf_worker_result(
+    PdfWorkerResult self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.requestId, serializer);
+    sse_encode_pdf_extraction(self.extraction, serializer);
+  }
+
+  @protected
+  void sse_encode_permission_rule(
+    PermissionRule self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_platform_reply(PlatformReply self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case PlatformReply_Ok():
+        sse_encode_i_32(0, serializer);
+      case PlatformReply_Failed(field0: final field0):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(field0, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_profile_mode(ProfileMode self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_run_host_request(
+    RunHostRequest self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.runId, serializer);
+    sse_encode_String(self.generation, serializer);
+    sse_encode_String(self.conversationId, serializer);
+    sse_encode_bool(self.active, serializer);
+    sse_encode_bool(self.waitingApproval, serializer);
+  }
+
+  @protected
+  void sse_encode_run_state(RunState self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_token_estimation(
+    TokenEstimation self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_tool_support(ToolSupport self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_u_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint32(self);
+  }
+
+  @protected
+  void sse_encode_u_64(BigInt self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putBigUint64(self);
   }
 
   @protected
@@ -230,14 +4539,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_i_32(int self, SseSerializer serializer) {
+  void sse_encode_usize(BigInt self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putInt32(self);
+    serializer.buffer.putBigUint64(self);
   }
+}
 
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint8(self ? 1 : 0);
-  }
+@sealed
+class AgentHandleImpl extends RustOpaque implements AgentHandle {
+  // Not to be used by end users
+  AgentHandleImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  AgentHandleImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        RustLib.instance.api.rust_arc_increment_strong_count_AgentHandle,
+    rustArcDecrementStrongCount:
+        RustLib.instance.api.rust_arc_decrement_strong_count_AgentHandle,
+    rustArcDecrementStrongCountPtr:
+        RustLib.instance.api.rust_arc_decrement_strong_count_AgentHandlePtr,
+  );
 }

@@ -1,26 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:chat_tool_harness/src/rust/api/simple.dart';
+import 'backend/platform_services.dart';
+import 'app.dart';
+import 'features/files/android_document_access.dart';
 import 'package:chat_tool_harness/src/rust/frb_generated.dart';
+// Retain the separate worker library in the app's compiled Dart program.
+import 'package:chat_tool_harness/pdf_worker.dart' as worker;
+
+final _workerEntrypointAnchor = worker.pdfWorkerMain;
 
 Future<void> main() async {
+  // Reachability keeps the worker entrypoint in debug and AOT snapshots.
+  _workerEntrypointAnchor.hashCode;
+  WidgetsFlutterBinding.ensureInitialized();
   await RustLib.init();
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
-        body: Center(
-          child: Text(
-            'Action: Call Rust `greet("Tom")`\nResult: `${greet(name: "Tom")}`',
-          ),
-        ),
-      ),
-    );
-  }
+  await EngineBackend.initialize();
+  runApp(
+    AgentApp(
+      backend: await EngineBackend.owner.backend,
+      documents: const MethodChannelDocumentAccess(),
+      lifecycle: EngineBackend.lifecycle,
+    ),
+  );
 }
