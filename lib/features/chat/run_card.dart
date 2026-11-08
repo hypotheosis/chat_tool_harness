@@ -20,7 +20,9 @@ class RunIssue {
 
   /// One sentence naming the cause.
   final String cause;
-  final RunAction action;
+
+  /// Null when nothing on the card may continue the run.
+  final RunAction? action;
 }
 
 /// Whether a tool call's remote outcome is unknown, so the run must never be
@@ -54,8 +56,14 @@ String _reasonText(ContextChoiceReason reason) => switch (reason) {
 /// waiting runs show a status row, completed and cancelled runs nothing.
 ///
 /// [originAcknowledged] says whether the run's inference origin is already
-/// acknowledged, so a disclosure pause can simply resume.
-RunIssue? runIssue(Run run, {required bool originAcknowledged}) {
+/// acknowledged, so a disclosure pause can simply resume. [fixed] says the
+/// user has since acted on the card (returned from the settings it opened,
+/// or applied a context selection), so a resumable run now offers Resume.
+RunIssue? runIssue(
+  Run run, {
+  required bool originAcknowledged,
+  bool fixed = false,
+}) {
   final title = switch (run.state) {
     RunState.failed => 'Run failed',
     RunState.paused => 'Paused',
@@ -64,7 +72,21 @@ RunIssue? runIssue(Run run, {required bool originAcknowledged}) {
   };
   if (title == null) return null;
   final ended = run.state == RunState.failed;
-  final resumable = !ended && !hasUnresolvedAttempt(run);
+  // A tool call whose remote outcome is unknown must never be repeated, so
+  // nothing on the card may start more model work for this turn.
+  if (hasUnresolvedAttempt(run)) {
+    return ended
+        ? RunIssue(
+            title,
+            "A tool call's outcome is unknown; check the remote system before continuing.",
+            null,
+          )
+        : RunIssue(
+            title,
+            "A tool call's outcome is unknown, so this run cannot resume. Check the remote system, then stop the run.",
+            RunAction.stop,
+          );
+  }
   final reason = run.context.usage?.reason;
   final origin = run.profile.inferenceOrigin;
   if (!ended &&
@@ -78,33 +100,23 @@ RunIssue? runIssue(Run run, {required bool originAcknowledged}) {
     );
   }
   final code = run.failureCode ?? (ended ? FailureCode.protocol : null);
+  String? cause;
+  RunAction? action;
   if (code != null) {
-    final action = switch (failureAction(code)) {
+    cause = failureMessage(BackendFailure(code, detail: run.failureDetail));
+    action = switch (failureAction(code)) {
       FailureAction.openSettings => RunAction.openSettings,
       FailureAction.reenterCredential => RunAction.reenterCredential,
       FailureAction.chooseContext => RunAction.chooseContext,
-      FailureAction.retry =>
-        ended
-            ? RunAction.retry
-            : resumable
-            ? RunAction.resume
-            : RunAction.stop,
+      FailureAction.retry => ended ? RunAction.retry : RunAction.resume,
     };
-    return RunIssue(
-      title,
-      failureMessage(BackendFailure(code, detail: run.failureDetail)),
-      action,
-    );
+  } else if (reason != null &&
+      reason != ContextChoiceReason.disclosureRequired) {
+    cause = _reasonText(reason);
+    action = RunAction.chooseContext;
   }
-  if (reason != null && reason != ContextChoiceReason.disclosureRequired) {
-    return RunIssue(title, _reasonText(reason), RunAction.chooseContext);
-  }
-  if (!resumable) {
-    return RunIssue(
-      title,
-      "A tool call's outcome is unknown, so this run cannot resume. Check the remote system, then stop the run.",
-      RunAction.stop,
-    );
+  if (cause != null && action != null) {
+    return RunIssue(title, cause, !ended && fixed ? RunAction.resume : action);
   }
   return RunIssue(
     title,
@@ -116,23 +128,26 @@ RunIssue? runIssue(Run run, {required bool originAcknowledged}) {
 }
 
 /// The inline card for a failed, paused or interrupted run: a title, the
-/// cause, one action button and a Details toggle.
+/// cause, at most one action button and a Details toggle. A [compact] card,
+/// for an earlier run, is one muted line with Details and no action.
 class RunCard extends StatefulWidget {
   const RunCard({
     super.key,
     required this.run,
     required this.issue,
-    required this.actionLabel,
-    required this.actionKey,
-    required this.onAction,
+    this.actionLabel,
+    this.actionKey,
+    this.onAction,
+    this.compact = false,
   });
   final Run run;
   final RunIssue issue;
-  final String actionLabel;
-  final Key actionKey;
+  final String? actionLabel;
+  final Key? actionKey;
 
   /// Null while another action is in progress.
   final VoidCallback? onAction;
+  final bool compact;
   @override
   State<RunCard> createState() => _RunCardState();
 }
@@ -159,11 +174,51 @@ class _RunCardState extends State<RunCard> {
     ].join('\n');
   }
 
+  Widget detailsToggle() => TextButton(
+    onPressed: () => setState(() => details = !details),
+    child: Text(details ? 'Hide details' : 'Details'),
+  );
+
+  Widget detailsBlock(Color? color) => SelectableText(
+    detailText(),
+    key: Key('run-details-${widget.run.id}'),
+    style: TextStyle(fontFamily: 'monospace', color: color),
+  );
+
+  Widget compact(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Padding(
+      key: Key('run-card-${widget.run.id}'),
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${widget.issue.title}: ${widget.issue.cause}',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: muted),
+                ),
+              ),
+              detailsToggle(),
+            ],
+          ),
+          if (details) detailsBlock(muted),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.compact) return compact(context);
     final scheme = Theme.of(context).colorScheme;
     final failed = widget.run.state == RunState.failed;
     final foreground = failed ? scheme.onErrorContainer : null;
+    final label = widget.actionLabel;
     return Card(
       key: Key('run-card-${widget.run.id}'),
       color: failed ? scheme.errorContainer : null,
@@ -197,23 +252,16 @@ class _RunCardState extends State<RunCard> {
               spacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                FilledButton.tonal(
-                  key: widget.actionKey,
-                  onPressed: widget.onAction,
-                  child: Text(widget.actionLabel),
-                ),
-                TextButton(
-                  onPressed: () => setState(() => details = !details),
-                  child: Text(details ? 'Hide details' : 'Details'),
-                ),
+                if (label != null)
+                  FilledButton.tonal(
+                    key: widget.actionKey,
+                    onPressed: widget.onAction,
+                    child: Text(label),
+                  ),
+                detailsToggle(),
               ],
             ),
-            if (details)
-              SelectableText(
-                detailText(),
-                key: Key('run-details-${widget.run.id}'),
-                style: TextStyle(fontFamily: 'monospace', color: foreground),
-              ),
+            if (details) detailsBlock(foreground),
           ],
         ),
       ),

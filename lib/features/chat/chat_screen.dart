@@ -28,6 +28,10 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   late final state = ChatController(widget.backend, widget.conversationId);
   final message = TextEditingController();
+
+  /// Runs whose card the user has acted on (returned from the settings it
+  /// opened, or applied a context selection), which now offer Resume.
+  final fixedRuns = <String>{};
   @override
   void initState() {
     super.initState();
@@ -41,9 +45,11 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  Future<void> chooseContext(Run? target) async {
+  /// Opens the context chooser for [target], or the summary chooser when
+  /// null; true when a selection was applied to [target].
+  Future<bool> chooseContext(Run? target) async {
     final conversation = state.conversation;
-    if (conversation == null) return;
+    if (conversation == null) return false;
     final messages = <String>{...target?.context.selection?.messageIds ?? []};
     final summaries = <String>{...target?.context.selection?.summaryIds ?? []};
     final origin = (target?.profile ?? conversation.profile).inferenceOrigin;
@@ -127,12 +133,18 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       ),
     );
-    if (choice != null) {
-      if (choice.$2) {
-        await state.summarize(choice.$1);
-      } else {
-        await state.select(target!.id, choice.$1);
-      }
+    if (choice == null) return false;
+    if (choice.$2) {
+      await state.summarize(choice.$1);
+      return false;
+    }
+    await state.select(target!.id, choice.$1);
+    return state.error == null;
+  }
+
+  void markFixed(Run run) {
+    if (mounted && run.state != RunState.failed) {
+      setState(() => fixedRuns.add(run.id));
     }
   }
 
@@ -233,10 +245,15 @@ class _ChatScreenState extends State<ChatScreen> {
     switch (action) {
       case RunAction.openSettings || RunAction.reenterCredential:
         await open(targetSettings(run));
+        markFixed(run);
       case RunAction.chooseContext:
         // An ended run cannot take a new selection; a summary shortens the
         // context for the next turn instead.
-        await chooseContext(run.state == RunState.failed ? null : run);
+        if (run.state == RunState.failed) {
+          await chooseContext(null);
+        } else if (await chooseContext(run)) {
+          markFixed(run);
+        }
       case RunAction.retry:
         final input = c.messages
             .where((m) => m.id == run.inputMessageId)
@@ -260,16 +277,27 @@ class _ChatScreenState extends State<ChatScreen> {
       c.originAcknowledged &&
       run.profile.inferenceOrigin == c.profile.inferenceOrigin;
 
+  /// Each run's card issue, computed once per build.
+  Map<String, RunIssue?> issuesFor(Conversation c) => {
+    for (final r in state.runs)
+      r.id: runIssue(
+        r,
+        originAcknowledged: runOriginAcknowledged(r, c),
+        fixed: fixedRuns.contains(r.id),
+      ),
+  };
+
   /// A run's tool calls and its status: a compact row while it works, one
-  /// card when it failed or paused, nothing once it succeeded.
-  Widget? runView(Run run, Conversation c) {
+  /// card when it failed or paused, nothing once it succeeded. Only the
+  /// conversation's latest run gets a full card with an action; earlier
+  /// runs collapse to one muted line.
+  Widget? runView(Run run, Conversation c, Map<String, RunIssue?> issues) {
     if (run.state == RunState.completed || run.state == RunState.cancelled) {
       return null;
     }
-    final issue = runIssue(
-      run,
-      originAcknowledged: runOriginAcknowledged(run, c),
-    );
+    final issue = issues[run.id];
+    final latest = state.runs.lastOrNull?.id == run.id;
+    final action = latest ? issue?.action : null;
     final busy = state.loading;
     return Column(
       key: ValueKey('run-${run.id}'),
@@ -282,13 +310,14 @@ class _ChatScreenState extends State<ChatScreen> {
           RunCard(
             run: run,
             issue: issue,
-            actionLabel: actionLabel(issue.action, run),
-            actionKey: Key(switch (issue.action) {
+            compact: !latest,
+            actionLabel: action == null ? null : actionLabel(action, run),
+            actionKey: Key(switch (action) {
               RunAction.resume => 'resume-${run.id}',
               RunAction.stop => 'stop-${run.id}',
               _ => 'run-action-${run.id}',
             }),
-            onAction: busy ? null : () => act(issue.action, run, c),
+            onAction: busy || action == null ? null : () => act(action, run, c),
           )
         else
           Padding(
@@ -331,7 +360,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// Messages in order, each run placed after the messages of its turn,
   /// which start at its input message; runs without one come last.
-  List<Widget> transcript(Conversation c) {
+  List<Widget> transcript(Conversation c, Map<String, RunIssue?> issues) {
     final byInput = <String, List<Run>>{};
     final loose = <Run>[];
     final ids = {for (final m in c.messages) m.id};
@@ -347,7 +376,7 @@ class _ChatScreenState extends State<ChatScreen> {
     var pending = <Run>[];
     void flush() {
       for (final r in pending) {
-        if (runView(r, c) case final view?) out.add(view);
+        if (runView(r, c, issues) case final view?) out.add(view);
       }
       pending = [];
     }
@@ -410,15 +439,15 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// The result banner, the disclosure card and the composer, kept above the
   /// system navigation bar.
-  Widget bottom(Conversation c) {
+  Widget bottom(Conversation c, Map<String, RunIssue?> issues) {
     final origin = c.profile.inferenceOrigin;
     final unacknowledged = origin != null && !c.originAcknowledged;
-    // A paused run asking for this origin already offers Allow.
-    final runAsks = state.runs.any(
-      (r) =>
-          r.profile.inferenceOrigin == origin &&
-          runIssue(r, originAcknowledged: false)?.action == RunAction.allow,
-    );
+    // The latest run's card already offers Allow when it asks for this origin.
+    final latest = state.runs.lastOrNull;
+    final runAsks =
+        latest != null &&
+        latest.profile.inferenceOrigin == origin &&
+        issues[latest.id]?.action == RunAction.allow;
     return SafeArea(
       top: false,
       child: ConstrainedBox(
@@ -546,6 +575,7 @@ class _ChatScreenState extends State<ChatScreen> {
     animation: state,
     builder: (context, _) {
       final c = state.conversation;
+      final issues = c == null ? const <String, RunIssue?>{} : issuesFor(c);
       return Scaffold(
         appBar: AppBar(
           title: const Text('Chat'),
@@ -590,12 +620,12 @@ class _ChatScreenState extends State<ChatScreen> {
                     const Text(
                       'Conversation unavailable. Return home or refresh.',
                     ),
-                  if (c != null) ...transcript(c),
+                  if (c != null) ...transcript(c, issues),
                 ],
               ),
             ),
             if (c != null)
-              bottom(c)
+              bottom(c, issues)
             else
               SafeArea(
                 top: false,

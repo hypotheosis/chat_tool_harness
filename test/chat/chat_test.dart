@@ -222,9 +222,201 @@ void main() {
     final card = t.getRect(find.byKey(const Key('run-card-r')));
     expect(card.top, greaterThan(t.getRect(find.text('reply')).bottom));
     expect(card.bottom, lessThan(t.getRect(find.text('second')).top));
-    await t.tap(inCard('r', find.text('Retry')));
+  });
+  for (final state in [AttemptState.outcomeUnknown, AttemptState.dispatching]) {
+    testWidgets('failed conflict run with a $state attempt offers no Retry', (
+      t,
+    ) async {
+      final b = UiBackend()
+        ..runs = [
+          turnRun(
+            code: FailureCode.conflict,
+            attempts: run(state: state).attempts,
+          ),
+        ];
+      await pumpChat(t, b);
+      expect(
+        inCard(
+          'r',
+          find.text(
+            "A tool call's outcome is unknown; check the remote system before continuing.",
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Retry'), findsNothing);
+      expect(inCard('r', find.byType(FilledButton)), findsNothing);
+      // Details is the card's only button, and it starts no work.
+      await t.tap(inCard('r', find.text('Details')));
+      await t.pumpAndSettle();
+      expect(b.commands.whereType<StartTurn>(), isEmpty);
+      expect(b.commands.whereType<ResumeRun>(), isEmpty);
+    });
+  }
+  testWidgets('a disclosure pause with an unknown outcome offers Stop only', (
+    t,
+  ) async {
+    final b = UiBackend()
+      ..runs = [
+        turnRun(
+          state: RunState.paused,
+          reason: ContextChoiceReason.disclosureRequired,
+          profile: movedProfile,
+          attempts: run(state: AttemptState.outcomeUnknown).attempts,
+        ),
+      ];
+    await pumpChat(t, b);
+    expect(inCard('r', find.text('Allow')), findsNothing);
+    expect(inCard('r', find.text('Stop')), findsOneWidget);
+  });
+  testWidgets('a paused run offers Resume after its settings are opened', (
+    t,
+  ) async {
+    final b = UiBackend()
+      ..runs = [
+        turnRun(
+          state: RunState.paused,
+          code: FailureCode.unavailableTransport,
+          detail: const FailureDetail(
+            targetKind: 'inference',
+            targetName: 'Endpoint',
+            step: 'chatRequest',
+            reason: 'connection refused',
+          ),
+        ),
+      ];
+    await pumpChat(t, b);
+    expect(inCard('r', find.text('Resume')), findsNothing);
+    await t.tap(inCard('r', find.text('Open Endpoint settings')));
     await t.pumpAndSettle();
-    expect(b.commands.whereType<StartTurn>().single.text, 'first');
+    expect(find.byType(EndpointScreen), findsOneWidget);
+    await t.pageBack();
+    // Returning refreshes the chat; let the stream cancellation it awaits
+    // complete outside fake time.
+    await t.runAsync(() => Future<void>.delayed(Duration.zero));
+    await t.pumpAndSettle();
+    expect(inCard('r', find.text('Open Endpoint settings')), findsNothing);
+    expect(inCard('r', find.byType(FilledButton)), findsOneWidget);
+    await t.tap(inCard('r', find.text('Resume')));
+    await t.pumpAndSettle();
+    expect(b.commands.whereType<ResumeRun>().single.runId, 'r');
+  });
+  testWidgets('a paused run offers Resume after a context selection', (
+    t,
+  ) async {
+    final b = UiBackend()
+      ..runs = [
+        turnRun(state: RunState.paused, code: FailureCode.contextLength),
+      ];
+    await pumpChat(t, b);
+    await t.tap(inCard('r', find.text('Choose context')));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Cancel'));
+    await t.pumpAndSettle();
+    // Cancelling the chooser leaves the card asking for a choice.
+    expect(inCard('r', find.text('Choose context')), findsOneWidget);
+    await t.tap(inCard('r', find.text('Choose context')));
+    await t.pumpAndSettle();
+    await t.tap(find.text('user: hello'));
+    await t.tap(find.text('Apply selection'));
+    await t.pumpAndSettle();
+    expect(b.commands.whereType<ApplyContextSelection>().single.runId, 'r');
+    expect(inCard('r', find.text('Choose context')), findsNothing);
+    await t.tap(inCard('r', find.text('Resume')));
+    await t.pumpAndSettle();
+    expect(b.commands.whereType<ResumeRun>().single.runId, 'r');
+  });
+  testWidgets('only the latest run gets a full card; earlier runs collapse', (
+    t,
+  ) async {
+    final b = UiBackend()
+      ..current = AppSnapshot(
+        conversations: [
+          Conversation(
+            id: 'c',
+            profile: profileSnapshot,
+            originAcknowledged: true,
+            summaries: const [],
+            messages: const [
+              Message(id: 'm', role: 'user', content: 'first', calls: []),
+              Message(id: 'm2', role: 'user', content: 'second', calls: []),
+              Message(id: 'm3', role: 'user', content: 'third', calls: []),
+            ],
+          ),
+        ],
+        runs: [
+          turnRun(id: 'old', code: FailureCode.rateLimited),
+          turnRun(
+            id: 'unknown',
+            code: FailureCode.conflict,
+            inputMessageId: 'm2',
+            attempts: run(state: AttemptState.outcomeUnknown).attempts,
+          ),
+          turnRun(
+            id: 'new',
+            code: FailureCode.rateLimited,
+            inputMessageId: 'm3',
+          ),
+        ],
+      );
+    await pumpChat(t, b);
+    final rate = failureMessage(const BackendFailure(FailureCode.rateLimited));
+    expect(inCard('old', find.text('Run failed: $rate')), findsOneWidget);
+    expect(
+      inCard('old', find.byWidgetPredicate((w) => w is ButtonStyleButton)),
+      findsOneWidget,
+    );
+    expect(inCard('old', find.text('Details')), findsOneWidget);
+    expect(
+      inCard(
+        'unknown',
+        find.text(
+          "Run failed: A tool call's outcome is unknown; check the remote system before continuing.",
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(inCard('unknown', find.byType(FilledButton)), findsNothing);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(inCard('new', find.text('Retry')), findsOneWidget);
+    await t.tap(inCard('old', find.text('Details')));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('run-details-old')), findsOneWidget);
+  });
+  testWidgets('a failed summary run sits last and Retry reopens the chooser', (
+    t,
+  ) async {
+    final b = UiBackend()
+      ..current = AppSnapshot(
+        conversations: [
+          Conversation(
+            id: 'c',
+            profile: profileSnapshot,
+            originAcknowledged: true,
+            summaries: const [],
+            messages: const [
+              Message(id: 'm', role: 'user', content: 'first', calls: []),
+              Message(id: 'm2', role: 'assistant', content: 'reply', calls: []),
+            ],
+          ),
+        ],
+        runs: [
+          turnRun(id: 'turn', state: RunState.completed),
+          turnRun(
+            id: 'summary',
+            code: FailureCode.rateLimited,
+            inputMessageId: null,
+          ),
+        ],
+      );
+    await pumpChat(t, b);
+    final card = t.getRect(find.byKey(const Key('run-card-summary')));
+    expect(card.top, greaterThan(t.getRect(find.text('reply')).bottom));
+    await t.tap(inCard('summary', find.text('Retry')));
+    await t.pumpAndSettle();
+    expect(find.text('Explicit context selection'), findsOneWidget);
+    expect(find.text('Request summary'), findsOneWidget);
+    expect(b.commands.whereType<StartTurn>(), isEmpty);
   });
   testWidgets('header shows profile and model and opens profile settings', (
     t,
