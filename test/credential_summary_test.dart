@@ -28,7 +28,7 @@ void main() {
         length: 47,
         sendable: true,
       ).authorizationPreview,
-      'Authorization: Bearer ••• (47 chars)',
+      'Authorization: Bearer ••• (40 chars)',
     );
     expect(
       const CredentialSummary(length: 40, sendable: true).authorizationPreview,
@@ -37,7 +37,7 @@ void main() {
     expect(
       const CredentialSummary(length: 41, sendable: false).authorizationPreview,
       'Authorization: Bearer ••• (41 chars; Bearer added). '
-      'Contains spaces or invisible characters',
+      'Has leading/trailing whitespace or characters that cannot be sent',
     );
   });
 
@@ -51,7 +51,9 @@ void main() {
     reply(() => null);
     expect(await PlatformServices.describeCredential(ref), isNull);
 
-    for (final malformed in [
+    for (final malformed in <Object>[
+      'not a map',
+      [1, 2],
       {'scheme': null, 'length': 3},
       {'scheme': 1, 'length': 3, 'sendable': true},
       {'scheme': null, 'length': '3', 'sendable': true},

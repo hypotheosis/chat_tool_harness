@@ -20,19 +20,23 @@ class CredentialSummary {
   /// Stored value length in UTF-8 bytes.
   final int length;
 
-  /// Whether every byte is visible ASCII, space or tab and the value has no
-  /// leading or trailing whitespace. False usually means a paste picked up a
-  /// newline or space; servers may then reject the key.
+  /// Whether every byte is visible ASCII or a single space between visible
+  /// characters: no tabs, newlines, non-ASCII, or leading, trailing or
+  /// consecutive spaces. False usually means a paste picked up whitespace;
+  /// servers may then reject the key.
   final bool sendable;
 
-  /// The Authorization header that will be sent, with the secret's length.
+  /// The Authorization header that will be sent; the count is the secret's
+  /// length, excluding any stored scheme and its space.
   String get authorizationPreview {
+    final scheme = this.scheme;
     final header = scheme != null
-        ? 'Authorization: $scheme ••• ($length chars)'
+        ? 'Authorization: $scheme ••• (${length - scheme.length - 1} chars)'
         : 'Authorization: Bearer ••• ($length chars; Bearer added)';
     return sendable
         ? header
-        : '$header. Contains spaces or invisible characters';
+        : '$header. Has leading/trailing whitespace or characters that '
+              'cannot be sent';
   }
 }
 
@@ -68,15 +72,16 @@ class PlatformServices {
   /// keystore key; the user must re-enter it), and with
   /// [FailureCode.protocol] when the platform reply is malformed.
   static Future<CredentialSummary?> describeCredential(String reference) async {
-    final Map<String, Object?>? reply;
+    final Object? reply;
     try {
-      reply = await credentials.invokeMapMethod<String, Object?>('describe', {
+      reply = await credentials.invokeMethod<Object?>('describe', {
         'reference': reference,
       });
     } on PlatformException {
       throw const BackendFailure(FailureCode.authentication);
     }
     if (reply == null) return null;
+    if (reply is! Map) throw const BackendFailure(FailureCode.protocol);
     final length = reply['length'];
     final scheme = reply['scheme'];
     final sendable = reply['sendable'];

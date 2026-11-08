@@ -1080,6 +1080,12 @@ mod tests {
                 format!("Bearer {value}")
             };
             assert_eq!(authorization_value(value), expected, "case {value:?}");
+            if case["sendable"] == true {
+                assert!(
+                    header::HeaderValue::from_str(&authorization_value(value)).is_ok(),
+                    "sendable case {value:?} must be a valid header"
+                );
+            }
         }
     }
 

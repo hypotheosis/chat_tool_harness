@@ -75,8 +75,9 @@ class CredentialStore(context: Context, private val alias: String = "agent.crede
      * - scheme: the first word when the value is "<scheme> <more>", the same rule as Rust's
      *   `net::authorization_value`; otherwise null and Rust adds "Bearer ".
      * - length: UTF-8 byte length of the stored value.
-     * - sendable: every byte is visible ASCII, space or tab, with no leading or trailing
-     *   whitespace. Stricter than Rust on purpose: it flags pasted newlines and spaces.
+     * - sendable: every byte is visible ASCII or a single space between visible bytes (no
+     *   tabs, control bytes, non-ASCII, leading/trailing or consecutive spaces). Stricter
+     *   than Rust on purpose: it flags pasted newlines, tabs and spaces.
      */
     @Synchronized fun describe(reference: String): Map<String, Any?>? {
         val value = resolve(reference) ?: return null
@@ -103,10 +104,18 @@ class CredentialStore(context: Context, private val alias: String = "agent.crede
         }
         return true
     }
-    private fun isSendable(value: ByteArray): Boolean =
-        value.isNotEmpty() && value.first() != SPACE && value.first() != TAB &&
-            value.last() != SPACE && value.last() != TAB &&
-            value.all { it == SPACE || it == TAB || it.toInt() in 0x21..0x7E }
+    private fun isSendable(value: ByteArray): Boolean {
+        if (value.isEmpty() || value.first() == SPACE || value.last() == SPACE) return false
+        for (i in value.indices) {
+            val b = value[i]
+            if (b == SPACE) {
+                if (value[i - 1] == SPACE) return false
+            } else if (b.toInt() !in 0x21..0x7E) {
+                return false
+            }
+        }
+        return true
+    }
     @Synchronized fun delete(reference: String) {
         val target = file(reference)
         target.delete()
@@ -114,7 +123,6 @@ class CredentialStore(context: Context, private val alias: String = "agent.crede
     }
     private companion object {
         const val SPACE: Byte = 0x20
-        const val TAB: Byte = 0x09
         const val TCHAR_SYMBOLS = "!#$%&'*+.^_`|~-"
     }
 }
