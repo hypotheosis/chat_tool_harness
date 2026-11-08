@@ -182,10 +182,10 @@ pub fn transport_reason(error: &reqwest::Error) -> &'static str {
     if error.is_connect() {
         if refused {
             "connection refused"
-        } else if chain.contains("dns") || chain.contains("resolve") || chain.contains("lookup") {
-            "dns lookup failed"
         } else if chain.contains("certificate") || chain.contains("tls") {
             "tls handshake failed"
+        } else if chain.contains("dns") || chain.contains("resolve") || chain.contains("lookup") {
+            "dns lookup failed"
         } else {
             "connection failed"
         }

@@ -59,11 +59,64 @@ pub fn endpoint_url(endpoint: &EndpointConfig, suffix: &str) -> CoreResult<Url> 
     Ok(url)
 }
 
-fn bearer_header(secret: &SecretValue) -> CoreResult<header::HeaderValue> {
-    let mut value = header::HeaderValue::from_str(&format!("Bearer {}", secret.as_str()))
+/// `Authorization` value for a stored credential: verbatim when it already
+/// starts with an auth scheme (`<token> <rest>`), otherwise `Bearer <value>`.
+pub(crate) fn authorization_value(stored: &str) -> String {
+    let has_scheme = stored.split_once(' ').is_some_and(|(scheme, rest)| {
+        !rest.is_empty()
+            && scheme
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic())
+            && scheme
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "!#$%&'*+.^_`|~-".contains(c))
+    });
+    if has_scheme {
+        stored.to_string()
+    } else {
+        format!("Bearer {stored}")
+    }
+}
+
+fn authorization_header(secret: &SecretValue) -> CoreResult<header::HeaderValue> {
+    let mut value = header::HeaderValue::from_str(&authorization_value(secret.as_str()))
         .map_err(|_| CoreError::Configuration)?;
     value.set_sensitive(true);
     Ok(value)
+}
+
+fn note_failure(
+    target: crate::failure::FailureTarget,
+    url: &Url,
+    status: Option<u16>,
+    reason: Option<String>,
+) {
+    crate::failure::note(crate::failure::FailureDetail {
+        target,
+        step: crate::failure::FailureStep::Request,
+        url: Some(crate::failure::display_url(url)),
+        status,
+        reason,
+    });
+}
+
+/// Reads at most 4096 body bytes of an error response. The flag is true when
+/// the body was cut short by that limit.
+async fn read_error_body(
+    response: &mut Response,
+    deadline: Instant,
+    cancel: &Cancellation,
+) -> CoreResult<(Vec<u8>, bool)> {
+    let mut body = Vec::new();
+    loop {
+        match next_chunk(response, deadline, cancel, 4096 - body.len()).await {
+            Err(CoreError::Limit) => return Ok((body, true)),
+            Err(error) => return Err(error),
+            Ok(None) => return Ok((body, false)),
+            Ok(Some(chunk)) => body.extend_from_slice(&chunk),
+        }
+    }
 }
 
 pub struct NetClient<P> {
@@ -92,6 +145,7 @@ impl<P: CredentialProvider> NetClient<P> {
         cancel: &Cancellation,
     ) -> CoreResult<Response> {
         let url = Url::parse(&server.url).map_err(|_| CoreError::InvalidInput)?;
+        let shown_url = url.clone();
         if server.url.trim() != server.url
             || url.query().is_some()
             || !matches!(url.scheme(), "https" | "http")
@@ -153,8 +207,12 @@ impl<P: CredentialProvider> NetClient<P> {
                 _ = cancel.cancelled() => return Err(CoreError::Cancelled),
                 result = tokio::time::timeout_at(deadline, self.provider.resolve(reference)) => result.map_err(|_| CoreError::Cancelled)??,
             };
-            let mut value = header::HeaderValue::from_str(secret.as_str())
-                .map_err(|_| CoreError::Configuration)?;
+            let mut value = if name == header::AUTHORIZATION {
+                header::HeaderValue::from_str(&authorization_value(secret.as_str()))
+            } else {
+                header::HeaderValue::from_str(secret.as_str())
+            }
+            .map_err(|_| CoreError::Configuration)?;
             value.set_sensitive(true);
             builder = builder.header(name, value);
         }
@@ -167,7 +225,16 @@ impl<P: CredentialProvider> NetClient<P> {
             _ = cancel.cancelled() => Err(CoreError::Cancelled),
             result = tokio::time::timeout_at(deadline, tokio::time::timeout(IDLE_TIMEOUT, builder.send())) => match result {
                 Err(_) => Err(CoreError::Cancelled),
-                Ok(Err(_)) | Ok(Ok(Err(_))) => Err(CoreError::UnavailableTransport),
+                Ok(Err(_)) => Err(CoreError::UnavailableTransport),
+                Ok(Ok(Err(error))) => {
+                    note_failure(
+                        crate::failure::FailureTarget::McpServer { name: server.name.clone() },
+                        &shown_url,
+                        None,
+                        Some(crate::failure::transport_reason(&error).into()),
+                    );
+                    Err(CoreError::UnavailableTransport)
+                }
                 Ok(Ok(Ok(response))) => Ok(response),
             },
         }
@@ -210,6 +277,11 @@ impl<P: CredentialProvider> NetClient<P> {
         if deadline <= Instant::now() {
             return Err(CoreError::Cancelled);
         }
+        let shown_url = url.clone();
+        let target = crate::failure::FailureTarget::Inference {
+            name: endpoint.name.clone(),
+        };
+        let mut secrets: Vec<String> = Vec::new();
         let mut builder = self
             .client
             .request(method, url)
@@ -219,42 +291,61 @@ impl<P: CredentialProvider> NetClient<P> {
                 _ = cancel.cancelled() => return Err(CoreError::Cancelled),
                 result = tokio::time::timeout_at(deadline, self.provider.resolve(reference)) => result.map_err(|_| CoreError::Cancelled)??,
             };
-            builder = builder.header(header::AUTHORIZATION, bearer_header(&secret)?);
+            builder = builder.header(header::AUTHORIZATION, authorization_header(&secret)?);
+            secrets.push(secret.as_str().to_string());
         }
         if let Some(body) = body {
             builder = builder
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(body);
         }
-        let response = tokio::select! {
+        let mut response = tokio::select! {
             _ = cancel.cancelled() => return Err(CoreError::Cancelled),
             result = tokio::time::timeout_at(deadline, tokio::time::timeout(IDLE_TIMEOUT, builder.send())) => {
                 match result {
                     Err(_) => return Err(CoreError::Cancelled),
                     Ok(Err(_)) => return Err(CoreError::UnavailableTransport),
-                    Ok(Ok(Err(_))) => return Err(CoreError::UnavailableTransport),
+                    Ok(Ok(Err(error))) => {
+                        note_failure(
+                            target,
+                            &shown_url,
+                            None,
+                            Some(crate::failure::transport_reason(&error).into()),
+                        );
+                        return Err(CoreError::UnavailableTransport);
+                    }
                     Ok(Ok(Ok(response))) => response,
                 }
             },
         };
-        match response.status().as_u16() {
-            200..=299 => Ok(response),
+        let status = response.status().as_u16();
+        if (200..=299).contains(&status) {
+            return Ok(response);
+        }
+        let (body, truncated) = match read_error_body(&mut response, deadline, cancel).await {
+            Err(CoreError::Cancelled) => return Err(CoreError::Cancelled),
+            Err(error) if status == 400 || status == 422 => {
+                if suffix == "chat/completions" {
+                    return Err(error);
+                }
+                (Vec::new(), false)
+            }
+            Err(_) => (Vec::new(), false),
+            Ok(read) => read,
+        };
+        let secret_refs: Vec<&str> = secrets.iter().map(String::as_str).collect();
+        note_failure(
+            target,
+            &shown_url,
+            Some(status),
+            crate::failure::reason_from_body(&body, &secret_refs),
+        );
+        match status {
             401 | 403 => Err(CoreError::Authentication),
             429 => Err(CoreError::RateLimited),
             400 | 422 if suffix == "chat/completions" => {
-                let mut response = response;
-                let mut body = Vec::new();
-                loop {
-                    let chunk = match next_chunk(&mut response, deadline, cancel, 4096 - body.len())
-                        .await
-                    {
-                        Err(CoreError::Limit) => return Err(CoreError::Protocol),
-                        other => other?,
-                    };
-                    let Some(chunk) = chunk else {
-                        break;
-                    };
-                    body.extend_from_slice(&chunk);
+                if truncated {
+                    return Err(CoreError::Protocol);
                 }
                 let error = serde_json::from_slice::<serde_json::Value>(&body).ok();
                 let error = error.as_ref().and_then(|v| v.get("error"));
@@ -393,7 +484,7 @@ mod tests {
             let n = socket.read(&mut request).await.unwrap();
             let request = String::from_utf8_lossy(&request[..n]).to_ascii_lowercase();
             assert!(request.starts_with("post /configured/mcp http/1.1"));
-            assert!(request.contains("authorization: synthetic-key"));
+            assert!(request.contains("authorization: bearer synthetic-key"));
             assert!(request.contains("mcp-protocol-version: 2025-11-25"));
             assert!(request.contains("mcp-session-id: synthetic-session"));
             socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").await.unwrap();
@@ -519,7 +610,7 @@ mod tests {
     }
     #[test]
     fn net_bearer_header_debug_redacts_while_preserving_wire_value() {
-        let value = bearer_header(&SecretValue::new("highly-private".into())).unwrap();
+        let value = authorization_header(&SecretValue::new("highly-private".into())).unwrap();
         assert!(value.is_sensitive());
         assert!(!format!("{value:?}").contains("highly-private"));
         assert_eq!(value.to_str().unwrap(), "Bearer highly-private");
@@ -874,5 +965,251 @@ mod tests {
             Cancellation::new(),
         ));
         assert!(matches!(result, Err(CoreError::InvalidInput)));
+    }
+
+    struct FixedKey(&'static str);
+    impl CredentialProvider for FixedKey {
+        fn resolve(
+            &self,
+            _: CredentialRef,
+        ) -> Pin<Box<dyn Future<Output = CoreResult<SecretValue>> + Send + '_>> {
+            let value = self.0.to_string();
+            Box::pin(async move { Ok(SecretValue::new(value)) })
+        }
+    }
+
+    async fn one_shot(
+        status: &'static str,
+        body: &'static str,
+    ) -> (std::net::SocketAddr, tokio::task::JoinHandle<String>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 8192];
+            let n = socket.read(&mut request).await.unwrap();
+            socket
+                .write_all(format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes())
+                .await
+                .unwrap();
+            String::from_utf8_lossy(&request[..n]).into_owned()
+        });
+        (addr, task)
+    }
+
+    #[test]
+    fn net_authorization_value_rule() {
+        assert_eq!(authorization_value("abc"), "Bearer abc");
+        assert_eq!(authorization_value("Bearer abc"), "Bearer abc");
+        assert_eq!(authorization_value("bearer abc"), "bearer abc");
+        assert_eq!(authorization_value("Basic dXNlcg=="), "Basic dXNlcg==");
+        assert_eq!(authorization_value("okf_abc-def"), "Bearer okf_abc-def");
+    }
+
+    #[tokio::test]
+    async fn net_endpoint_401_notes_reason_and_redacts_key() {
+        let (addr, server) = one_shot(
+            "401 Unauthorized",
+            r#"{"error":{"message":"unknown API key"}}"#,
+        )
+        .await;
+        let mut endpoint = endpoint(&format!("http://{addr}/v1"));
+        endpoint.allow_http = true;
+        endpoint.credential = Some(CredentialRef::new());
+        let (result, detail) = crate::failure::scope(async {
+            NetClient::new(FixedKey("sk-test-key"))
+                .unwrap()
+                .get(
+                    &endpoint,
+                    "models",
+                    Instant::now() + Duration::from_secs(5),
+                    Cancellation::new(),
+                )
+                .await
+        })
+        .await;
+        assert!(matches!(result, Err(CoreError::Authentication)));
+        let request = server.await.unwrap().to_ascii_lowercase();
+        assert!(request.contains("authorization: bearer sk-test-key"));
+        let detail = detail.expect("detail noted");
+        assert_eq!(detail.status, Some(401));
+        assert_eq!(detail.reason.as_deref(), Some("unknown API key"));
+        assert_eq!(
+            detail.target,
+            crate::failure::FailureTarget::Inference {
+                name: "test".into()
+            }
+        );
+        assert_eq!(
+            detail.url.as_deref(),
+            Some(format!("http://{addr}/v1/models").as_str())
+        );
+    }
+
+    #[tokio::test]
+    async fn net_endpoint_error_body_echoing_key_is_redacted() {
+        let (addr, server) = one_shot(
+            "401 Unauthorized",
+            r#"{"error":{"message":"bad key sk-test-key"}}"#,
+        )
+        .await;
+        let mut endpoint = endpoint(&format!("http://{addr}/v1"));
+        endpoint.allow_http = true;
+        endpoint.credential = Some(CredentialRef::new());
+        let (_, detail) = crate::failure::scope(async {
+            NetClient::new(FixedKey("sk-test-key"))
+                .unwrap()
+                .get(
+                    &endpoint,
+                    "models",
+                    Instant::now() + Duration::from_secs(5),
+                    Cancellation::new(),
+                )
+                .await
+        })
+        .await;
+        server.await.unwrap();
+        assert_eq!(detail.unwrap().reason.as_deref(), Some("bad key •••"));
+    }
+
+    #[tokio::test]
+    async fn net_endpoint_credential_with_scheme_is_not_double_prefixed() {
+        let (addr, server) = one_shot("200 OK", r#"{"data":[]}"#).await;
+        let mut endpoint = endpoint(&format!("http://{addr}/v1"));
+        endpoint.allow_http = true;
+        endpoint.credential = Some(CredentialRef::new());
+        let _ = NetClient::new(FixedKey("Bearer sk-test-key"))
+            .unwrap()
+            .get(
+                &endpoint,
+                "models",
+                Instant::now() + Duration::from_secs(5),
+                Cancellation::new(),
+            )
+            .await
+            .unwrap();
+        let request = server.await.unwrap().to_ascii_lowercase();
+        assert!(request.contains("authorization: bearer sk-test-key\r\n"));
+        assert!(!request.contains("bearer bearer"));
+    }
+
+    #[tokio::test]
+    async fn net_connect_failure_notes_transport_reason() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        drop(listener);
+        let mut endpoint = endpoint(&format!("http://{addr}/v1"));
+        endpoint.allow_http = true;
+        let (result, detail) = crate::failure::scope(async {
+            NetClient::new(FixedKey("unused"))
+                .unwrap()
+                .get(
+                    &endpoint,
+                    "models",
+                    Instant::now() + Duration::from_secs(5),
+                    Cancellation::new(),
+                )
+                .await
+        })
+        .await;
+        assert!(matches!(result, Err(CoreError::UnavailableTransport)));
+        let detail = detail.unwrap();
+        assert_eq!(detail.status, None);
+        assert_eq!(detail.reason.as_deref(), Some("connection refused"));
+    }
+
+    #[tokio::test]
+    async fn net_mcp_authorization_header_rule_and_other_headers_verbatim() {
+        for (stored, expected) in [
+            ("okf_abc", "authorization: bearer okf_abc\r\n"),
+            ("Bearer okf_abc", "authorization: bearer okf_abc\r\n"),
+        ] {
+            let (addr, server) = one_shot("200 OK", "{}").await;
+            let config = crate::model::core::ServerConfig {
+                id: crate::model::core::ServerId::new(),
+                name: "fixture".into(),
+                url: format!("http://{addr}/mcp"),
+                allow_http: true,
+                secret_headers: vec![("Authorization".into(), CredentialRef::new())],
+            };
+            NetClient::new(FixedKey(stored))
+                .unwrap()
+                .mcp_request(
+                    &config,
+                    Method::POST,
+                    Some(b"{}".to_vec()),
+                    None,
+                    None,
+                    Instant::now() + Duration::from_secs(5),
+                    &Cancellation::new(),
+                )
+                .await
+                .unwrap();
+            let request = server.await.unwrap().to_ascii_lowercase();
+            assert!(request.contains(expected), "{request}");
+            assert!(!request.contains("bearer bearer"));
+        }
+        let (addr, server) = one_shot("200 OK", "{}").await;
+        let config = crate::model::core::ServerConfig {
+            id: crate::model::core::ServerId::new(),
+            name: "fixture".into(),
+            url: format!("http://{addr}/mcp"),
+            allow_http: true,
+            secret_headers: vec![("X-Api-Key".into(), CredentialRef::new())],
+        };
+        NetClient::new(FixedKey("k1"))
+            .unwrap()
+            .mcp_request(
+                &config,
+                Method::POST,
+                Some(b"{}".to_vec()),
+                None,
+                None,
+                Instant::now() + Duration::from_secs(5),
+                &Cancellation::new(),
+            )
+            .await
+            .unwrap();
+        let request = server.await.unwrap().to_ascii_lowercase();
+        assert!(request.contains("x-api-key: k1\r\n"), "{request}");
+    }
+
+    #[tokio::test]
+    async fn net_mcp_connect_failure_notes_transport_reason() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        drop(listener);
+        let config = crate::model::core::ServerConfig {
+            id: crate::model::core::ServerId::new(),
+            name: "fixture".into(),
+            url: format!("http://{addr}/mcp"),
+            allow_http: true,
+            secret_headers: vec![],
+        };
+        let (result, detail) = crate::failure::scope(async {
+            NetClient::new(FixedKey("unused"))
+                .unwrap()
+                .mcp_request(
+                    &config,
+                    Method::POST,
+                    Some(b"{}".to_vec()),
+                    None,
+                    None,
+                    Instant::now() + Duration::from_secs(5),
+                    &Cancellation::new(),
+                )
+                .await
+        })
+        .await;
+        assert!(matches!(result, Err(CoreError::UnavailableTransport)));
+        let detail = detail.unwrap();
+        assert_eq!(
+            detail.target,
+            crate::failure::FailureTarget::McpServer {
+                name: "fixture".into()
+            }
+        );
+        assert_eq!(detail.reason.as_deref(), Some("connection refused"));
     }
 }
