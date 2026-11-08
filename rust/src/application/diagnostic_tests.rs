@@ -535,3 +535,100 @@ async fn r3_discovery_error_keeps_lease_through_cleanup_then_releases_it() {
     f.start_then_cancel().await;
     f.app.close().await.unwrap();
 }
+
+#[tokio::test]
+async fn discover_server_failure_carries_detail_across_command_boundary() {
+    let mut wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    let app = f.app.clone();
+    let command = f.discover();
+    let diagnostic = tokio::spawn(async move { app.command_with_detail(command).await });
+    let request = wire.next().await;
+    assert_eq!(request.body["method"], "initialize");
+    request.respond(
+        401,
+        "application/json",
+        "",
+        json!({"error":"unknown API key"}).to_string(),
+    );
+    let failure = diagnostic.await.unwrap().unwrap_err();
+    assert_eq!(failure.code, CoreError::Authentication);
+    let detail = failure.detail.expect("failure detail");
+    assert_eq!(detail.target_kind, "mcpServer");
+    assert_eq!(detail.target_name.as_deref(), Some("s"));
+    assert_eq!(detail.step, "initialize");
+    assert_eq!(detail.status, Some(401));
+    assert_eq!(detail.reason.as_deref(), Some("unknown API key"));
+    f.app.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn discover_server_missing_credential_is_credential_missing() {
+    let wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    f.app
+        .repository
+        .save_server(core::ServerConfig {
+            id: core::ServerId(uuid(&f.server).unwrap()),
+            name: "s".into(),
+            url: format!("{}/mcp", wire.url),
+            allow_http: true,
+            secret_headers: vec![("Authorization".into(), core::CredentialRef::new())],
+        })
+        .unwrap();
+    let failure = f.app.command_with_detail(f.discover()).await.unwrap_err();
+    assert_eq!(failure.code, CoreError::CredentialMissing);
+    let detail = failure.detail.expect("failure detail");
+    assert_eq!(detail.target_kind, "credential");
+    assert_eq!(detail.target_name, None);
+    assert_eq!(detail.step, "resolveCredential");
+    // The plain command path reports the same kind.
+    assert_eq!(
+        f.app.command(f.discover()).await.unwrap_err(),
+        CoreError::CredentialMissing
+    );
+    f.app.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn discover_models_transport_failure_carries_detail() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/v1", listener.local_addr().unwrap());
+    drop(listener);
+    let f = AppFixture::open(&url).await;
+    let failure = f
+        .app
+        .command_with_detail(AppCommand::DiscoverModels {
+            endpoint_id: f.endpoint.clone(),
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(failure.code, CoreError::UnavailableTransport);
+    let detail = failure.detail.expect("failure detail");
+    assert_eq!(detail.target_kind, "inference");
+    assert_eq!(detail.target_name.as_deref(), Some("e"));
+    assert_eq!(detail.step, "discoverModels");
+    assert_eq!(detail.reason.as_deref(), Some("connection refused"));
+    f.app.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn failed_run_snapshot_carries_failure_code_and_detail() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    drop(listener);
+    let f = AppFixture::open(&url).await;
+    let stopped = f.stopped.notified();
+    let run = f.app.command(f.start()).await.unwrap().id.unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(10), stopped)
+        .await
+        .expect("run settles");
+    let snapshot = f.app.snapshot().await.unwrap();
+    let run = snapshot.runs.iter().find(|r| r.id == run).expect("run");
+    let code = run.failure_code.clone().expect("failure code");
+    let detail = run.failure_detail.clone().expect("failure detail");
+    assert_eq!(code, CoreError::UnavailableTransport);
+    assert_eq!(detail.reason.as_deref(), Some("connection refused"));
+    assert_eq!(run.failure, detail.reason);
+    f.app.close().await.unwrap();
+}

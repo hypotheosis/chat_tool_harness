@@ -306,3 +306,102 @@ impl AgentConversation {
         }
     }
 }
+impl From<crate::failure::FailureDetail> for AgentFailureDetail {
+    fn from(v: crate::failure::FailureDetail) -> Self {
+        use crate::failure::{FailureStep, FailureTarget};
+        let (target_kind, target_name) = match v.target {
+            FailureTarget::Inference { name } => ("inference", Some(name)),
+            FailureTarget::McpServer { name } => ("mcpServer", Some(name)),
+            FailureTarget::Profile { name } => ("profile", Some(name)),
+            FailureTarget::Credential => ("credential", None),
+        };
+        let step = match v.step {
+            FailureStep::DiscoverModels => "discoverModels",
+            FailureStep::ChatRequest => "chatRequest",
+            FailureStep::Initialize => "initialize",
+            FailureStep::ListTools => "listTools",
+            FailureStep::CallTool => "callTool",
+            FailureStep::ResolveCredential => "resolveCredential",
+            FailureStep::RefreshProfile => "refreshProfile",
+            FailureStep::Request => "request",
+        };
+        Self {
+            target_kind: target_kind.into(),
+            target_name,
+            step: step.into(),
+            url: v.url,
+            status: v.status,
+            reason: v.reason,
+        }
+    }
+}
+impl AgentFailure {
+    /// Pairs `code` with `detail`, restoring `CredentialMissing` where the
+    /// detail marks an absent credential.
+    pub(crate) fn new(code: CoreError, detail: Option<crate::failure::FailureDetail>) -> Self {
+        Self {
+            code: crate::failure::promote(code, detail.as_ref()),
+            detail: detail.map(|d| Box::new(d.into())),
+        }
+    }
+}
+impl From<CoreError> for AgentFailure {
+    fn from(code: CoreError) -> Self {
+        Self::new(code, None)
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::failure::{FailureDetail, FailureStep, FailureTarget};
+
+    #[test]
+    fn failure_detail_maps_target_and_step_names() {
+        let mapped: AgentFailureDetail = FailureDetail {
+            target: FailureTarget::McpServer {
+                name: "tools".into(),
+            },
+            step: FailureStep::ListTools,
+            url: Some("https://example.com/mcp".into()),
+            status: Some(503),
+            reason: Some("busy".into()),
+        }
+        .into();
+        assert_eq!(
+            mapped,
+            AgentFailureDetail {
+                target_kind: "mcpServer".into(),
+                target_name: Some("tools".into()),
+                step: "listTools".into(),
+                url: Some("https://example.com/mcp".into()),
+                status: Some(503),
+                reason: Some("busy".into()),
+            }
+        );
+        let credential: AgentFailureDetail = crate::failure::credential_missing().into();
+        assert_eq!(credential.target_kind, "credential");
+        assert_eq!(credential.target_name, None);
+        assert_eq!(credential.step, "resolveCredential");
+    }
+
+    #[test]
+    fn agent_failure_promotes_missing_credential_only() {
+        let missing = AgentFailure::new(
+            CoreError::Authentication,
+            Some(crate::failure::credential_missing()),
+        );
+        assert_eq!(missing.code, CoreError::CredentialMissing);
+        let lookup = AgentFailure::new(
+            CoreError::Authentication,
+            Some(FailureDetail {
+                reason: Some("credential lookup failed".into()),
+                ..crate::failure::credential_missing()
+            }),
+        );
+        assert_eq!(lookup.code, CoreError::Authentication);
+        assert_eq!(
+            AgentFailure::from(CoreError::Storage).code,
+            CoreError::Storage
+        );
+    }
+}

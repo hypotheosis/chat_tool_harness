@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import '../src/rust/inference.dart' as inf;
 import '../src/rust/api/agent.dart' as api;
 import '../src/rust/application.dart' as callbacks;
@@ -55,7 +56,7 @@ class FrbBackend implements Backend {
       );
       return FrbBackend._(handle);
     } catch (error) {
-      throw _failure(error);
+      throw mapFailure(error);
     }
   }
 
@@ -71,7 +72,7 @@ class FrbBackend implements Backend {
         await api.agentCommand(handle: _handle, command: _command(command)),
       );
     } catch (error) {
-      throw _failure(error);
+      throw mapFailure(error);
     }
   }
 
@@ -81,7 +82,7 @@ class FrbBackend implements Backend {
     try {
       return _fromAppSnapshot(await api.agentSnapshot(handle: _handle));
     } catch (error) {
-      throw _failure(error);
+      throw mapFailure(error);
     }
   }
 
@@ -108,7 +109,7 @@ class FrbBackend implements Backend {
           if (!wait.cancelled && _closing == null) await wait.next();
         }
       } catch (error) {
-        if (!wait.cancelled) controller.addError(_failure(error));
+        if (!wait.cancelled) controller.addError(mapFailure(error));
       } finally {
         wait.cancel();
         _polls.remove(wait);
@@ -142,35 +143,53 @@ class FrbBackend implements Backend {
       );
       await api.closeAgent(handle: _handle);
     } catch (error) {
-      throw _failure(error);
+      throw mapFailure(error);
     } finally {
       _handle.dispose();
     }
   }
 }
 
-BackendFailure _failure(Object error) {
+/// Maps a bridge error to a sanitized [BackendFailure].
+@visibleForTesting
+BackendFailure mapFailure(Object error) {
   if (error is BackendFailure) return error;
-  if (error is errors.CoreError) {
-    return BackendFailure(switch (error) {
-      errors.CoreError.invalidInput => FailureCode.invalidInput,
-      errors.CoreError.configuration => FailureCode.configuration,
-      errors.CoreError.authentication => FailureCode.authentication,
-      errors.CoreError.credentialMissing => FailureCode.credentialMissing,
-      errors.CoreError.rateLimited => FailureCode.rateLimited,
-      errors.CoreError.toolUnsupported => FailureCode.toolUnsupported,
-      errors.CoreError.discoveryUnavailable => FailureCode.discoveryUnavailable,
-      errors.CoreError.contextLength => FailureCode.contextLength,
-      errors.CoreError.unavailableTransport => FailureCode.unavailableTransport,
-      errors.CoreError.protocol => FailureCode.protocol,
-      errors.CoreError.limit => FailureCode.limit,
-      errors.CoreError.storage => FailureCode.storage,
-      errors.CoreError.cancelled => FailureCode.cancelled,
-      errors.CoreError.conflict => FailureCode.conflict,
-    });
+  if (error is g.AgentFailure) {
+    final detail = error.detail;
+    return BackendFailure(
+      _fromCoreError(error.code),
+      detail: detail == null ? null : _fromFailureDetail(detail),
+    );
   }
+  if (error is errors.CoreError) return BackendFailure(_fromCoreError(error));
   return BackendFailure.fromNative(error);
 }
+
+FailureCode _fromCoreError(errors.CoreError error) => switch (error) {
+  errors.CoreError.invalidInput => FailureCode.invalidInput,
+  errors.CoreError.configuration => FailureCode.configuration,
+  errors.CoreError.authentication => FailureCode.authentication,
+  errors.CoreError.credentialMissing => FailureCode.credentialMissing,
+  errors.CoreError.rateLimited => FailureCode.rateLimited,
+  errors.CoreError.toolUnsupported => FailureCode.toolUnsupported,
+  errors.CoreError.discoveryUnavailable => FailureCode.discoveryUnavailable,
+  errors.CoreError.contextLength => FailureCode.contextLength,
+  errors.CoreError.unavailableTransport => FailureCode.unavailableTransport,
+  errors.CoreError.protocol => FailureCode.protocol,
+  errors.CoreError.limit => FailureCode.limit,
+  errors.CoreError.storage => FailureCode.storage,
+  errors.CoreError.cancelled => FailureCode.cancelled,
+  errors.CoreError.conflict => FailureCode.conflict,
+};
+
+FailureDetail _fromFailureDetail(g.AgentFailureDetail v) => FailureDetail(
+  targetKind: v.targetKind,
+  targetName: v.targetName,
+  step: v.step,
+  url: v.url,
+  status: v.status,
+  reason: v.reason,
+);
 
 g.AppCommand _command(AppCommand command) => switch (command) {
   DiscoverModels() => g.AppCommand.discoverModels(
@@ -472,6 +491,10 @@ Run _fromRun(g.AgentRun v) => Run(
   activeMs: v.activeMs.toInt(),
   partialText: v.partialText,
   failure: v.failure,
+  failureCode: v.failureCode == null ? null : _fromCoreError(v.failureCode!),
+  failureDetail: v.failureDetail == null
+      ? null
+      : _fromFailureDetail(v.failureDetail!),
   attempts: v.attempts.map((v) => _fromAttempt(v)).toList(),
   context: _fromRunContext(v.context),
 );

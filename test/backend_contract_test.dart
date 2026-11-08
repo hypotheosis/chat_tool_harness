@@ -2,7 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chat_tool_harness/backend/backend.dart';
+import 'package:chat_tool_harness/backend/frb_backend.dart';
 import 'package:chat_tool_harness/backend/models.dart';
+import 'package:chat_tool_harness/src/rust/application/dto.dart' as g;
+import 'package:chat_tool_harness/src/rust/error.dart' as errors;
 import 'support/fake_backend.dart';
 
 void main() {
@@ -66,6 +69,35 @@ void main() {
     );
     expect(failure.toString(), isNot(contains('private')));
     expect(failure.code, FailureCode.unavailableTransport);
+  });
+
+  test('agent_failure_maps_code_and_detail', () {
+    final failure = mapFailure(
+      const g.AgentFailure(
+        code: errors.CoreError.authentication,
+        detail: g.AgentFailureDetail(
+          targetKind: 'mcpServer',
+          targetName: 'tools',
+          step: 'initialize',
+          status: 401,
+          reason: 'unknown API key',
+          url: null,
+        ),
+      ),
+    );
+    expect(failure.code, FailureCode.authentication);
+    expect(failure.detail?.targetKind, 'mcpServer');
+    expect(failure.detail?.targetName, 'tools');
+    expect(failure.detail?.step, 'initialize');
+    expect(failure.detail?.status, 401);
+    expect(failure.detail?.reason, 'unknown API key');
+    expect(failure.detail?.url, isNull);
+    final bare = mapFailure(
+      const g.AgentFailure(code: errors.CoreError.credentialMissing),
+    );
+    expect(bare.code, FailureCode.credentialMissing);
+    expect(bare.detail, isNull);
+    expect(failure.toString(), isNot(contains('unknown API key')));
   });
 
   test('unsubscribe_does_not_cancel_run', () async {

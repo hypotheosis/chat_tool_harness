@@ -10,11 +10,16 @@
 //!   last writer wins. Set the step per request.
 //! - Nested scopes capture their own notes and start with no step.
 //! - Read the detail only when the work returned `Err`.
+use crate::error::CoreError;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::future::Future;
 
 pub const MAX_REASON_CHARS: usize = 160;
+/// Reason of the Credential note that marks an absent stored credential. MCP
+/// collapses `CredentialMissing` into `Authentication`; this note lets a
+/// boundary restore the precise kind (see [`promote`]).
+pub const CREDENTIAL_MISSING_REASON: &str = "stored credential missing; re-enter it in settings";
 const MAX_BODY_BYTES: usize = 8192;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,6 +89,30 @@ pub fn note(mut detail: FailureDetail) {
         }
     }
     let _ = NOTE.try_with(|n| *n.borrow_mut() = Some(detail));
+}
+
+/// The note recorded when a credential reference has no stored value.
+pub fn credential_missing() -> FailureDetail {
+    FailureDetail {
+        target: FailureTarget::Credential,
+        step: FailureStep::ResolveCredential,
+        url: None,
+        status: None,
+        reason: Some(CREDENTIAL_MISSING_REASON.into()),
+    }
+}
+
+/// Restores `CredentialMissing` for an `Authentication` failure whose note
+/// marks an absent credential; every other kind is returned unchanged.
+pub fn promote(code: CoreError, detail: Option<&FailureDetail>) -> CoreError {
+    let missing = detail.is_some_and(|d| {
+        d.target == FailureTarget::Credential
+            && d.reason.as_deref() == Some(CREDENTIAL_MISSING_REASON)
+    });
+    match code {
+        CoreError::Authentication if missing => CoreError::CredentialMissing,
+        other => other,
+    }
 }
 
 /// Sets the logical step for notes recorded with `FailureStep::Request`.
@@ -245,6 +274,31 @@ mod tests {
         })
         .await;
         assert_eq!(got.unwrap().reason.as_deref(), Some("second"));
+    }
+
+    #[test]
+    fn failure_promote_needs_the_credential_missing_marker() {
+        let missing = credential_missing();
+        assert_eq!(
+            promote(CoreError::Authentication, Some(&missing)),
+            CoreError::CredentialMissing
+        );
+        let reasonless = FailureDetail {
+            reason: None,
+            ..credential_missing()
+        };
+        assert_eq!(
+            promote(CoreError::Authentication, Some(&reasonless)),
+            CoreError::Authentication
+        );
+        assert_eq!(
+            promote(CoreError::Authentication, None),
+            CoreError::Authentication
+        );
+        assert_eq!(
+            promote(CoreError::Protocol, Some(&missing)),
+            CoreError::Protocol
+        );
     }
 
     #[tokio::test]

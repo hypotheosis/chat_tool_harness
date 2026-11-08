@@ -27,8 +27,8 @@ pub async fn open_agent(
 pub async fn agent_command(
     handle: &AgentHandle,
     command: AppCommand,
-) -> CoreResult<AgentCommandReply> {
-    handle.0.command(command).await
+) -> Result<AgentCommandReply, AgentFailure> {
+    handle.0.command_with_detail(command).await
 }
 pub async fn agent_snapshot(handle: &AgentHandle) -> CoreResult<AgentAppSnapshot> {
     handle.0.snapshot().await

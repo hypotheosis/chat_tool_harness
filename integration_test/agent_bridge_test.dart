@@ -91,12 +91,11 @@ void main() {
         (await backend.snapshot()).conversations.single.originAcknowledged,
         isTrue,
       );
-      // Inference diagnostics report the missing credential itself; MCP
-      // diagnostics still collapse it into authentication.
+      // Inference and MCP diagnostics both report the missing credential.
       for (final (command, code) in <(AppCommand, FailureCode)>[
         (DiscoverModels(endpoint), FailureCode.credentialMissing),
         (ProbeEndpoint(endpoint), FailureCode.credentialMissing),
-        (DiscoverServer(profile, server), FailureCode.authentication),
+        (DiscoverServer(profile, server), FailureCode.credentialMissing),
       ]) {
         await expectLater(
           backend.execute(command),
@@ -112,6 +111,48 @@ void main() {
       expect(
         (await backend.snapshot()).profiles.single.mode,
         ProfileMode.chatOnly,
+      );
+    } finally {
+      await backend.close();
+      await dir.delete(recursive: true);
+    }
+  });
+  testWidgets('connection_test_failure_carries_detail', (tester) async {
+    final dir = await Directory.systemTemp.createTemp('agent-detail-');
+    final backend = await FrbBackend.open(
+      dir.path,
+      PlatformServices(
+        resolveCredential: (_) async => null,
+        setServiceActive: (_) async {},
+      ),
+    );
+    try {
+      final endpoint = (await backend.execute(const NewId())).id!;
+      await backend.execute(
+        SaveEndpoint(
+          EndpointConfig(
+            id: endpoint,
+            name: 'closed',
+            // Port 9 (discard) is closed, so the connection is refused.
+            baseUrl: 'http://127.0.0.1:9/v1',
+            model: 'manual',
+            contextTokens: 4000,
+            maxOutputTokens: 128,
+            temperature: 0,
+            allowHttp: true,
+          ),
+        ),
+      );
+      await expectLater(
+        backend.execute(DiscoverModels(endpoint)),
+        throwsA(
+          isA<BackendFailure>()
+              .having((e) => e.code, 'code', FailureCode.unavailableTransport)
+              .having((e) => e.detail?.targetKind, 'target', 'inference')
+              .having((e) => e.detail?.targetName, 'name', 'closed')
+              .having((e) => e.detail?.step, 'step', 'discoverModels')
+              .having((e) => e.detail?.reason, 'reason', 'connection refused'),
+        ),
       );
     } finally {
       await backend.close();
@@ -288,8 +329,14 @@ void main() {
           .timeout(const Duration(seconds: 15));
       expect(resolutions, 1);
       expect(hostCalls, [true, false]);
-      expect(terminal.runs.single.failure, 'core authentication failure');
-      expect(terminal.runs.single.failure, isNot(contains('private')));
+      final run = terminal.runs.single;
+      // The display text is the noted reason; the code and detail are typed.
+      expect(run.failure, 'credential lookup failed');
+      expect(run.failure, isNot(contains('private')));
+      expect(run.failureCode, FailureCode.authentication);
+      expect(run.failureDetail?.targetKind, 'credential');
+      expect(run.failureDetail?.step, 'resolveCredential');
+      expect(run.failureDetail?.reason, isNot(contains('private')));
     } finally {
       await backend.close();
       await dir.delete(recursive: true);

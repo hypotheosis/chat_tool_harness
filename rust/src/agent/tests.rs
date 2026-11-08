@@ -1626,18 +1626,12 @@ async fn failed_run_without_note_stores_fallback_detail() {
 
 #[tokio::test]
 async fn credential_note_promotes_authentication_to_credential_missing() {
-    use crate::failure::{FailureDetail, FailureStep, FailureTarget};
+    use crate::failure::FailureTarget;
     let mut f = Fixture::new();
     let run = f.start().await;
     f.request().await.finish_noted(
         Err(CoreError::Authentication),
-        FailureDetail {
-            target: FailureTarget::Credential,
-            step: FailureStep::ResolveCredential,
-            url: None,
-            status: None,
-            reason: None,
-        },
+        crate::failure::credential_missing(),
     );
     let stored = f.settled(run).await.failure.unwrap();
     assert_eq!(stored.code, CoreError::CredentialMissing);

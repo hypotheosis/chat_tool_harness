@@ -76,7 +76,7 @@ fn wire__crate__api__agent__agent_command_impl(
             let api_command = <crate::application::dto::AppCommand>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
-                transform_result_sse::<_, crate::error::CoreError>(
+                transform_result_sse::<_, crate::application::dto::AgentFailure>(
                     (move || async move {
                         let mut api_handle_guard = None;
                         let decode_indices_ =
@@ -900,6 +900,39 @@ impl SseDecode for crate::application::dto::AgentExportBundle {
     }
 }
 
+impl SseDecode for crate::application::dto::AgentFailure {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_code = <crate::error::CoreError>::sse_decode(deserializer);
+        let mut var_detail =
+            <Option<Box<crate::application::dto::AgentFailureDetail>>>::sse_decode(deserializer);
+        return crate::application::dto::AgentFailure {
+            code: var_code,
+            detail: var_detail,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentFailureDetail {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_targetKind = <String>::sse_decode(deserializer);
+        let mut var_targetName = <Option<String>>::sse_decode(deserializer);
+        let mut var_step = <String>::sse_decode(deserializer);
+        let mut var_url = <Option<String>>::sse_decode(deserializer);
+        let mut var_status = <Option<u16>>::sse_decode(deserializer);
+        let mut var_reason = <Option<String>>::sse_decode(deserializer);
+        return crate::application::dto::AgentFailureDetail {
+            target_kind: var_targetKind,
+            target_name: var_targetName,
+            step: var_step,
+            url: var_url,
+            status: var_status,
+            reason: var_reason,
+        };
+    }
+}
+
 impl SseDecode for crate::application::dto::AgentMessage {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1007,6 +1040,9 @@ impl SseDecode for crate::application::dto::AgentRun {
         let mut var_activeMs = <u64>::sse_decode(deserializer);
         let mut var_partialText = <String>::sse_decode(deserializer);
         let mut var_failure = <Option<String>>::sse_decode(deserializer);
+        let mut var_failureCode = <Option<crate::error::CoreError>>::sse_decode(deserializer);
+        let mut var_failureDetail =
+            <Option<crate::application::dto::AgentFailureDetail>>::sse_decode(deserializer);
         let mut var_attempts =
             <Vec<crate::application::dto::AgentAttempt>>::sse_decode(deserializer);
         let mut var_context = <crate::application::dto::AgentRunContext>::sse_decode(deserializer);
@@ -1020,6 +1056,8 @@ impl SseDecode for crate::application::dto::AgentRun {
             active_ms: var_activeMs,
             partial_text: var_partialText,
             failure: var_failure,
+            failure_code: var_failureCode,
+            failure_detail: var_failureDetail,
             attempts: var_attempts,
             context: var_context,
         };
@@ -1385,6 +1423,15 @@ impl SseDecode for bool {
     }
 }
 
+impl SseDecode for Box<crate::application::dto::AgentFailureDetail> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        return Box::new(<crate::application::dto::AgentFailureDetail>::sse_decode(
+            deserializer,
+        ));
+    }
+}
+
 impl SseDecode for crate::agent::context::ContextChoiceReason {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1730,6 +1777,19 @@ impl SseDecode for Option<String> {
     }
 }
 
+impl SseDecode for Option<Box<crate::application::dto::AgentFailureDetail>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(
+                <Box<crate::application::dto::AgentFailureDetail>>::sse_decode(deserializer),
+            );
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::application::dto::AgentApprovalBinding> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1808,6 +1868,19 @@ impl SseDecode for Option<crate::application::dto::AgentExportBundle> {
     }
 }
 
+impl SseDecode for Option<crate::application::dto::AgentFailureDetail> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::application::dto::AgentFailureDetail>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::application::dto::AgentProviderUsage> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1834,6 +1907,17 @@ impl SseDecode for Option<crate::agent::context::ContextChoiceReason> {
     }
 }
 
+impl SseDecode for Option<crate::error::CoreError> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::error::CoreError>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<i64> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1850,6 +1934,17 @@ impl SseDecode for Option<crate::inference::ToolSupport> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<crate::inference::ToolSupport>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<u16> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<u16>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -2062,6 +2157,13 @@ impl SseDecode for crate::inference::ToolSupport {
             2 => crate::inference::ToolSupport::Inconclusive,
             _ => unreachable!("Invalid variant for ToolSupport: {}", inner),
         };
+    }
+}
+
+impl SseDecode for u16 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u16::<NativeEndian>().unwrap()
     }
 }
 
@@ -2491,6 +2593,52 @@ impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentExportBundl
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentFailure {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.code.into_into_dart().into_dart(),
+            self.detail.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentFailure
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentFailure>
+    for crate::application::dto::AgentFailure
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentFailure {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentFailureDetail {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.target_kind.into_into_dart().into_dart(),
+            self.target_name.into_into_dart().into_dart(),
+            self.step.into_into_dart().into_dart(),
+            self.url.into_into_dart().into_dart(),
+            self.status.into_into_dart().into_dart(),
+            self.reason.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentFailureDetail
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentFailureDetail>
+    for crate::application::dto::AgentFailureDetail
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentFailureDetail {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentMessage {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -2624,6 +2772,8 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentRun {
             self.active_ms.into_into_dart().into_dart(),
             self.partial_text.into_into_dart().into_dart(),
             self.failure.into_into_dart().into_dart(),
+            self.failure_code.into_into_dart().into_dart(),
+            self.failure_detail.into_into_dart().into_dart(),
             self.attempts.into_into_dart().into_dart(),
             self.context.into_into_dart().into_dart(),
         ]
@@ -3652,6 +3802,29 @@ impl SseEncode for crate::application::dto::AgentExportBundle {
     }
 }
 
+impl SseEncode for crate::application::dto::AgentFailure {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::error::CoreError>::sse_encode(self.code, serializer);
+        <Option<Box<crate::application::dto::AgentFailureDetail>>>::sse_encode(
+            self.detail,
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentFailureDetail {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.target_kind, serializer);
+        <Option<String>>::sse_encode(self.target_name, serializer);
+        <String>::sse_encode(self.step, serializer);
+        <Option<String>>::sse_encode(self.url, serializer);
+        <Option<u16>>::sse_encode(self.status, serializer);
+        <Option<String>>::sse_encode(self.reason, serializer);
+    }
+}
+
 impl SseEncode for crate::application::dto::AgentMessage {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3720,6 +3893,11 @@ impl SseEncode for crate::application::dto::AgentRun {
         <u64>::sse_encode(self.active_ms, serializer);
         <String>::sse_encode(self.partial_text, serializer);
         <Option<String>>::sse_encode(self.failure, serializer);
+        <Option<crate::error::CoreError>>::sse_encode(self.failure_code, serializer);
+        <Option<crate::application::dto::AgentFailureDetail>>::sse_encode(
+            self.failure_detail,
+            serializer,
+        );
         <Vec<crate::application::dto::AgentAttempt>>::sse_encode(self.attempts, serializer);
         <crate::application::dto::AgentRunContext>::sse_encode(self.context, serializer);
     }
@@ -4020,6 +4198,13 @@ impl SseEncode for bool {
     }
 }
 
+impl SseEncode for Box<crate::application::dto::AgentFailureDetail> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::application::dto::AgentFailureDetail>::sse_encode(*self, serializer);
+    }
+}
+
 impl SseEncode for crate::agent::context::ContextChoiceReason {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -4316,6 +4501,16 @@ impl SseEncode for Option<String> {
     }
 }
 
+impl SseEncode for Option<Box<crate::application::dto::AgentFailureDetail>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <Box<crate::application::dto::AgentFailureDetail>>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<crate::application::dto::AgentApprovalBinding> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -4376,6 +4571,16 @@ impl SseEncode for Option<crate::application::dto::AgentExportBundle> {
     }
 }
 
+impl SseEncode for Option<crate::application::dto::AgentFailureDetail> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::application::dto::AgentFailureDetail>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<crate::application::dto::AgentProviderUsage> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -4396,6 +4601,16 @@ impl SseEncode for Option<crate::agent::context::ContextChoiceReason> {
     }
 }
 
+impl SseEncode for Option<crate::error::CoreError> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::error::CoreError>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<i64> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -4412,6 +4627,16 @@ impl SseEncode for Option<crate::inference::ToolSupport> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::inference::ToolSupport>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<u16> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <u16>::sse_encode(value, serializer);
         }
     }
 }
@@ -4622,6 +4847,13 @@ impl SseEncode for crate::inference::ToolSupport {
             },
             serializer,
         );
+    }
+}
+
+impl SseEncode for u16 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_u16::<NativeEndian>(self).unwrap();
     }
 }
 

@@ -18,9 +18,32 @@ enum FailureCode {
   conflict,
 }
 
+/// What failed and where, as noted by the backend. Values are sanitized.
+class FailureDetail {
+  const FailureDetail({
+    required this.targetKind,
+    this.targetName,
+    required this.step,
+    this.url,
+    this.status,
+    this.reason,
+  });
+
+  /// `inference`, `mcpServer`, `profile` or `credential`.
+  final String targetKind;
+  final String? targetName;
+
+  /// The failed step in lowerCamelCase, for example `discoverModels`.
+  final String step;
+  final String? url;
+  final int? status;
+  final String? reason;
+}
+
 class BackendFailure implements Exception {
-  const BackendFailure(this.code);
+  const BackendFailure(this.code, {this.detail});
   final FailureCode code;
+  final FailureDetail? detail;
   factory BackendFailure.fromNative(Object _) =>
       const BackendFailure(FailureCode.unavailableTransport);
   @override
@@ -324,6 +347,8 @@ class Run {
     required this.activeMs,
     required this.partialText,
     this.failure,
+    this.failureCode,
+    this.failureDetail,
     required this.attempts,
     required this.context,
   });
@@ -336,6 +361,8 @@ class Run {
   final int activeMs;
   final String partialText;
   final String? failure;
+  final FailureCode? failureCode;
+  final FailureDetail? failureDetail;
   final List<Attempt> attempts;
   final RunContext context;
 }

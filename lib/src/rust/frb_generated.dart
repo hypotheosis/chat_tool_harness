@@ -166,7 +166,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_agent_command_reply,
-          decodeErrorData: sse_decode_core_error,
+          decodeErrorData: sse_decode_agent_failure,
         ),
         constMeta: kCrateApiAgentAgentCommandConstMeta,
         argValues: [handle, command],
@@ -816,6 +816,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AgentFailure dco_decode_agent_failure(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return AgentFailure(
+      code: dco_decode_core_error(arr[0]),
+      detail: dco_decode_opt_box_agent_failure_detail(arr[1]),
+    );
+  }
+
+  @protected
+  AgentFailureDetail dco_decode_agent_failure_detail(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return AgentFailureDetail(
+      targetKind: dco_decode_String(arr[0]),
+      targetName: dco_decode_opt_String(arr[1]),
+      step: dco_decode_String(arr[2]),
+      url: dco_decode_opt_String(arr[3]),
+      status: dco_decode_opt_box_autoadd_u_16(arr[4]),
+      reason: dco_decode_opt_String(arr[5]),
+    );
+  }
+
+  @protected
   AgentMessage dco_decode_agent_message(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -895,8 +923,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AgentRun dco_decode_agent_run(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 11)
-      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
+    if (arr.length != 13)
+      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
     return AgentRun(
       id: dco_decode_String(arr[0]),
       conversationId: dco_decode_String(arr[1]),
@@ -907,8 +935,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       activeMs: dco_decode_u_64(arr[6]),
       partialText: dco_decode_String(arr[7]),
       failure: dco_decode_opt_String(arr[8]),
-      attempts: dco_decode_list_agent_attempt(arr[9]),
-      context: dco_decode_agent_run_context(arr[10]),
+      failureCode: dco_decode_opt_box_autoadd_core_error(arr[9]),
+      failureDetail: dco_decode_opt_box_autoadd_agent_failure_detail(arr[10]),
+      attempts: dco_decode_list_agent_attempt(arr[11]),
+      context: dco_decode_agent_run_context(arr[12]),
     );
   }
 
@@ -1157,6 +1187,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AgentFailureDetail dco_decode_box_agent_failure_detail(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_agent_failure_detail(raw);
+  }
+
+  @protected
   AgentApprovalBinding dco_decode_box_autoadd_agent_approval_binding(
     dynamic raw,
   ) {
@@ -1209,6 +1245,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AgentFailureDetail dco_decode_box_autoadd_agent_failure_detail(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_agent_failure_detail(raw);
+  }
+
+  @protected
   AgentProfile dco_decode_box_autoadd_agent_profile(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_agent_profile(raw);
@@ -1247,6 +1289,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  CoreError dco_decode_box_autoadd_core_error(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_core_error(raw);
+  }
+
+  @protected
   PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_i_64(raw);
@@ -1268,6 +1316,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ToolSupport dco_decode_box_autoadd_tool_support(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_tool_support(raw);
+  }
+
+  @protected
+  int dco_decode_box_autoadd_u_16(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
   }
 
   @protected
@@ -1444,6 +1498,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AgentFailureDetail? dco_decode_opt_box_agent_failure_detail(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_agent_failure_detail(raw);
+  }
+
+  @protected
   AgentApprovalBinding? dco_decode_opt_box_autoadd_agent_approval_binding(
     dynamic raw,
   ) {
@@ -1500,6 +1560,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AgentFailureDetail? dco_decode_opt_box_autoadd_agent_failure_detail(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_agent_failure_detail(raw);
+  }
+
+  @protected
   AgentProviderUsage? dco_decode_opt_box_autoadd_agent_provider_usage(
     dynamic raw,
   ) {
@@ -1520,6 +1590,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  CoreError? dco_decode_opt_box_autoadd_core_error(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_core_error(raw);
+  }
+
+  @protected
   PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_i_64(raw);
@@ -1529,6 +1605,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ToolSupport? dco_decode_opt_box_autoadd_tool_support(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_tool_support(raw);
+  }
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_16(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_u_16(raw);
   }
 
   @protected
@@ -1665,6 +1747,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ToolSupport dco_decode_tool_support(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return ToolSupport.values[raw as int];
+  }
+
+  @protected
+  int dco_decode_u_16(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
   }
 
   @protected
@@ -2035,6 +2123,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AgentFailure sse_decode_agent_failure(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_code = sse_decode_core_error(deserializer);
+    var var_detail = sse_decode_opt_box_agent_failure_detail(deserializer);
+    return AgentFailure(code: var_code, detail: var_detail);
+  }
+
+  @protected
+  AgentFailureDetail sse_decode_agent_failure_detail(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_targetKind = sse_decode_String(deserializer);
+    var var_targetName = sse_decode_opt_String(deserializer);
+    var var_step = sse_decode_String(deserializer);
+    var var_url = sse_decode_opt_String(deserializer);
+    var var_status = sse_decode_opt_box_autoadd_u_16(deserializer);
+    var var_reason = sse_decode_opt_String(deserializer);
+    return AgentFailureDetail(
+      targetKind: var_targetKind,
+      targetName: var_targetName,
+      step: var_step,
+      url: var_url,
+      status: var_status,
+      reason: var_reason,
+    );
+  }
+
+  @protected
   AgentMessage sse_decode_agent_message(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_id = sse_decode_String(deserializer);
@@ -2139,6 +2256,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_activeMs = sse_decode_u_64(deserializer);
     var var_partialText = sse_decode_String(deserializer);
     var var_failure = sse_decode_opt_String(deserializer);
+    var var_failureCode = sse_decode_opt_box_autoadd_core_error(deserializer);
+    var var_failureDetail = sse_decode_opt_box_autoadd_agent_failure_detail(
+      deserializer,
+    );
     var var_attempts = sse_decode_list_agent_attempt(deserializer);
     var var_context = sse_decode_agent_run_context(deserializer);
     return AgentRun(
@@ -2151,6 +2272,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       activeMs: var_activeMs,
       partialText: var_partialText,
       failure: var_failure,
+      failureCode: var_failureCode,
+      failureDetail: var_failureDetail,
       attempts: var_attempts,
       context: var_context,
     );
@@ -2464,6 +2587,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AgentFailureDetail sse_decode_box_agent_failure_detail(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_agent_failure_detail(deserializer));
+  }
+
+  @protected
   AgentApprovalBinding sse_decode_box_autoadd_agent_approval_binding(
     SseDeserializer deserializer,
   ) {
@@ -2520,6 +2651,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AgentFailureDetail sse_decode_box_autoadd_agent_failure_detail(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_agent_failure_detail(deserializer));
+  }
+
+  @protected
   AgentProfile sse_decode_box_autoadd_agent_profile(
     SseDeserializer deserializer,
   ) {
@@ -2566,6 +2705,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  CoreError sse_decode_box_autoadd_core_error(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_core_error(deserializer));
+  }
+
+  @protected
   PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_i_64(deserializer));
@@ -2591,6 +2736,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_tool_support(deserializer));
+  }
+
+  @protected
+  int sse_decode_box_autoadd_u_16(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_u_16(deserializer));
   }
 
   @protected
@@ -2896,6 +3047,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AgentFailureDetail? sse_decode_opt_box_agent_failure_detail(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_agent_failure_detail(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   AgentApprovalBinding? sse_decode_opt_box_autoadd_agent_approval_binding(
     SseDeserializer deserializer,
   ) {
@@ -2974,6 +3138,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AgentFailureDetail? sse_decode_opt_box_autoadd_agent_failure_detail(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_agent_failure_detail(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   AgentProviderUsage? sse_decode_opt_box_autoadd_agent_provider_usage(
     SseDeserializer deserializer,
   ) {
@@ -3000,6 +3177,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  CoreError? sse_decode_opt_box_autoadd_core_error(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_core_error(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -3018,6 +3208,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_tool_support(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_16(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_u_16(deserializer));
     } else {
       return null;
     }
@@ -3167,6 +3368,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_i_32(deserializer);
     return ToolSupport.values[inner];
+  }
+
+  @protected
+  int sse_decode_u_16(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint16();
   }
 
   @protected
@@ -3497,6 +3704,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_agent_failure(AgentFailure self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_core_error(self.code, serializer);
+    sse_encode_opt_box_agent_failure_detail(self.detail, serializer);
+  }
+
+  @protected
+  void sse_encode_agent_failure_detail(
+    AgentFailureDetail self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.targetKind, serializer);
+    sse_encode_opt_String(self.targetName, serializer);
+    sse_encode_String(self.step, serializer);
+    sse_encode_opt_String(self.url, serializer);
+    sse_encode_opt_box_autoadd_u_16(self.status, serializer);
+    sse_encode_opt_String(self.reason, serializer);
+  }
+
+  @protected
   void sse_encode_agent_message(AgentMessage self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.id, serializer);
@@ -3568,6 +3796,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_64(self.activeMs, serializer);
     sse_encode_String(self.partialText, serializer);
     sse_encode_opt_String(self.failure, serializer);
+    sse_encode_opt_box_autoadd_core_error(self.failureCode, serializer);
+    sse_encode_opt_box_autoadd_agent_failure_detail(
+      self.failureDetail,
+      serializer,
+    );
     sse_encode_list_agent_attempt(self.attempts, serializer);
     sse_encode_agent_run_context(self.context, serializer);
   }
@@ -3834,6 +4067,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_agent_failure_detail(
+    AgentFailureDetail self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_failure_detail(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_agent_approval_binding(
     AgentApprovalBinding self,
     SseSerializer serializer,
@@ -3897,6 +4139,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_agent_failure_detail(
+    AgentFailureDetail self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_failure_detail(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_agent_profile(
     AgentProfile self,
     SseSerializer serializer,
@@ -3951,6 +4202,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_core_error(
+    CoreError self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_core_error(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_i_64(
     PlatformInt64 self,
     SseSerializer serializer,
@@ -3984,6 +4244,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_tool_support(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_16(self, serializer);
   }
 
   @protected
@@ -4262,6 +4528,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_agent_failure_detail(
+    AgentFailureDetail? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_agent_failure_detail(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_agent_approval_binding(
     AgentApprovalBinding? self,
     SseSerializer serializer,
@@ -4340,6 +4619,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_agent_failure_detail(
+    AgentFailureDetail? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_agent_failure_detail(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_agent_provider_usage(
     AgentProviderUsage? self,
     SseSerializer serializer,
@@ -4366,6 +4658,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_core_error(
+    CoreError? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_core_error(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_i_64(
     PlatformInt64? self,
     SseSerializer serializer,
@@ -4388,6 +4693,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_tool_support(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_u_16(self, serializer);
     }
   }
 
@@ -4512,6 +4827,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_tool_support(ToolSupport self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_u_16(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint16(self);
   }
 
   @protected

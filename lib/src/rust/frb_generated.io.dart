@@ -118,6 +118,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AgentExportBundle dco_decode_agent_export_bundle(dynamic raw);
 
   @protected
+  AgentFailure dco_decode_agent_failure(dynamic raw);
+
+  @protected
+  AgentFailureDetail dco_decode_agent_failure_detail(dynamic raw);
+
+  @protected
   AgentMessage dco_decode_agent_message(dynamic raw);
 
   @protected
@@ -169,6 +175,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  AgentFailureDetail dco_decode_box_agent_failure_detail(dynamic raw);
+
+  @protected
   AgentApprovalBinding dco_decode_box_autoadd_agent_approval_binding(
     dynamic raw,
   );
@@ -196,6 +205,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AgentExportBundle dco_decode_box_autoadd_agent_export_bundle(dynamic raw);
 
   @protected
+  AgentFailureDetail dco_decode_box_autoadd_agent_failure_detail(dynamic raw);
+
+  @protected
   AgentProfile dco_decode_box_autoadd_agent_profile(dynamic raw);
 
   @protected
@@ -214,6 +226,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ContextChoiceReason dco_decode_box_autoadd_context_choice_reason(dynamic raw);
 
   @protected
+  CoreError dco_decode_box_autoadd_core_error(dynamic raw);
+
+  @protected
   PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
 
   @protected
@@ -224,6 +239,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ToolSupport dco_decode_box_autoadd_tool_support(dynamic raw);
+
+  @protected
+  int dco_decode_box_autoadd_u_16(dynamic raw);
 
   @protected
   ContextChoiceReason dco_decode_context_choice_reason(dynamic raw);
@@ -306,6 +324,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String? dco_decode_opt_String(dynamic raw);
 
   @protected
+  AgentFailureDetail? dco_decode_opt_box_agent_failure_detail(dynamic raw);
+
+  @protected
   AgentApprovalBinding? dco_decode_opt_box_autoadd_agent_approval_binding(
     dynamic raw,
   );
@@ -336,6 +357,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  AgentFailureDetail? dco_decode_opt_box_autoadd_agent_failure_detail(
+    dynamic raw,
+  );
+
+  @protected
   AgentProviderUsage? dco_decode_opt_box_autoadd_agent_provider_usage(
     dynamic raw,
   );
@@ -346,10 +372,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  CoreError? dco_decode_opt_box_autoadd_core_error(dynamic raw);
+
+  @protected
   PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
 
   @protected
   ToolSupport? dco_decode_opt_box_autoadd_tool_support(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_16(dynamic raw);
 
   @protected
   PageStatus dco_decode_page_status(dynamic raw);
@@ -392,6 +424,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ToolSupport dco_decode_tool_support(dynamic raw);
+
+  @protected
+  int dco_decode_u_16(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -501,6 +536,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  AgentFailure sse_decode_agent_failure(SseDeserializer deserializer);
+
+  @protected
+  AgentFailureDetail sse_decode_agent_failure_detail(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   AgentMessage sse_decode_agent_message(SseDeserializer deserializer);
 
   @protected
@@ -562,6 +605,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  AgentFailureDetail sse_decode_box_agent_failure_detail(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   AgentApprovalBinding sse_decode_box_autoadd_agent_approval_binding(
     SseDeserializer deserializer,
   );
@@ -597,6 +645,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  AgentFailureDetail sse_decode_box_autoadd_agent_failure_detail(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   AgentProfile sse_decode_box_autoadd_agent_profile(
     SseDeserializer deserializer,
   );
@@ -625,6 +678,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  CoreError sse_decode_box_autoadd_core_error(SseDeserializer deserializer);
+
+  @protected
   PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
@@ -637,6 +693,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ToolSupport sse_decode_box_autoadd_tool_support(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_box_autoadd_u_16(SseDeserializer deserializer);
 
   @protected
   ContextChoiceReason sse_decode_context_choice_reason(
@@ -745,6 +804,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
+  AgentFailureDetail? sse_decode_opt_box_agent_failure_detail(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   AgentApprovalBinding? sse_decode_opt_box_autoadd_agent_approval_binding(
     SseDeserializer deserializer,
   );
@@ -775,6 +839,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  AgentFailureDetail? sse_decode_opt_box_autoadd_agent_failure_detail(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   AgentProviderUsage? sse_decode_opt_box_autoadd_agent_provider_usage(
     SseDeserializer deserializer,
   );
@@ -785,12 +854,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  CoreError? sse_decode_opt_box_autoadd_core_error(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
   ToolSupport? sse_decode_opt_box_autoadd_tool_support(
     SseDeserializer deserializer,
   );
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_16(SseDeserializer deserializer);
 
   @protected
   PageStatus sse_decode_page_status(SseDeserializer deserializer);
@@ -833,6 +910,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ToolSupport sse_decode_tool_support(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_u_16(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -977,6 +1057,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_agent_failure(AgentFailure self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_agent_failure_detail(
+    AgentFailureDetail self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_agent_message(AgentMessage self, SseSerializer serializer);
 
   @protected
@@ -1049,6 +1138,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_agent_failure_detail(
+    AgentFailureDetail self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_agent_approval_binding(
     AgentApprovalBinding self,
     SseSerializer serializer,
@@ -1091,6 +1186,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_agent_failure_detail(
+    AgentFailureDetail self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_agent_profile(
     AgentProfile self,
     SseSerializer serializer,
@@ -1127,6 +1228,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_core_error(
+    CoreError self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_i_64(
     PlatformInt64 self,
     SseSerializer serializer,
@@ -1149,6 +1256,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     ToolSupport self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_context_choice_reason(
@@ -1280,6 +1390,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_agent_failure_detail(
+    AgentFailureDetail? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_agent_approval_binding(
     AgentApprovalBinding? self,
     SseSerializer serializer,
@@ -1316,6 +1432,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_agent_failure_detail(
+    AgentFailureDetail? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_agent_provider_usage(
     AgentProviderUsage? self,
     SseSerializer serializer,
@@ -1324,6 +1446,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_context_choice_reason(
     ContextChoiceReason? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_core_error(
+    CoreError? self,
     SseSerializer serializer,
   );
 
@@ -1338,6 +1466,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     ToolSupport? self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer);
 
   @protected
   void sse_encode_page_status(PageStatus self, SseSerializer serializer);
@@ -1395,6 +1526,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_tool_support(ToolSupport self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_u_16(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);

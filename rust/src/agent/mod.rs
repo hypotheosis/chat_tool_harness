@@ -802,20 +802,10 @@ async fn execute(inner: Arc<Inner>, execution: Arc<Execution>, cancel: Cancellat
     // Teardown above runs in nested scopes, so this is the run's own last note;
     // a note is only meaningful when the run itself failed.
     let detail = crate::failure::take().filter(|_| result.is_err());
-    let error = match result {
-        Err(CoreError::Authentication)
-            if detail.as_ref().is_some_and(|d| {
-                // MCP collapses CredentialMissing into Authentication; only the
-                // reasonless Credential note marks an absent credential.
-                d.target == crate::failure::FailureTarget::Credential && d.reason.is_none()
-            }) =>
-        {
-            Err(CoreError::CredentialMissing)
-        }
-        other => other,
-    }
-    .err()
-    .or(flush.err());
+    let error = result
+        .map_err(|code| crate::failure::promote(code, detail.as_ref()))
+        .err()
+        .or(flush.err());
     let total = active.total();
     let settled = inner
         .persist(move |repo| state::settle(&repo, run, status, error, detail, total))

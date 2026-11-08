@@ -28,14 +28,7 @@ fn credential_value(reply: CredentialReply) -> CoreResult<SecretValue> {
     match reply {
         CredentialReply::Value(value) => Ok(SecretValue::new(value)),
         CredentialReply::Missing => {
-            // No reason: run settlement reads a reasonless Credential note as "missing".
-            crate::failure::note(crate::failure::FailureDetail {
-                target: crate::failure::FailureTarget::Credential,
-                step: crate::failure::FailureStep::ResolveCredential,
-                url: None,
-                status: None,
-                reason: None,
-            });
+            crate::failure::note(crate::failure::credential_missing());
             Err(CoreError::CredentialMissing)
         }
         CredentialReply::Failed(_) => {
@@ -145,6 +138,15 @@ impl Application {
             gate: tokio::sync::RwLock::new(false),
             closed,
         })
+    }
+    /// [`Application::command`] with the failure detail noted where the
+    /// command failed (connection tests, profile refresh, credential lookup).
+    pub async fn command_with_detail(
+        &self,
+        command: AppCommand,
+    ) -> Result<AgentCommandReply, AgentFailure> {
+        let (result, detail) = crate::failure::scope(self.command(command)).await;
+        result.map_err(|code| AgentFailure::new(code, detail))
     }
     pub async fn command(&self, command: AppCommand) -> CoreResult<AgentCommandReply> {
         let closed = self.gate.read().await;
@@ -467,7 +469,14 @@ impl Application {
                 attempt_count: v.attempt_count,
                 active_ms: v.active_ms,
                 partial_text: v.partial_text,
-                failure: v.failure.map(|f| f.code.to_string()),
+                failure: v.failure.as_ref().map(|f| {
+                    f.detail
+                        .reason
+                        .clone()
+                        .unwrap_or_else(|| f.code.to_string())
+                }),
+                failure_code: v.failure.as_ref().map(|f| f.code.clone()),
+                failure_detail: v.failure.map(|f| f.detail.into()),
                 attempts: v
                     .attempts
                     .into_iter()

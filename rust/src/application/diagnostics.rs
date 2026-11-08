@@ -260,13 +260,26 @@ impl Application {
         let finished = self.diagnostic_finished.clone();
         // This worker owns resources/lease, never Application/Coordinator ownership.
         tokio::spawn(async move {
-            let result = operation.run(command).await;
+            let (result, detail) = crate::failure::scope(operation.run(command)).await;
+            let detail = detail.filter(|_| result.is_err());
+            let result = result
+                .map_err(|code| crate::failure::promote(code, detail.as_ref()))
+                .map_err(|code| (code, detail));
             drop(lease);
             let _ = done.send(true);
             #[cfg(test)]
             finished.notify_one();
             let _ = send.send(result);
         });
-        receive.await.map_err(|_| CoreError::Storage)?
+        // The worker runs in its own task; re-note its detail in the caller's scope.
+        receive
+            .await
+            .map_err(|_| CoreError::Storage)?
+            .map_err(|(code, detail)| {
+                if let Some(detail) = detail {
+                    crate::failure::note(detail);
+                }
+                code
+            })
     }
 }

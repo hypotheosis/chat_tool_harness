@@ -70,7 +70,7 @@ impl std::fmt::Display for CoreError {
             Self::InvalidInput => "invalid core input",
             Self::Configuration => "invalid core configuration",
             Self::Authentication => "core authentication failure",
-            Self::CredentialMissing => "stored credential missing; re-enter it in settings",
+            Self::CredentialMissing => crate::failure::CREDENTIAL_MISSING_REASON,
             Self::RateLimited => "provider rate limited",
             Self::ToolUnsupported => "provider structured tools unsupported",
             Self::DiscoveryUnavailable => "model discovery unavailable",

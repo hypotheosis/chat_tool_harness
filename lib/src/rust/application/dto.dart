@@ -4,6 +4,7 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import '../agent/context.dart';
+import '../error.dart';
 import '../frb_generated.dart';
 import '../inference.dart';
 import '../model/core.dart';
@@ -494,6 +495,69 @@ class AgentExportBundle {
           transcript == other.transcript;
 }
 
+/// A command failure: its kind plus the detail noted where it happened.
+/// The detail is boxed to keep `Result<_, AgentFailure>` small.
+class AgentFailure implements FrbException {
+  final CoreError code;
+  final AgentFailureDetail? detail;
+
+  const AgentFailure({required this.code, this.detail});
+
+  @override
+  int get hashCode => code.hashCode ^ detail.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AgentFailure &&
+          runtimeType == other.runtimeType &&
+          code == other.code &&
+          detail == other.detail;
+}
+
+/// What failed and where, sanitized for display.
+class AgentFailureDetail {
+  /// "inference" | "mcpServer" | "profile" | "credential"
+  final String targetKind;
+  final String? targetName;
+
+  /// The failed step's name in lowerCamelCase, for example "discoverModels".
+  final String step;
+  final String? url;
+  final int? status;
+  final String? reason;
+
+  const AgentFailureDetail({
+    required this.targetKind,
+    this.targetName,
+    required this.step,
+    this.url,
+    this.status,
+    this.reason,
+  });
+
+  @override
+  int get hashCode =>
+      targetKind.hashCode ^
+      targetName.hashCode ^
+      step.hashCode ^
+      url.hashCode ^
+      status.hashCode ^
+      reason.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AgentFailureDetail &&
+          runtimeType == other.runtimeType &&
+          targetKind == other.targetKind &&
+          targetName == other.targetName &&
+          step == other.step &&
+          url == other.url &&
+          status == other.status &&
+          reason == other.reason;
+}
+
 class AgentMessage {
   final String id;
   final String role;
@@ -678,7 +742,11 @@ class AgentRun {
   final int attemptCount;
   final BigInt activeMs;
   final String partialText;
+
+  /// One-line display text: the failure reason, or the code's text.
   final String? failure;
+  final CoreError? failureCode;
+  final AgentFailureDetail? failureDetail;
   final List<AgentAttempt> attempts;
   final AgentRunContext context;
 
@@ -692,6 +760,8 @@ class AgentRun {
     required this.activeMs,
     required this.partialText,
     this.failure,
+    this.failureCode,
+    this.failureDetail,
     required this.attempts,
     required this.context,
   });
@@ -707,6 +777,8 @@ class AgentRun {
       activeMs.hashCode ^
       partialText.hashCode ^
       failure.hashCode ^
+      failureCode.hashCode ^
+      failureDetail.hashCode ^
       attempts.hashCode ^
       context.hashCode;
 
@@ -724,6 +796,8 @@ class AgentRun {
           activeMs == other.activeMs &&
           partialText == other.partialText &&
           failure == other.failure &&
+          failureCode == other.failureCode &&
+          failureDetail == other.failureDetail &&
           attempts == other.attempts &&
           context == other.context;
 }

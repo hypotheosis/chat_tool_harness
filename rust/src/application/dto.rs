@@ -150,7 +150,10 @@ pub struct AgentRun {
     pub attempt_count: u32,
     pub active_ms: u64,
     pub partial_text: String,
+    /// One-line display text: the failure reason, or the code's text.
     pub failure: Option<String>,
+    pub failure_code: Option<crate::error::CoreError>,
+    pub failure_detail: Option<AgentFailureDetail>,
     pub attempts: Vec<AgentAttempt>,
     pub context: AgentRunContext,
 }
@@ -323,4 +326,23 @@ pub enum AppCommand {
         conversation_id: String,
         origin: String,
     },
+}
+/// What failed and where, sanitized for display.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentFailureDetail {
+    /// "inference" | "mcpServer" | "profile" | "credential"
+    pub target_kind: String,
+    pub target_name: Option<String>,
+    /// The failed step's name in lowerCamelCase, for example "discoverModels".
+    pub step: String,
+    pub url: Option<String>,
+    pub status: Option<u16>,
+    pub reason: Option<String>,
+}
+/// A command failure: its kind plus the detail noted where it happened.
+/// The detail is boxed to keep `Result<_, AgentFailure>` small.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentFailure {
+    pub code: crate::error::CoreError,
+    pub detail: Option<Box<AgentFailureDetail>>,
 }
