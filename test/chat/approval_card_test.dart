@@ -397,6 +397,9 @@ void main() {
       ],
     );
     await pumpChat(t, b);
+    // The call sits in the collapsed tool activity card.
+    await t.tap(find.text('Used 1 tool'));
+    await t.pumpAndSettle();
     expect(find.text('search · Notes'), findsOneWidget);
     expect(find.textContaining(serverId), findsNothing);
   });

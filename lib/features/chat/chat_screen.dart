@@ -386,17 +386,93 @@ class _ChatScreenState extends State<ChatScreen> {
       pending = [];
     }
 
+    // Tool calls and their results are kept out of the conversation: each
+    // stretch of them becomes one collapsed "Used N tools" card.
+    var activity = <Message>[];
+    void flushActivity() {
+      if (activity.isNotEmpty) out.add(toolActivity(activity, c));
+      activity = [];
+    }
+
     for (final m in c.messages) {
       if (byInput[m.id] case final runs?) {
+        flushActivity();
         flush();
         pending = runs;
       }
-      out.add(messageCard(m, c));
+      final calls = m.role == 'assistant' && m.calls.isNotEmpty;
+      if (m.role == 'tool' || calls) {
+        // Text the model wrote alongside its calls stays in the conversation.
+        if (calls && m.content.trim().isNotEmpty) {
+          flushActivity();
+          out.add(messageCard(m));
+        }
+        activity.add(m);
+      } else {
+        flushActivity();
+        out.add(messageCard(m));
+      }
     }
+    flushActivity();
     flush();
     pending = loose;
     flush();
     return out;
+  }
+
+  /// One collapsed card for consecutive tool calls and results in [messages]:
+  /// each call with its arguments and the result that answered it.
+  Widget toolActivity(List<Message> messages, Conversation c) {
+    final calls = [for (final m in messages) ...m.calls];
+    final results = {
+      for (final m in messages)
+        if (m.role == 'tool' && m.callId != null) m.callId!: m.content,
+    };
+    final answered = {for (final call in calls) call.providerCallId};
+    final orphans = [
+      for (final m in messages)
+        if (m.role == 'tool' && !answered.contains(m.callId)) m.content,
+    ];
+    final names = {for (final call in calls) call.key.name}.join(', ');
+    final count = calls.isEmpty ? orphans.length : calls.length;
+    final muted = Theme.of(context).textTheme.bodySmall;
+    Widget section(String label, String text) => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.labelMedium),
+          SelectableText(text, style: muted),
+        ],
+      ),
+    );
+    return Card(
+      key: Key('tools-${messages.first.id}'),
+      elevation: 0,
+      child: ExpansionTile(
+        dense: true,
+        leading: const Icon(Icons.build_outlined, size: 18),
+        title: Text('Used $count tool${count == 1 ? '' : 's'}'),
+        subtitle: names.isEmpty ? null : Text(names, style: muted),
+        children: [
+          for (final call in calls)
+            ExpansionTile(
+              dense: true,
+              title: Text(
+                '${call.key.name} · ${serverName(call.key.serverId, c.profile)}',
+              ),
+              children: [
+                section('Arguments', call.argumentsJson),
+                section(
+                  'Result',
+                  results[call.providerCallId] ?? 'No result recorded.',
+                ),
+              ],
+            ),
+          for (final text in orphans) section('Result', text),
+        ],
+      ),
+    );
   }
 
   /// The display name of [serverId] in [profile], else in the current
@@ -457,7 +533,8 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget messageCard(Message m, Conversation c) => Card(
+  /// A user or assistant message. Tool calls are shown by [toolActivity].
+  Widget messageCard(Message m) => Card(
     child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -465,13 +542,6 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Text(m.role, style: Theme.of(context).textTheme.labelLarge),
           SafeMarkdown(m.content),
-          for (final call in m.calls)
-            ExpansionTile(
-              title: Text(
-                '${call.key.name} · ${serverName(call.key.serverId, c.profile)}',
-              ),
-              children: [SelectableText(call.argumentsJson)],
-            ),
         ],
       ),
     ),
