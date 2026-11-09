@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../backend/models.dart';
 import '../screen_controller.dart';
 
@@ -190,10 +191,28 @@ class _RunCardState extends State<RunCard> {
     child: Text(details ? 'Hide details' : 'Details'),
   );
 
-  Widget detailsBlock(Color? color) => SelectableText(
-    detailText(),
-    key: Key('run-details-${widget.run.id}'),
-    style: TextStyle(fontFamily: 'monospace', color: color),
+  /// The full detail, selectable, with Copy for reporting it elsewhere.
+  Widget detailsBlock(Color? color) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SelectableText(
+        detailText(),
+        key: Key('run-details-${widget.run.id}'),
+        style: TextStyle(fontFamily: 'monospace', color: color),
+      ),
+      TextButton.icon(
+        key: Key('copy-details-${widget.run.id}'),
+        icon: const Icon(Icons.copy, size: 18),
+        label: const Text('Copy details'),
+        onPressed: () async {
+          await Clipboard.setData(ClipboardData(text: detailText()));
+          if (!mounted) return;
+          ScaffoldMessenger.maybeOf(
+            context,
+          )?.showSnackBar(const SnackBar(content: Text('Details copied')));
+        },
+      ),
+    ],
   );
 
   Widget compact(BuildContext context) {
@@ -209,6 +228,8 @@ class _RunCardState extends State<RunCard> {
               Expanded(
                 child: Text(
                   '${widget.issue.title}: ${widget.issue.cause}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(
                     context,
                   ).textTheme.bodySmall?.copyWith(color: muted),
@@ -254,8 +275,12 @@ class _RunCardState extends State<RunCard> {
               ],
             ),
             const SizedBox(height: 4),
-            SelectableText(
+            // A long reason shows its start; Details has all of it.
+            Text(
               widget.issue.cause,
+              key: Key('run-cause-${widget.run.id}'),
+              maxLines: 6,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(color: foreground),
             ),
             const SizedBox(height: 8),

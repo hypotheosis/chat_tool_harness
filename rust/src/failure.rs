@@ -15,7 +15,9 @@ use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::future::Future;
 
-pub const MAX_REASON_CHARS: usize = 160;
+/// Long enough for a chained transport error relayed by a router, which a
+/// user may need to report verbatim; the run card shows the start of it.
+pub const MAX_REASON_CHARS: usize = 1000;
 /// Reason of the `ResolveCredential` note that marks an absent stored
 /// credential. MCP collapses `CredentialMissing` into `Authentication`; this
 /// note lets a boundary restore the precise kind (see [`promote`]).
@@ -393,10 +395,19 @@ mod tests {
 
     #[test]
     fn failure_reason_strips_controls_and_caps_length() {
-        let raw = format!("bad\u{0}\nkey {}", "é".repeat(400));
+        let raw = format!("bad\u{0}\nkey {}", "é".repeat(MAX_REASON_CHARS + 200));
         let out = sanitize_reason(&raw, &[]).unwrap();
         assert!(!out.contains('\u{0}') && !out.contains('\n'));
         assert_eq!(out.chars().count(), MAX_REASON_CHARS);
+    }
+
+    #[test]
+    fn failure_reason_keeps_a_relayed_error_chain_whole() {
+        // A router's mid-stream error once lost its end at 160 characters.
+        let raw = "transport error: body error: error decoding response body: \
+                   request or response body error: error reading a body from \
+                   connection: unexpected EOF during chunk size line";
+        assert_eq!(sanitize_reason(raw, &[]).as_deref(), Some(raw));
     }
 
     #[test]

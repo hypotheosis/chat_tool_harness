@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chat_tool_harness/backend/models.dart';
 import 'package:chat_tool_harness/features/chat/chat_screen.dart';
@@ -239,6 +240,63 @@ void main() {
     await t.pumpAndSettle();
     final turn = b.commands.whereType<StartTurn>().single;
     expect((turn.conversationId, turn.text), ('c', 'hello'));
+  });
+  testWidgets('a long reason is clamped on the card; Details copies it all', (
+    t,
+  ) async {
+    final reason = [
+      'inference server reported an error mid-reply:',
+      for (var i = 0; i < 30; i++) 'layer $i error:',
+      'error reading a body from connection END-OF-REASON',
+    ].join(' ');
+    String? copied;
+    t.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => t.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    final b = UiBackend()
+      ..runs = [
+        failedRun(
+          code: FailureCode.protocol,
+          detail: FailureDetail(
+            targetKind: 'inference',
+            targetName: 'Endpoint',
+            step: 'chatRequest',
+            url: 'https://example.test/v1/chat/completions',
+            reason: reason,
+          ),
+        ),
+      ];
+    await pumpChat(t, b);
+    final cause = t.widget<Text>(find.byKey(const Key('run-cause-r')));
+    expect(cause.maxLines, 6);
+    expect(cause.overflow, TextOverflow.ellipsis);
+    await t.tap(inCard('r', find.text('Details')));
+    await t.pumpAndSettle();
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is SelectableText && w.data!.contains('Reason: $reason'),
+      ),
+      findsOneWidget,
+    );
+    await t.ensureVisible(find.byKey(const Key('copy-details-r')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('copy-details-r')));
+    await t.pumpAndSettle();
+    expect(copied, contains('Reason: $reason'));
+    expect(copied, contains('URL: https://example.test/v1/chat/completions'));
+    expect(find.text('Details copied'), findsOneWidget);
   });
   testWidgets('a failed run without detail offers Retry after settings', (
     t,

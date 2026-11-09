@@ -75,7 +75,7 @@ pub struct FailureDetail {
     pub step: FailureStep,          // DiscoverModels | ChatRequest | Initialize | ListTools | CallTool | ResolveCredential | RefreshProfile
     pub url: Option<String>,        // request URL without query, userinfo or fragment
     pub status: Option<u16>,        // HTTP status if a response arrived
-    pub reason: Option<String>,     // <= 160 chars, sanitized
+    pub reason: Option<String>,     // <= 1000 chars, sanitized
 }
 ```
 
@@ -85,9 +85,11 @@ request suffix), so the user can compare it with their settings.
 - `reason` comes from the response body's JSON `error.message`, `error`
   (string) or `message`, read within the existing response limits; otherwise
   from the transport error class: `dns`, `connect`, `tls`, `timeout`, `body`.
-  Control characters are stripped, length is capped at 160 characters on a
-  char boundary, with the request's resolved secrets (inference credential and
-  MCP header values) and any 32+ character token-like word replaced by •••.
+  Control characters are stripped, length is capped at 1000 characters on a
+  char boundary (160 at first, which cut off a router's relayed error chain),
+  with the request's resolved secrets (inference credential and MCP header
+  values) and any 32+ character token-like word replaced by •••. The run card
+  shows the first lines of the cause; Details shows all of it, with Copy.
 - `CoreError` keeps its kinds and `CoreResult` is unchanged. Lower layers
   record the detail with a task-local note (`rust/src/failure.rs`); run
   execution, diagnostics and pre-launch preparation run inside a failure scope
