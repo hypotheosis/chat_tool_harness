@@ -134,6 +134,52 @@ void main() {
       }
     },
   );
+  testWidgets('invalid references and values are rejected; valid ones still '
+      'work', (tester) async {
+    const ref = 'd02677ad-3f0c-4ca5-b10a-c4fcd9bf4131';
+    addTearDown(
+      () => credentials.invokeMethod<void>('delete', {'reference': ref}),
+    );
+    Future<void> put(String reference, Uint8List value) => credentials
+        .invokeMethod<void>('put', {'reference': reference, 'value': value});
+    Future<Uint8List?> resolve() =>
+        credentials.invokeMethod<Uint8List>('resolve', {'reference': ref});
+    final rejected = throwsA(
+      isA<PlatformException>().having(
+        (e) => e.code,
+        'code',
+        'CREDENTIAL_UNAVAILABLE',
+      ),
+    );
+    final one = Uint8List.fromList([65]);
+    for (final reference in [
+      ref.toUpperCase(),
+      '{$ref}',
+      ref.replaceAll('-', ''),
+      '1-1-1-1-1',
+      '',
+    ]) {
+      await expectLater(put(reference, one), rejected, reason: reference);
+      await expectLater(
+        credentials.invokeMethod('resolve', {'reference': reference}),
+        rejected,
+        reason: reference,
+      );
+    }
+    await expectLater(put(ref, Uint8List(0)), rejected, reason: 'empty');
+    await expectLater(
+      put(ref, Uint8List.fromList(List.filled(8193, 65))),
+      rejected,
+      reason: '8193 bytes',
+    );
+    // Nothing was stored by the rejected calls, and the channel still works.
+    expect(await resolve(), isNull);
+    final largest = Uint8List.fromList(List.filled(8192, 66));
+    await put(ref, largest);
+    expect(await resolve(), largest);
+    await put(ref, one);
+    expect(await resolve(), one);
+  });
   testWidgets('calls issued together run in arrival order', (tester) async {
     const ref = 'c92677ad-3f0c-4ca5-b10a-c4fcd9bf4131';
     addTearDown(() => PlatformServices.deleteCredential(ref));
