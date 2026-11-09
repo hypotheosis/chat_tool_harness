@@ -583,6 +583,12 @@ class ResumeRun extends AppCommand {
   final String runId;
 }
 
+/// Re-runs failed turn [runId] from its existing input message.
+class RetryRun extends AppCommand {
+  const RetryRun(this.runId);
+  final String runId;
+}
+
 class Approve extends AppCommand {
   const Approve(this.binding);
   final ApprovalBinding binding;

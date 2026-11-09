@@ -746,5 +746,42 @@ async fn chat_turn_with_missing_credential_fails_as_credential_missing() {
     assert_eq!(detail.target_kind, "inference");
     assert_eq!(detail.target_name.as_deref(), Some("e"));
     assert_eq!(detail.step, "resolveCredential");
+
+    // Retry starts a new run on the same input message; no message is added.
+    let retry = app
+        .command(AppCommand::RetryRun {
+            run_id: run.clone(),
+        })
+        .await
+        .unwrap()
+        .id
+        .expect("retry run id");
+    assert_ne!(retry, run);
+    tokio::time::timeout(std::time::Duration::from_secs(5), stopped.notified())
+        .await
+        .expect("retry settles");
+    let snapshot = app.snapshot().await.unwrap();
+    let inputs: Vec<_> = snapshot
+        .runs
+        .iter()
+        .map(|r| (r.id.as_str(), r.input_message_id.as_deref()))
+        .collect();
+    let input = dto.input_message_id.as_deref();
+    assert!(input.is_some());
+    assert_eq!(inputs, [(run.as_str(), input), (retry.as_str(), input)]);
+    let conversation = snapshot
+        .conversations
+        .iter()
+        .find(|c| c.id == conversation.0.to_string())
+        .expect("conversation");
+    assert_eq!(conversation.messages.len(), 1);
+    assert_eq!(
+        app.command(AppCommand::RetryRun {
+            run_id: "not-a-uuid".into(),
+        })
+        .await
+        .unwrap_err(),
+        CoreError::InvalidInput
+    );
     app.close().await.unwrap();
 }

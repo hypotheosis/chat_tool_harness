@@ -393,6 +393,13 @@ impl Application {
                 self.coordinator.resume(core::RunId(uuid(&run_id)?)).await?;
                 None
             }
+            AppCommand::RetryRun { run_id } => Some(
+                self.coordinator
+                    .retry(core::RunId(uuid(&run_id)?))
+                    .await?
+                    .0
+                    .to_string(),
+            ),
             AppCommand::Approve { binding } => {
                 let binding: core::ApprovalBinding = binding.try_into()?;
                 let check = binding.clone();

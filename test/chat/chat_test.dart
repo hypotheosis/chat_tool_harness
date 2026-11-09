@@ -238,8 +238,8 @@ void main() {
     expect(inCard('r', find.text('Open Server settings')), findsNothing);
     await t.tap(inCard('r', find.text('Retry')));
     await t.pumpAndSettle();
-    final turn = b.commands.whereType<StartTurn>().single;
-    expect((turn.conversationId, turn.text), ('c', 'hello'));
+    expect(b.commands.whereType<RetryRun>().single.runId, 'r');
+    expect(b.commands.whereType<StartTurn>(), isEmpty);
   });
   testWidgets('a long reason is clamped on the card; Details copies it all', (
     t,
@@ -371,8 +371,9 @@ void main() {
       await pumpChat(t, b);
       await t.tap(inCard('r', find.text('Retry')));
       await t.pumpAndSettle();
-      final turn = b.commands.whereType<StartTurn>().single;
-      expect((turn.conversationId, turn.text), ('c', 'hello'));
+      // The run's own input message is re-run; no new message is sent.
+      expect(b.commands.whereType<RetryRun>().single.runId, 'r');
+      expect(b.commands.whereType<StartTurn>(), isEmpty);
     });
   }
   testWidgets('a paused run with a retryable failure offers Resume', (t) async {
@@ -630,6 +631,7 @@ void main() {
     expect(find.text('Explicit context selection'), findsOneWidget);
     expect(find.text('Request summary'), findsOneWidget);
     expect(b.commands.whereType<StartTurn>(), isEmpty);
+    expect(b.commands.whereType<RetryRun>(), isEmpty);
   });
   testWidgets('header shows profile and model and opens profile settings', (
     t,

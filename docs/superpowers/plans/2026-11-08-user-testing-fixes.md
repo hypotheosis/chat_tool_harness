@@ -1227,7 +1227,7 @@ Expected: failures on old texts.
     - `openSettings`: label `Open ${detail?.targetName ?? 'profile'} settings`, opens `ServerScreen`/`EndpointScreen` for the named target from `c.profile` (match by name), else `ProfileScreen`.
     - `reenterCredential`: label `Re-enter credential`, same navigation.
     - `chooseContext`: label `Choose context`, existing context dialog.
-    - `retry`: label `Resume` for paused/interrupted (existing resume), otherwise `Retry` which resends the run's input message via `StartTurn`.
+    - `retry`: label `Resume` for paused/interrupted (existing resume), otherwise `Retry` which re-runs the failed turn from its existing input message via `RetryRun` (issue #6; no new user message is added).
     Plus a `TextButton('Details')` toggling a monospace block: run id, target, step, URL, status, reason.
   - `completed` / `cancelled`: render nothing.
 - Disclosure: if `!c.originAcknowledged && c.profile.inferenceOrigin != null`, show above the composer a `Card` with `Text('Messages will be sent to ${Uri.parse(c.profile.inferenceOrigin!).host}.')` and `FilledButton(onPressed: () => state.acknowledgeOrigin(c.profile.inferenceOrigin!), child: const Text('Allow'))`. Disable Send while unacknowledged.

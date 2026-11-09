@@ -253,13 +253,13 @@ class _ChatScreenState extends State<ChatScreen> {
           markFixed(run);
         }
       case RunAction.retry:
-        final input = c.messages
-            .where((m) => m.id == run.inputMessageId)
-            .firstOrNull;
-        if (input == null) {
+        // A turn re-runs from its own input message; a summary has none and
+        // reopens the chooser instead.
+        final input = run.inputMessageId;
+        if (input == null || c.messages.every((m) => m.id != input)) {
           await chooseContext(null);
         } else {
-          await state.send(input.content);
+          await state.retry(run.id);
         }
       case RunAction.resume:
         await state.resume(run.id);

@@ -190,8 +190,9 @@ otherwise falls back to plain per-code text. Each code maps to one action:
     runs collapse to one muted line with Details.
   - A disclosure pause offers Allow for the run's own origin, then resumes.
   - Runs carry `input_message_id` so cards sit under their turn; Retry
-    re-sends that message as a new turn (it appears twice in the transcript;
-    a backend re-run command would be cleaner).
+    starts a new run on that same message (`RetryRun`, issue #6), so the
+    message is not duplicated. Only the conversation's latest run, failed,
+    with no unresolved tool attempt, may be retried.
 
 ## 9. Safe area on settings screens
 

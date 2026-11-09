@@ -187,6 +187,69 @@ pub fn start(
         Ok(())
     })
 }
+/// Why `failed` cannot be retried, checked on `conn`: a Conflict unless it is
+/// a failed turn run (one with an input message), its conversation's latest
+/// run, and has no attempt whose outcome is unresolved. Returns its
+/// conversation and input message id.
+fn retry_check(conn: &rusqlite::Connection, failed: RunId) -> CoreResult<(String, String)> {
+    let (conversation, status, input): (String, String, Option<String>) = conn
+        .query_row(
+            "SELECT conversation_id,state,input_message_id FROM runs WHERE id=?1",
+            [failed.0.to_string()],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()
+        .map_err(sql_error)?
+        .ok_or(CoreError::Conflict)?;
+    let input = input.ok_or(CoreError::Conflict)?;
+    if status != "Failed" {
+        return Err(CoreError::Conflict);
+    }
+    let (latest, unresolved, input_exists): (bool, bool, bool) = conn
+        .query_row(
+            "SELECT
+               NOT EXISTS(SELECT 1 FROM runs WHERE conversation_id=?2 AND rowid>(SELECT rowid FROM runs WHERE id=?1)),
+               EXISTS(SELECT 1 FROM attempts WHERE run_id=?1 AND state IN ('Dispatching','OutcomeUnknown')),
+               EXISTS(SELECT 1 FROM messages WHERE conversation_id=?2 AND id=?3)",
+            params![failed.0.to_string(), conversation, input],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .map_err(sql_error)?;
+    if !latest || unresolved || !input_exists {
+        return Err(CoreError::Conflict);
+    }
+    Ok((conversation, input))
+}
+/// The conversation of `failed` when it may be retried; see [`start_retry`].
+pub fn retryable(repo: &Repository, failed: RunId) -> CoreResult<ConversationId> {
+    repo.with_connection(move |conn| {
+        let (conversation, _) = retry_check(conn, failed)?;
+        Ok(ConversationId(uuid(conversation)?))
+    })
+}
+/// Starts `run` as a retry of the failed turn `failed`: a new run on the
+/// conversation's current revision whose input is the failed run's existing
+/// message, so no user message is added. The checks of [`retryable`] are
+/// repeated in the same transaction, so a concurrent turn or second retry is
+/// a Conflict.
+pub fn start_retry(repo: &Repository, run: RunId, failed: RunId) -> CoreResult<()> {
+    repo.with_connection(move |conn| {
+        let tx = conn.transaction().map_err(sql_error)?;
+        let (conversation, input) = retry_check(&tx, failed)?;
+        tx.execute(
+            "INSERT INTO runs(id,conversation_id,snapshot_revision,state,input_message_id) VALUES(?1,?2,(SELECT current_revision FROM conversations WHERE id=?2),'Running',?3)",
+            params![run.0.to_string(), conversation, input],
+        )
+        .map_err(sql_error)?;
+        event(
+            &tx,
+            ConversationId(uuid(conversation)?),
+            &format!("run:{}:Running", run.0),
+        )?;
+        tx.commit().map_err(sql_error)?;
+        Ok(())
+    })
+}
 fn insert_message(
     tx: &rusqlite::Transaction<'_>,
     conversation: ConversationId,

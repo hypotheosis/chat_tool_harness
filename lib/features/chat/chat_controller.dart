@@ -51,6 +51,11 @@ class ChatController extends ScreenController {
     await perform(ResumeRun(runId));
   }
 
+  /// Re-runs failed turn [runId] from its own input message, adding none.
+  Future<void> retry(String runId) async {
+    await perform(RetryRun(runId));
+  }
+
   /// Acknowledges disclosure for [origin]; true when the backend accepted it.
   Future<bool> acknowledgeOrigin(String origin) async =>
       await perform(AcknowledgeContextDisclosure(conversationId, origin)) !=

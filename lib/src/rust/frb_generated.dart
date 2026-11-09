@@ -1155,33 +1155,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 21:
         return AppCommand_ResumeRun(runId: dco_decode_String(raw[1]));
       case 22:
+        return AppCommand_RetryRun(runId: dco_decode_String(raw[1]));
+      case 23:
         return AppCommand_Approve(
           binding: dco_decode_box_autoadd_agent_approval_binding(raw[1]),
         );
-      case 23:
-        return AppCommand_Deny(attemptId: dco_decode_String(raw[1]));
       case 24:
+        return AppCommand_Deny(attemptId: dco_decode_String(raw[1]));
+      case 25:
         return AppCommand_DecideApprovals(
           runId: dco_decode_String(raw[1]),
           approve: dco_decode_list_agent_approval_binding(raw[2]),
           deny: dco_decode_list_String(raw[3]),
         );
-      case 25:
+      case 26:
         return AppCommand_SetServerTrust(
           serverId: dco_decode_String(raw[1]),
           trusted: dco_decode_bool(raw[2]),
         );
-      case 26:
+      case 27:
         return AppCommand_SummarizeContext(
           conversationId: dco_decode_String(raw[1]),
           selection: dco_decode_box_autoadd_agent_context_selection(raw[2]),
         );
-      case 27:
+      case 28:
         return AppCommand_ApplyContextSelection(
           runId: dco_decode_String(raw[1]),
           selection: dco_decode_box_autoadd_agent_context_selection(raw[2]),
         );
-      case 28:
+      case 29:
         return AppCommand_AcknowledgeContextDisclosure(
           conversationId: dco_decode_String(raw[1]),
           origin: dco_decode_String(raw[2]),
@@ -2585,14 +2587,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         var var_runId = sse_decode_String(deserializer);
         return AppCommand_ResumeRun(runId: var_runId);
       case 22:
+        var var_runId = sse_decode_String(deserializer);
+        return AppCommand_RetryRun(runId: var_runId);
+      case 23:
         var var_binding = sse_decode_box_autoadd_agent_approval_binding(
           deserializer,
         );
         return AppCommand_Approve(binding: var_binding);
-      case 23:
+      case 24:
         var var_attemptId = sse_decode_String(deserializer);
         return AppCommand_Deny(attemptId: var_attemptId);
-      case 24:
+      case 25:
         var var_runId = sse_decode_String(deserializer);
         var var_approve = sse_decode_list_agent_approval_binding(deserializer);
         var var_deny = sse_decode_list_String(deserializer);
@@ -2601,14 +2606,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           approve: var_approve,
           deny: var_deny,
         );
-      case 25:
+      case 26:
         var var_serverId = sse_decode_String(deserializer);
         var var_trusted = sse_decode_bool(deserializer);
         return AppCommand_SetServerTrust(
           serverId: var_serverId,
           trusted: var_trusted,
         );
-      case 26:
+      case 27:
         var var_conversationId = sse_decode_String(deserializer);
         var var_selection = sse_decode_box_autoadd_agent_context_selection(
           deserializer,
@@ -2617,7 +2622,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           conversationId: var_conversationId,
           selection: var_selection,
         );
-      case 27:
+      case 28:
         var var_runId = sse_decode_String(deserializer);
         var var_selection = sse_decode_box_autoadd_agent_context_selection(
           deserializer,
@@ -2626,7 +2631,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           runId: var_runId,
           selection: var_selection,
         );
-      case 28:
+      case 29:
         var var_conversationId = sse_decode_String(deserializer);
         var var_origin = sse_decode_String(deserializer);
         return AppCommand_AcknowledgeContextDisclosure(
@@ -4131,18 +4136,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case AppCommand_ResumeRun(runId: final runId):
         sse_encode_i_32(21, serializer);
         sse_encode_String(runId, serializer);
-      case AppCommand_Approve(binding: final binding):
+      case AppCommand_RetryRun(runId: final runId):
         sse_encode_i_32(22, serializer);
+        sse_encode_String(runId, serializer);
+      case AppCommand_Approve(binding: final binding):
+        sse_encode_i_32(23, serializer);
         sse_encode_box_autoadd_agent_approval_binding(binding, serializer);
       case AppCommand_Deny(attemptId: final attemptId):
-        sse_encode_i_32(23, serializer);
+        sse_encode_i_32(24, serializer);
         sse_encode_String(attemptId, serializer);
       case AppCommand_DecideApprovals(
         runId: final runId,
         approve: final approve,
         deny: final deny,
       ):
-        sse_encode_i_32(24, serializer);
+        sse_encode_i_32(25, serializer);
         sse_encode_String(runId, serializer);
         sse_encode_list_agent_approval_binding(approve, serializer);
         sse_encode_list_String(deny, serializer);
@@ -4150,28 +4158,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         serverId: final serverId,
         trusted: final trusted,
       ):
-        sse_encode_i_32(25, serializer);
+        sse_encode_i_32(26, serializer);
         sse_encode_String(serverId, serializer);
         sse_encode_bool(trusted, serializer);
       case AppCommand_SummarizeContext(
         conversationId: final conversationId,
         selection: final selection,
       ):
-        sse_encode_i_32(26, serializer);
+        sse_encode_i_32(27, serializer);
         sse_encode_String(conversationId, serializer);
         sse_encode_box_autoadd_agent_context_selection(selection, serializer);
       case AppCommand_ApplyContextSelection(
         runId: final runId,
         selection: final selection,
       ):
-        sse_encode_i_32(27, serializer);
+        sse_encode_i_32(28, serializer);
         sse_encode_String(runId, serializer);
         sse_encode_box_autoadd_agent_context_selection(selection, serializer);
       case AppCommand_AcknowledgeContextDisclosure(
         conversationId: final conversationId,
         origin: final origin,
       ):
-        sse_encode_i_32(28, serializer);
+        sse_encode_i_32(29, serializer);
         sse_encode_String(conversationId, serializer);
         sse_encode_String(origin, serializer);
     }

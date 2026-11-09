@@ -321,6 +321,11 @@ pub enum AppCommand {
     ResumeRun {
         run_id: String,
     },
+    /// Re-runs a failed turn from its existing input message; replies with
+    /// the new run's id.
+    RetryRun {
+        run_id: String,
+    },
     Approve {
         binding: AgentApprovalBinding,
     },

@@ -339,6 +339,33 @@ void main() {
       expect(run.failureDetail?.targetName, 'no network');
       expect(run.failureDetail?.step, 'resolveCredential');
       expect(run.failureDetail?.reason, isNot(contains('private')));
+
+      // Retry re-runs the failed turn from its own input message.
+      final retry = (await backend.execute(RetryRun(run.id))).id!;
+      expect(retry, isNot(run.id));
+      final retried = await backend
+          .events(0)
+          .asyncMap((_) => backend.snapshot())
+          .firstWhere(
+            (s) => s.runs.length == 2 && s.runs.last.state == RunState.failed,
+          )
+          .timeout(const Duration(seconds: 15));
+      expect(resolutions, 2);
+      expect(retried.runs.last.id, retry);
+      expect(retried.runs.last.inputMessageId, run.inputMessageId);
+      expect(retried.conversations.single.messages.map((m) => m.content), [
+        'never transmitted',
+      ]);
+      await expectLater(
+        backend.execute(RetryRun(run.id)),
+        throwsA(
+          isA<BackendFailure>().having(
+            (f) => f.code,
+            'code',
+            FailureCode.conflict,
+          ),
+        ),
+      );
     } finally {
       await backend.close();
       await dir.delete(recursive: true);

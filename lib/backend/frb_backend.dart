@@ -276,6 +276,7 @@ g.AppCommand _command(AppCommand command) => switch (command) {
   ),
   CancelRun() => g.AppCommand.cancelRun(runId: command.runId),
   ResumeRun() => g.AppCommand.resumeRun(runId: command.runId),
+  RetryRun() => g.AppCommand.retryRun(runId: command.runId),
   Approve() => g.AppCommand.approve(
     binding: _toApprovalBinding(command.binding),
   ),
