@@ -68,6 +68,8 @@ String _codeText(FailureCode code) => switch (code) {
     'The service is unavailable or could not be reached. Check connectivity and the URL.',
   FailureCode.conflict =>
     'Something changed or is busy. No work was queued. Refresh and try again.',
+  FailureCode.unsupportedPlatform =>
+    'This is not available on this platform yet.',
 };
 
 /// The next step to append after a detailed failure sentence, which already
@@ -86,6 +88,7 @@ String _actionHint(FailureCode code) => switch (code) {
   FailureCode.protocol => 'Check the URL and server type.',
   FailureCode.unavailableTransport => 'Check connectivity and the URL.',
   FailureCode.storage || FailureCode.conflict => 'Refresh and try again.',
+  FailureCode.unsupportedPlatform => 'Use the Android app for this.',
 };
 
 /// One sentence naming what failed, from the detail when present, followed

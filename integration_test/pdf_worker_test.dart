@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:chat_tool_harness/main.dart' as app;
 import 'package:chat_tool_harness/pdf_worker_host.dart';
 import 'package:chat_tool_harness/src/rust/model.dart';
@@ -148,5 +149,7 @@ void main() {
       expect(deadlineRetry, isA<PdfWorkerReply_Extracted>());
     },
     timeout: const Timeout(Duration(seconds: 100)),
+    // The PDF worker host is Android-only for now.
+    skip: !Platform.isAndroid,
   );
 }

@@ -5,6 +5,9 @@ import 'file_controller.dart';
 class MethodChannelDocumentAccess implements AndroidDocumentAccess {
   const MethodChannelDocumentAccess();
   static const channel = MethodChannel('chat_tool_harness/documents');
+
+  /// The error code a platform without document access replies with.
+  static const unsupportedPlatformCode = 'UNSUPPORTED_PLATFORM';
   Future<DocumentResult> _invoke(
     String method,
     ArtifactContent artifact,
@@ -20,7 +23,12 @@ class MethodChannelDocumentAccess implements AndroidDocumentAccess {
         'cancelled' => DocumentResult.cancelled,
         _ => throw const BackendFailure(FailureCode.protocol),
       };
-    } on PlatformException {
+    } on PlatformException catch (e) {
+      // The Linux runner answers this way: it has no file chooser or share
+      // sheet yet.
+      if (e.code == unsupportedPlatformCode) {
+        throw const BackendFailure(FailureCode.unsupportedPlatform);
+      }
       throw const BackendFailure(FailureCode.unavailableTransport);
     } on MissingPluginException {
       throw const BackendFailure(FailureCode.unavailableTransport);

@@ -103,6 +103,9 @@ for suitable invariants when their value justifies adding the dependency.
 
 Run commands from the repository root. Start with focused tests, then run the
 relevant checks below before declaring the change complete.
+The `justfile` wraps them: `just check` runs the formatting check, both linters
+and the headless suites; `just integration <device-id>` runs every integration
+suite on one device.
 
 For Rust changes:
 
@@ -131,6 +134,10 @@ flutter test integration_test/simple_test.dart -d <device-id>
 Replace `<device-id>` with a target listed by `flutter devices`; run other
 relevant integration tests as they are added. A desktop run can exercise the
 bridge without a phone, but does not establish Android/iOS packaging correctness.
+On Linux (`-d linux`) the runner needs `libsecret-1` to build and an unlocked
+Secret Service (GNOME Keyring, KWallet) for the credential suites. Cases that
+drive Android-only hosts (foreground service, PDF worker, content URIs) skip
+there.
 
 Do not weaken lints or edit generated output just to make checks pass. Report
 commands actually run, failures, missing toolchains/targets, and untested paths.

@@ -53,6 +53,8 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # System-level dependencies.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
+# Credentials are kept in the Secret Service (see runner/platform_channels.h).
+pkg_check_modules(LIBSECRET REQUIRED IMPORTED_TARGET libsecret-1>=0.19)
 
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")

@@ -353,6 +353,8 @@ void main() {
         await dir.delete(recursive: true);
       }
     },
+    // Drives the Android foreground service and its probe; Linux has none.
+    skip: !Platform.isAndroid,
   );
 }
 
