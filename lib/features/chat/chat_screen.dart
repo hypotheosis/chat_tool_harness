@@ -500,9 +500,14 @@ class _ChatScreenState extends State<ChatScreen> {
     if (mounted && state.error == null) message.clear();
   }
 
-  /// The result banner, the disclosure card and the composer, kept above the
-  /// system navigation bar.
-  Widget bottom(Conversation c, Map<String, RunIssue?> issues) {
+  /// The result banner, approval and disclosure cards and the composer, kept
+  /// above the system navigation bar and within [maxHeight] (half the room
+  /// the chat has after the keyboard). The cards scroll; the composer stays.
+  Widget bottom(
+    Conversation c,
+    Map<String, RunIssue?> issues, {
+    required double maxHeight,
+  }) {
     final origin = c.profile.inferenceOrigin;
     final unacknowledged = origin != null && !c.originAcknowledged;
     // A run card already offers Allow when it asks for this origin (Allow
@@ -515,46 +520,54 @@ class _ChatScreenState extends State<ChatScreen> {
     return SafeArea(
       top: false,
       child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.5,
-        ),
-        child: SingleChildScrollView(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ResultBanner(state: state),
-              // Deciding resumes the run, so a run with a call whose outcome
-              // is unknown gets no approval card; Stop is all it offers.
-              for (final r in state.runs)
-                if (decisions(r) case final calls
-                    when calls.isNotEmpty && !hasUnresolvedAttempt(r))
-                  approvalCard(r, calls),
-              if (unacknowledged && !runAsks)
-                Card(
-                  key: const Key('disclosure'),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Messages will be sent to ${originHost(origin)}.',
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ResultBanner(state: state),
+                      // Deciding resumes the run, so a run with a call whose outcome
+                      // is unknown gets no approval card; Stop is all it offers.
+                      for (final r in state.runs)
+                        if (decisions(r) case final calls
+                            when calls.isNotEmpty && !hasUnresolvedAttempt(r))
+                          approvalCard(r, calls),
+                      if (unacknowledged && !runAsks)
+                        Card(
+                          key: const Key('disclosure'),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Messages will be sent to ${originHost(origin)}.',
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                FilledButton(
+                                  key: const Key('ack-new-work'),
+                                  onPressed: state.loading
+                                      ? null
+                                      : () => state.acknowledgeOrigin(origin),
+                                  child: const Text('Allow'),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          key: const Key('ack-new-work'),
-                          onPressed: state.loading
-                              ? null
-                              : () => state.acknowledgeOrigin(origin),
-                          child: const Text('Allow'),
-                        ),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
+              ),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -665,33 +678,35 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
         ),
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (c != null) header(c),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                children: [
-                  if (c == null && !state.loading)
-                    const Text(
-                      'Conversation unavailable. Return home or refresh.',
-                    ),
-                  if (c != null) ...transcript(c, issues),
-                ],
-              ),
-            ),
-            if (c != null)
-              bottom(c, issues)
-            else
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: ResultBanner(state: state),
+        body: LayoutBuilder(
+          builder: (context, room) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (c != null) header(c),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  children: [
+                    if (c == null && !state.loading)
+                      const Text(
+                        'Conversation unavailable. Return home or refresh.',
+                      ),
+                    if (c != null) ...transcript(c, issues),
+                  ],
                 ),
               ),
-          ],
+              if (c != null)
+                bottom(c, issues, maxHeight: room.maxHeight * 0.5)
+              else
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: ResultBanner(state: state),
+                  ),
+                ),
+            ],
+          ),
         ),
       );
     },

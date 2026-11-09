@@ -120,6 +120,61 @@ class HeldBackend extends UiBackend {
 }
 
 void main() {
+  testWidgets(
+    'with the keyboard open the card scrolls and the composer stays visible',
+    (t) async {
+      // A phone-sized view with the keyboard taking about 40% of it.
+      t.view.physicalSize = const Size(360, 780);
+      t.view.devicePixelRatio = 1;
+      t.view.viewInsets = const FakeViewPadding(bottom: 330);
+      addTearDown(t.view.resetPhysicalSize);
+      addTearDown(t.view.resetDevicePixelRatio);
+      addTearDown(t.view.resetViewInsets);
+      final long = pendingAttempt(
+        'attempt-3333-uuid',
+        serverId,
+        'set_frontmatter',
+      );
+      final args =
+          '{"changeset":"one","key":"two","path":"/","value":["three"],"extra":"four"}';
+      final call = Attempt(
+        id: long.id,
+        state: long.state,
+        call: ToolCall(
+          key: long.call.key,
+          providerCallId: long.call.providerCallId,
+          argumentsJson: args,
+        ),
+        binding: ApprovalBinding(
+          attemptId: long.id,
+          key: long.call.key,
+          providerCallId: long.call.providerCallId,
+          definitionDigest: 'definition',
+          argumentsDigest: 'args',
+          argumentsJson: args,
+          schemaJson: '{}',
+          destinationDigest: 'destination',
+        ),
+      );
+      await t.pumpWidget(
+        MaterialApp(
+          home: ChatScreen(
+            backend: backendWith([call, attemptOne]),
+            conversationId: 'c',
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+      final composer = t.getRect(find.byKey(const Key('message')));
+      expect(composer.bottom, lessThanOrEqualTo(780 - 330));
+      expect(composer.top, greaterThanOrEqualTo(0));
+      expect(
+        find.byKey(const Key('approve-all-r')).hitTestable(),
+        findsOneWidget,
+      );
+    },
+  );
   testWidgets('the approval card lists every pending call by name', (t) async {
     final b = backendWith([attemptOne, attemptTwo]);
     await pumpChat(t, b);
