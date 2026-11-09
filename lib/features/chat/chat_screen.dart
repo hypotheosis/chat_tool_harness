@@ -477,6 +477,9 @@ class _ChatScreenState extends State<ChatScreen> {
     ),
   );
 
+  /// Below this body height (dp) the header is hidden; see the body builder.
+  static const compactHeight = 200.0;
+
   Widget header(Conversation c) => ListTile(
     key: const Key('chat-header'),
     dense: true,
@@ -679,34 +682,44 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         body: LayoutBuilder(
-          builder: (context, room) => Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (c != null) header(c),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  children: [
-                    if (c == null && !state.loading)
-                      const Text(
-                        'Conversation unavailable. Return home or refresh.',
-                      ),
-                    if (c != null) ...transcript(c, issues),
-                  ],
-                ),
-              ),
-              if (c != null)
-                bottom(c, issues, maxHeight: room.maxHeight * 0.5)
-              else
-                SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: ResultBanner(state: state),
+          builder: (context, room) {
+            // Too short for the header and the composer together (landscape
+            // with the keyboard open): drop the header and let the bottom
+            // area use all the room, so the composer stays on screen.
+            final compact = room.maxHeight < compactHeight;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (c != null && !compact) header(c),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    children: [
+                      if (c == null && !state.loading)
+                        const Text(
+                          'Conversation unavailable. Return home or refresh.',
+                        ),
+                      if (c != null) ...transcript(c, issues),
+                    ],
                   ),
                 ),
-            ],
-          ),
+                if (c != null)
+                  bottom(
+                    c,
+                    issues,
+                    maxHeight: compact ? room.maxHeight : room.maxHeight * 0.5,
+                  )
+                else
+                  SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: ResultBanner(state: state),
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
       );
     },

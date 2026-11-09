@@ -121,6 +121,38 @@ class HeldBackend extends UiBackend {
 
 void main() {
   testWidgets(
+    'in landscape with the keyboard open the header gives way to the composer',
+    (t) async {
+      // A landscape phone where the keyboard leaves the chat about 78 dp.
+      t.view.physicalSize = const Size(832, 384);
+      t.view.devicePixelRatio = 1;
+      t.view.viewInsets = const FakeViewPadding(bottom: 250);
+      addTearDown(t.view.resetPhysicalSize);
+      addTearDown(t.view.resetDevicePixelRatio);
+      addTearDown(t.view.resetViewInsets);
+      await t.pumpWidget(
+        MaterialApp(
+          home: ChatScreen(
+            backend: backendWith([attemptOne]),
+            conversationId: 'c',
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+      expect(find.byKey(const Key('chat-header')), findsNothing);
+      final composer = t.getRect(find.byKey(const Key('message')));
+      expect(composer.bottom, lessThanOrEqualTo(384 - 250));
+      expect(find.byKey(const Key('message')).hitTestable(), findsOneWidget);
+      // With the keyboard closed there is room for the header again.
+      t.view.viewInsets = FakeViewPadding.zero;
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+      expect(find.byKey(const Key('chat-header')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'with the keyboard open the card scrolls and the composer stays visible',
     (t) async {
       // A phone-sized view with the keyboard taking about 40% of it.
