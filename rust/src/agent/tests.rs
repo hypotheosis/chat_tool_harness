@@ -3565,3 +3565,51 @@ async fn retry_is_refused_for_a_summary_run_and_an_unknown_run() {
     );
     assert!(f.requests.try_recv().is_err());
 }
+
+/// The ids of every run, and the number of events, in storage.
+fn runs_and_events(f: &Fixture) -> (Vec<String>, i64) {
+    f.repo
+        .with_connection(|c| {
+            let mut stmt = c.prepare("SELECT id FROM runs ORDER BY rowid").unwrap();
+            let runs = stmt
+                .query_map([], |r| r.get::<_, String>(0))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect();
+            let events = c
+                .query_row("SELECT count(*) FROM events", [], |r| r.get(0))
+                .unwrap();
+            Ok((runs, events))
+        })
+        .unwrap()
+}
+
+#[tokio::test]
+async fn start_retry_rechecks_eligibility_inside_its_transaction() {
+    // A turn started after the preliminary check makes the failed run stale.
+    let mut f = Fixture::new();
+    let failed = failed_turn(&mut f).await;
+    assert_eq!(state::retryable(&f.repo, failed), Ok(f.conversation));
+    let later = RunId::new();
+    state::start(&f.repo, later, f.conversation, "next".into()).unwrap();
+    let before = runs_and_events(&f);
+    assert_eq!(
+        state::start_retry(&f.repo, RunId::new(), failed),
+        Err(CoreError::Conflict)
+    );
+    assert_eq!(runs_and_events(&f), before);
+
+    // A second retry of the same failed run, both past the preliminary check.
+    let mut f = Fixture::new();
+    let failed = failed_turn(&mut f).await;
+    assert_eq!(state::retryable(&f.repo, failed), Ok(f.conversation));
+    let first = RunId::new();
+    state::start_retry(&f.repo, first, failed).unwrap();
+    let before = runs_and_events(&f);
+    assert_eq!(
+        state::start_retry(&f.repo, RunId::new(), failed),
+        Err(CoreError::Conflict)
+    );
+    assert_eq!(runs_and_events(&f), before);
+    assert_eq!(before.0, [failed.0.to_string(), first.0.to_string()]);
+}
