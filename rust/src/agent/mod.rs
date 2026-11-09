@@ -330,6 +330,33 @@ impl Coordinator {
         prepared(ready).await?;
         Ok(run)
     }
+    /// Re-runs a failed turn from its existing input message as a new run,
+    /// without adding another user message. Only the conversation's latest
+    /// run may be retried, and never one with a tool call whose outcome is
+    /// unresolved; anything else is a Conflict.
+    pub async fn retry(&self, failed: RunId) -> CoreResult<RunId> {
+        let run = RunId::new();
+        let ready = {
+            let mut slot = self.inner.running.lock().await;
+            self.inner.admission()?;
+            if slot.is_some()
+                || self
+                    .inner
+                    .diagnostic
+                    .load(std::sync::atomic::Ordering::Acquire)
+            {
+                return Err(CoreError::Conflict);
+            }
+            self.launch(&mut slot, run, move |repo| {
+                let conversation = state::retryable(&repo, failed)?;
+                // Fixed settings (URL, credential) apply to the retry.
+                repo.refresh_profile(conversation)?;
+                state::start_retry(&repo, run, failed)
+            })
+        };
+        prepared(ready).await?;
+        Ok(run)
+    }
     pub async fn summarize_context(
         &self,
         conversation: ConversationId,

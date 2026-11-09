@@ -55,7 +55,7 @@ extension AppCommandPatterns on AppCommand {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( AppCommand_SearchConversations value)?  searchConversations,TResult Function( AppCommand_RenameConversation value)?  renameConversation,TResult Function( AppCommand_DeleteConversation value)?  deleteConversation,TResult Function( AppCommand_ExportTranscript value)?  exportTranscript,TResult Function( AppCommand_DiscoverModels value)?  discoverModels,TResult Function( AppCommand_ProbeEndpoint value)?  probeEndpoint,TResult Function( AppCommand_DiscoverServer value)?  discoverServer,TResult Function( AppCommand_CreateArtifact value)?  createArtifact,TResult Function( AppCommand_ReadArtifact value)?  readArtifact,TResult Function( AppCommand_DeleteArtifact value)?  deleteArtifact,TResult Function( AppCommand_NewId value)?  newId,TResult Function( AppCommand_SaveEndpoint value)?  saveEndpoint,TResult Function( AppCommand_SaveServer value)?  saveServer,TResult Function( AppCommand_SaveProfile value)?  saveProfile,TResult Function( AppCommand_CreateConversation value)?  createConversation,TResult Function( AppCommand_ApplyProfile value)?  applyProfile,TResult Function( AppCommand_SetRule value)?  setRule,TResult Function( AppCommand_StartTurn value)?  startTurn,TResult Function( AppCommand_PlatformPause value)?  platformPause,TResult Function( AppCommand_PlatformStop value)?  platformStop,TResult Function( AppCommand_CancelRun value)?  cancelRun,TResult Function( AppCommand_ResumeRun value)?  resumeRun,TResult Function( AppCommand_Approve value)?  approve,TResult Function( AppCommand_Deny value)?  deny,TResult Function( AppCommand_DecideApprovals value)?  decideApprovals,TResult Function( AppCommand_SetServerTrust value)?  setServerTrust,TResult Function( AppCommand_SummarizeContext value)?  summarizeContext,TResult Function( AppCommand_ApplyContextSelection value)?  applyContextSelection,TResult Function( AppCommand_AcknowledgeContextDisclosure value)?  acknowledgeContextDisclosure,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( AppCommand_SearchConversations value)?  searchConversations,TResult Function( AppCommand_RenameConversation value)?  renameConversation,TResult Function( AppCommand_DeleteConversation value)?  deleteConversation,TResult Function( AppCommand_ExportTranscript value)?  exportTranscript,TResult Function( AppCommand_DiscoverModels value)?  discoverModels,TResult Function( AppCommand_ProbeEndpoint value)?  probeEndpoint,TResult Function( AppCommand_DiscoverServer value)?  discoverServer,TResult Function( AppCommand_CreateArtifact value)?  createArtifact,TResult Function( AppCommand_ReadArtifact value)?  readArtifact,TResult Function( AppCommand_DeleteArtifact value)?  deleteArtifact,TResult Function( AppCommand_NewId value)?  newId,TResult Function( AppCommand_SaveEndpoint value)?  saveEndpoint,TResult Function( AppCommand_SaveServer value)?  saveServer,TResult Function( AppCommand_SaveProfile value)?  saveProfile,TResult Function( AppCommand_CreateConversation value)?  createConversation,TResult Function( AppCommand_ApplyProfile value)?  applyProfile,TResult Function( AppCommand_SetRule value)?  setRule,TResult Function( AppCommand_StartTurn value)?  startTurn,TResult Function( AppCommand_PlatformPause value)?  platformPause,TResult Function( AppCommand_PlatformStop value)?  platformStop,TResult Function( AppCommand_CancelRun value)?  cancelRun,TResult Function( AppCommand_ResumeRun value)?  resumeRun,TResult Function( AppCommand_RetryRun value)?  retryRun,TResult Function( AppCommand_Approve value)?  approve,TResult Function( AppCommand_Deny value)?  deny,TResult Function( AppCommand_DecideApprovals value)?  decideApprovals,TResult Function( AppCommand_SetServerTrust value)?  setServerTrust,TResult Function( AppCommand_SummarizeContext value)?  summarizeContext,TResult Function( AppCommand_ApplyContextSelection value)?  applyContextSelection,TResult Function( AppCommand_AcknowledgeContextDisclosure value)?  acknowledgeContextDisclosure,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case AppCommand_SearchConversations() when searchConversations != null:
@@ -80,7 +80,8 @@ return startTurn(_that);case AppCommand_PlatformPause() when platformPause != nu
 return platformPause(_that);case AppCommand_PlatformStop() when platformStop != null:
 return platformStop(_that);case AppCommand_CancelRun() when cancelRun != null:
 return cancelRun(_that);case AppCommand_ResumeRun() when resumeRun != null:
-return resumeRun(_that);case AppCommand_Approve() when approve != null:
+return resumeRun(_that);case AppCommand_RetryRun() when retryRun != null:
+return retryRun(_that);case AppCommand_Approve() when approve != null:
 return approve(_that);case AppCommand_Deny() when deny != null:
 return deny(_that);case AppCommand_DecideApprovals() when decideApprovals != null:
 return decideApprovals(_that);case AppCommand_SetServerTrust() when setServerTrust != null:
@@ -105,7 +106,7 @@ return acknowledgeContextDisclosure(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( AppCommand_SearchConversations value)  searchConversations,required TResult Function( AppCommand_RenameConversation value)  renameConversation,required TResult Function( AppCommand_DeleteConversation value)  deleteConversation,required TResult Function( AppCommand_ExportTranscript value)  exportTranscript,required TResult Function( AppCommand_DiscoverModels value)  discoverModels,required TResult Function( AppCommand_ProbeEndpoint value)  probeEndpoint,required TResult Function( AppCommand_DiscoverServer value)  discoverServer,required TResult Function( AppCommand_CreateArtifact value)  createArtifact,required TResult Function( AppCommand_ReadArtifact value)  readArtifact,required TResult Function( AppCommand_DeleteArtifact value)  deleteArtifact,required TResult Function( AppCommand_NewId value)  newId,required TResult Function( AppCommand_SaveEndpoint value)  saveEndpoint,required TResult Function( AppCommand_SaveServer value)  saveServer,required TResult Function( AppCommand_SaveProfile value)  saveProfile,required TResult Function( AppCommand_CreateConversation value)  createConversation,required TResult Function( AppCommand_ApplyProfile value)  applyProfile,required TResult Function( AppCommand_SetRule value)  setRule,required TResult Function( AppCommand_StartTurn value)  startTurn,required TResult Function( AppCommand_PlatformPause value)  platformPause,required TResult Function( AppCommand_PlatformStop value)  platformStop,required TResult Function( AppCommand_CancelRun value)  cancelRun,required TResult Function( AppCommand_ResumeRun value)  resumeRun,required TResult Function( AppCommand_Approve value)  approve,required TResult Function( AppCommand_Deny value)  deny,required TResult Function( AppCommand_DecideApprovals value)  decideApprovals,required TResult Function( AppCommand_SetServerTrust value)  setServerTrust,required TResult Function( AppCommand_SummarizeContext value)  summarizeContext,required TResult Function( AppCommand_ApplyContextSelection value)  applyContextSelection,required TResult Function( AppCommand_AcknowledgeContextDisclosure value)  acknowledgeContextDisclosure,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( AppCommand_SearchConversations value)  searchConversations,required TResult Function( AppCommand_RenameConversation value)  renameConversation,required TResult Function( AppCommand_DeleteConversation value)  deleteConversation,required TResult Function( AppCommand_ExportTranscript value)  exportTranscript,required TResult Function( AppCommand_DiscoverModels value)  discoverModels,required TResult Function( AppCommand_ProbeEndpoint value)  probeEndpoint,required TResult Function( AppCommand_DiscoverServer value)  discoverServer,required TResult Function( AppCommand_CreateArtifact value)  createArtifact,required TResult Function( AppCommand_ReadArtifact value)  readArtifact,required TResult Function( AppCommand_DeleteArtifact value)  deleteArtifact,required TResult Function( AppCommand_NewId value)  newId,required TResult Function( AppCommand_SaveEndpoint value)  saveEndpoint,required TResult Function( AppCommand_SaveServer value)  saveServer,required TResult Function( AppCommand_SaveProfile value)  saveProfile,required TResult Function( AppCommand_CreateConversation value)  createConversation,required TResult Function( AppCommand_ApplyProfile value)  applyProfile,required TResult Function( AppCommand_SetRule value)  setRule,required TResult Function( AppCommand_StartTurn value)  startTurn,required TResult Function( AppCommand_PlatformPause value)  platformPause,required TResult Function( AppCommand_PlatformStop value)  platformStop,required TResult Function( AppCommand_CancelRun value)  cancelRun,required TResult Function( AppCommand_ResumeRun value)  resumeRun,required TResult Function( AppCommand_RetryRun value)  retryRun,required TResult Function( AppCommand_Approve value)  approve,required TResult Function( AppCommand_Deny value)  deny,required TResult Function( AppCommand_DecideApprovals value)  decideApprovals,required TResult Function( AppCommand_SetServerTrust value)  setServerTrust,required TResult Function( AppCommand_SummarizeContext value)  summarizeContext,required TResult Function( AppCommand_ApplyContextSelection value)  applyContextSelection,required TResult Function( AppCommand_AcknowledgeContextDisclosure value)  acknowledgeContextDisclosure,}){
 final _that = this;
 switch (_that) {
 case AppCommand_SearchConversations():
@@ -130,7 +131,8 @@ return startTurn(_that);case AppCommand_PlatformPause():
 return platformPause(_that);case AppCommand_PlatformStop():
 return platformStop(_that);case AppCommand_CancelRun():
 return cancelRun(_that);case AppCommand_ResumeRun():
-return resumeRun(_that);case AppCommand_Approve():
+return resumeRun(_that);case AppCommand_RetryRun():
+return retryRun(_that);case AppCommand_Approve():
 return approve(_that);case AppCommand_Deny():
 return deny(_that);case AppCommand_DecideApprovals():
 return decideApprovals(_that);case AppCommand_SetServerTrust():
@@ -151,7 +153,7 @@ return acknowledgeContextDisclosure(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( AppCommand_SearchConversations value)?  searchConversations,TResult? Function( AppCommand_RenameConversation value)?  renameConversation,TResult? Function( AppCommand_DeleteConversation value)?  deleteConversation,TResult? Function( AppCommand_ExportTranscript value)?  exportTranscript,TResult? Function( AppCommand_DiscoverModels value)?  discoverModels,TResult? Function( AppCommand_ProbeEndpoint value)?  probeEndpoint,TResult? Function( AppCommand_DiscoverServer value)?  discoverServer,TResult? Function( AppCommand_CreateArtifact value)?  createArtifact,TResult? Function( AppCommand_ReadArtifact value)?  readArtifact,TResult? Function( AppCommand_DeleteArtifact value)?  deleteArtifact,TResult? Function( AppCommand_NewId value)?  newId,TResult? Function( AppCommand_SaveEndpoint value)?  saveEndpoint,TResult? Function( AppCommand_SaveServer value)?  saveServer,TResult? Function( AppCommand_SaveProfile value)?  saveProfile,TResult? Function( AppCommand_CreateConversation value)?  createConversation,TResult? Function( AppCommand_ApplyProfile value)?  applyProfile,TResult? Function( AppCommand_SetRule value)?  setRule,TResult? Function( AppCommand_StartTurn value)?  startTurn,TResult? Function( AppCommand_PlatformPause value)?  platformPause,TResult? Function( AppCommand_PlatformStop value)?  platformStop,TResult? Function( AppCommand_CancelRun value)?  cancelRun,TResult? Function( AppCommand_ResumeRun value)?  resumeRun,TResult? Function( AppCommand_Approve value)?  approve,TResult? Function( AppCommand_Deny value)?  deny,TResult? Function( AppCommand_DecideApprovals value)?  decideApprovals,TResult? Function( AppCommand_SetServerTrust value)?  setServerTrust,TResult? Function( AppCommand_SummarizeContext value)?  summarizeContext,TResult? Function( AppCommand_ApplyContextSelection value)?  applyContextSelection,TResult? Function( AppCommand_AcknowledgeContextDisclosure value)?  acknowledgeContextDisclosure,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( AppCommand_SearchConversations value)?  searchConversations,TResult? Function( AppCommand_RenameConversation value)?  renameConversation,TResult? Function( AppCommand_DeleteConversation value)?  deleteConversation,TResult? Function( AppCommand_ExportTranscript value)?  exportTranscript,TResult? Function( AppCommand_DiscoverModels value)?  discoverModels,TResult? Function( AppCommand_ProbeEndpoint value)?  probeEndpoint,TResult? Function( AppCommand_DiscoverServer value)?  discoverServer,TResult? Function( AppCommand_CreateArtifact value)?  createArtifact,TResult? Function( AppCommand_ReadArtifact value)?  readArtifact,TResult? Function( AppCommand_DeleteArtifact value)?  deleteArtifact,TResult? Function( AppCommand_NewId value)?  newId,TResult? Function( AppCommand_SaveEndpoint value)?  saveEndpoint,TResult? Function( AppCommand_SaveServer value)?  saveServer,TResult? Function( AppCommand_SaveProfile value)?  saveProfile,TResult? Function( AppCommand_CreateConversation value)?  createConversation,TResult? Function( AppCommand_ApplyProfile value)?  applyProfile,TResult? Function( AppCommand_SetRule value)?  setRule,TResult? Function( AppCommand_StartTurn value)?  startTurn,TResult? Function( AppCommand_PlatformPause value)?  platformPause,TResult? Function( AppCommand_PlatformStop value)?  platformStop,TResult? Function( AppCommand_CancelRun value)?  cancelRun,TResult? Function( AppCommand_ResumeRun value)?  resumeRun,TResult? Function( AppCommand_RetryRun value)?  retryRun,TResult? Function( AppCommand_Approve value)?  approve,TResult? Function( AppCommand_Deny value)?  deny,TResult? Function( AppCommand_DecideApprovals value)?  decideApprovals,TResult? Function( AppCommand_SetServerTrust value)?  setServerTrust,TResult? Function( AppCommand_SummarizeContext value)?  summarizeContext,TResult? Function( AppCommand_ApplyContextSelection value)?  applyContextSelection,TResult? Function( AppCommand_AcknowledgeContextDisclosure value)?  acknowledgeContextDisclosure,}){
 final _that = this;
 switch (_that) {
 case AppCommand_SearchConversations() when searchConversations != null:
@@ -176,7 +178,8 @@ return startTurn(_that);case AppCommand_PlatformPause() when platformPause != nu
 return platformPause(_that);case AppCommand_PlatformStop() when platformStop != null:
 return platformStop(_that);case AppCommand_CancelRun() when cancelRun != null:
 return cancelRun(_that);case AppCommand_ResumeRun() when resumeRun != null:
-return resumeRun(_that);case AppCommand_Approve() when approve != null:
+return resumeRun(_that);case AppCommand_RetryRun() when retryRun != null:
+return retryRun(_that);case AppCommand_Approve() when approve != null:
 return approve(_that);case AppCommand_Deny() when deny != null:
 return deny(_that);case AppCommand_DecideApprovals() when decideApprovals != null:
 return decideApprovals(_that);case AppCommand_SetServerTrust() when setServerTrust != null:
@@ -200,7 +203,7 @@ return acknowledgeContextDisclosure(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String query,  int offset,  int limit)?  searchConversations,TResult Function( String conversationId,  String title)?  renameConversation,TResult Function( String conversationId,  bool confirmedUnknown)?  deleteConversation,TResult Function( String conversationId,  bool includeToolPayloads)?  exportTranscript,TResult Function( String endpointId)?  discoverModels,TResult Function( String endpointId)?  probeEndpoint,TResult Function( String profileId,  String serverId)?  discoverServer,TResult Function( String conversationId,  String name,  String content)?  createArtifact,TResult Function( String conversationId,  String artifactId)?  readArtifact,TResult Function( String conversationId,  String artifactId)?  deleteArtifact,TResult Function()?  newId,TResult Function( AgentEndpointConfig endpoint)?  saveEndpoint,TResult Function( AgentServerConfig server)?  saveServer,TResult Function( AgentProfile profile)?  saveProfile,TResult Function( String profileId)?  createConversation,TResult Function( String conversationId,  String profileId)?  applyProfile,TResult Function( AgentToolKey key,  String schemaDigest,  String destinationDigest,  PermissionRule rule)?  setRule,TResult Function( String conversationId,  String text)?  startTurn,TResult Function( String runId,  String generation)?  platformPause,TResult Function( String runId,  String generation)?  platformStop,TResult Function( String runId)?  cancelRun,TResult Function( String runId)?  resumeRun,TResult Function( AgentApprovalBinding binding)?  approve,TResult Function( String attemptId)?  deny,TResult Function( String runId,  List<AgentApprovalBinding> approve,  List<String> deny)?  decideApprovals,TResult Function( String serverId,  bool trusted)?  setServerTrust,TResult Function( String conversationId,  AgentContextSelection selection)?  summarizeContext,TResult Function( String runId,  AgentContextSelection selection)?  applyContextSelection,TResult Function( String conversationId,  String origin)?  acknowledgeContextDisclosure,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String query,  int offset,  int limit)?  searchConversations,TResult Function( String conversationId,  String title)?  renameConversation,TResult Function( String conversationId,  bool confirmedUnknown)?  deleteConversation,TResult Function( String conversationId,  bool includeToolPayloads)?  exportTranscript,TResult Function( String endpointId)?  discoverModels,TResult Function( String endpointId)?  probeEndpoint,TResult Function( String profileId,  String serverId)?  discoverServer,TResult Function( String conversationId,  String name,  String content)?  createArtifact,TResult Function( String conversationId,  String artifactId)?  readArtifact,TResult Function( String conversationId,  String artifactId)?  deleteArtifact,TResult Function()?  newId,TResult Function( AgentEndpointConfig endpoint)?  saveEndpoint,TResult Function( AgentServerConfig server)?  saveServer,TResult Function( AgentProfile profile)?  saveProfile,TResult Function( String profileId)?  createConversation,TResult Function( String conversationId,  String profileId)?  applyProfile,TResult Function( AgentToolKey key,  String schemaDigest,  String destinationDigest,  PermissionRule rule)?  setRule,TResult Function( String conversationId,  String text)?  startTurn,TResult Function( String runId,  String generation)?  platformPause,TResult Function( String runId,  String generation)?  platformStop,TResult Function( String runId)?  cancelRun,TResult Function( String runId)?  resumeRun,TResult Function( String runId)?  retryRun,TResult Function( AgentApprovalBinding binding)?  approve,TResult Function( String attemptId)?  deny,TResult Function( String runId,  List<AgentApprovalBinding> approve,  List<String> deny)?  decideApprovals,TResult Function( String serverId,  bool trusted)?  setServerTrust,TResult Function( String conversationId,  AgentContextSelection selection)?  summarizeContext,TResult Function( String runId,  AgentContextSelection selection)?  applyContextSelection,TResult Function( String conversationId,  String origin)?  acknowledgeContextDisclosure,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case AppCommand_SearchConversations() when searchConversations != null:
 return searchConversations(_that.query,_that.offset,_that.limit);case AppCommand_RenameConversation() when renameConversation != null:
@@ -224,7 +227,8 @@ return startTurn(_that.conversationId,_that.text);case AppCommand_PlatformPause(
 return platformPause(_that.runId,_that.generation);case AppCommand_PlatformStop() when platformStop != null:
 return platformStop(_that.runId,_that.generation);case AppCommand_CancelRun() when cancelRun != null:
 return cancelRun(_that.runId);case AppCommand_ResumeRun() when resumeRun != null:
-return resumeRun(_that.runId);case AppCommand_Approve() when approve != null:
+return resumeRun(_that.runId);case AppCommand_RetryRun() when retryRun != null:
+return retryRun(_that.runId);case AppCommand_Approve() when approve != null:
 return approve(_that.binding);case AppCommand_Deny() when deny != null:
 return deny(_that.attemptId);case AppCommand_DecideApprovals() when decideApprovals != null:
 return decideApprovals(_that.runId,_that.approve,_that.deny);case AppCommand_SetServerTrust() when setServerTrust != null:
@@ -249,7 +253,7 @@ return acknowledgeContextDisclosure(_that.conversationId,_that.origin);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String query,  int offset,  int limit)  searchConversations,required TResult Function( String conversationId,  String title)  renameConversation,required TResult Function( String conversationId,  bool confirmedUnknown)  deleteConversation,required TResult Function( String conversationId,  bool includeToolPayloads)  exportTranscript,required TResult Function( String endpointId)  discoverModels,required TResult Function( String endpointId)  probeEndpoint,required TResult Function( String profileId,  String serverId)  discoverServer,required TResult Function( String conversationId,  String name,  String content)  createArtifact,required TResult Function( String conversationId,  String artifactId)  readArtifact,required TResult Function( String conversationId,  String artifactId)  deleteArtifact,required TResult Function()  newId,required TResult Function( AgentEndpointConfig endpoint)  saveEndpoint,required TResult Function( AgentServerConfig server)  saveServer,required TResult Function( AgentProfile profile)  saveProfile,required TResult Function( String profileId)  createConversation,required TResult Function( String conversationId,  String profileId)  applyProfile,required TResult Function( AgentToolKey key,  String schemaDigest,  String destinationDigest,  PermissionRule rule)  setRule,required TResult Function( String conversationId,  String text)  startTurn,required TResult Function( String runId,  String generation)  platformPause,required TResult Function( String runId,  String generation)  platformStop,required TResult Function( String runId)  cancelRun,required TResult Function( String runId)  resumeRun,required TResult Function( AgentApprovalBinding binding)  approve,required TResult Function( String attemptId)  deny,required TResult Function( String runId,  List<AgentApprovalBinding> approve,  List<String> deny)  decideApprovals,required TResult Function( String serverId,  bool trusted)  setServerTrust,required TResult Function( String conversationId,  AgentContextSelection selection)  summarizeContext,required TResult Function( String runId,  AgentContextSelection selection)  applyContextSelection,required TResult Function( String conversationId,  String origin)  acknowledgeContextDisclosure,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String query,  int offset,  int limit)  searchConversations,required TResult Function( String conversationId,  String title)  renameConversation,required TResult Function( String conversationId,  bool confirmedUnknown)  deleteConversation,required TResult Function( String conversationId,  bool includeToolPayloads)  exportTranscript,required TResult Function( String endpointId)  discoverModels,required TResult Function( String endpointId)  probeEndpoint,required TResult Function( String profileId,  String serverId)  discoverServer,required TResult Function( String conversationId,  String name,  String content)  createArtifact,required TResult Function( String conversationId,  String artifactId)  readArtifact,required TResult Function( String conversationId,  String artifactId)  deleteArtifact,required TResult Function()  newId,required TResult Function( AgentEndpointConfig endpoint)  saveEndpoint,required TResult Function( AgentServerConfig server)  saveServer,required TResult Function( AgentProfile profile)  saveProfile,required TResult Function( String profileId)  createConversation,required TResult Function( String conversationId,  String profileId)  applyProfile,required TResult Function( AgentToolKey key,  String schemaDigest,  String destinationDigest,  PermissionRule rule)  setRule,required TResult Function( String conversationId,  String text)  startTurn,required TResult Function( String runId,  String generation)  platformPause,required TResult Function( String runId,  String generation)  platformStop,required TResult Function( String runId)  cancelRun,required TResult Function( String runId)  resumeRun,required TResult Function( String runId)  retryRun,required TResult Function( AgentApprovalBinding binding)  approve,required TResult Function( String attemptId)  deny,required TResult Function( String runId,  List<AgentApprovalBinding> approve,  List<String> deny)  decideApprovals,required TResult Function( String serverId,  bool trusted)  setServerTrust,required TResult Function( String conversationId,  AgentContextSelection selection)  summarizeContext,required TResult Function( String runId,  AgentContextSelection selection)  applyContextSelection,required TResult Function( String conversationId,  String origin)  acknowledgeContextDisclosure,}) {final _that = this;
 switch (_that) {
 case AppCommand_SearchConversations():
 return searchConversations(_that.query,_that.offset,_that.limit);case AppCommand_RenameConversation():
@@ -273,7 +277,8 @@ return startTurn(_that.conversationId,_that.text);case AppCommand_PlatformPause(
 return platformPause(_that.runId,_that.generation);case AppCommand_PlatformStop():
 return platformStop(_that.runId,_that.generation);case AppCommand_CancelRun():
 return cancelRun(_that.runId);case AppCommand_ResumeRun():
-return resumeRun(_that.runId);case AppCommand_Approve():
+return resumeRun(_that.runId);case AppCommand_RetryRun():
+return retryRun(_that.runId);case AppCommand_Approve():
 return approve(_that.binding);case AppCommand_Deny():
 return deny(_that.attemptId);case AppCommand_DecideApprovals():
 return decideApprovals(_that.runId,_that.approve,_that.deny);case AppCommand_SetServerTrust():
@@ -294,7 +299,7 @@ return acknowledgeContextDisclosure(_that.conversationId,_that.origin);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String query,  int offset,  int limit)?  searchConversations,TResult? Function( String conversationId,  String title)?  renameConversation,TResult? Function( String conversationId,  bool confirmedUnknown)?  deleteConversation,TResult? Function( String conversationId,  bool includeToolPayloads)?  exportTranscript,TResult? Function( String endpointId)?  discoverModels,TResult? Function( String endpointId)?  probeEndpoint,TResult? Function( String profileId,  String serverId)?  discoverServer,TResult? Function( String conversationId,  String name,  String content)?  createArtifact,TResult? Function( String conversationId,  String artifactId)?  readArtifact,TResult? Function( String conversationId,  String artifactId)?  deleteArtifact,TResult? Function()?  newId,TResult? Function( AgentEndpointConfig endpoint)?  saveEndpoint,TResult? Function( AgentServerConfig server)?  saveServer,TResult? Function( AgentProfile profile)?  saveProfile,TResult? Function( String profileId)?  createConversation,TResult? Function( String conversationId,  String profileId)?  applyProfile,TResult? Function( AgentToolKey key,  String schemaDigest,  String destinationDigest,  PermissionRule rule)?  setRule,TResult? Function( String conversationId,  String text)?  startTurn,TResult? Function( String runId,  String generation)?  platformPause,TResult? Function( String runId,  String generation)?  platformStop,TResult? Function( String runId)?  cancelRun,TResult? Function( String runId)?  resumeRun,TResult? Function( AgentApprovalBinding binding)?  approve,TResult? Function( String attemptId)?  deny,TResult? Function( String runId,  List<AgentApprovalBinding> approve,  List<String> deny)?  decideApprovals,TResult? Function( String serverId,  bool trusted)?  setServerTrust,TResult? Function( String conversationId,  AgentContextSelection selection)?  summarizeContext,TResult? Function( String runId,  AgentContextSelection selection)?  applyContextSelection,TResult? Function( String conversationId,  String origin)?  acknowledgeContextDisclosure,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String query,  int offset,  int limit)?  searchConversations,TResult? Function( String conversationId,  String title)?  renameConversation,TResult? Function( String conversationId,  bool confirmedUnknown)?  deleteConversation,TResult? Function( String conversationId,  bool includeToolPayloads)?  exportTranscript,TResult? Function( String endpointId)?  discoverModels,TResult? Function( String endpointId)?  probeEndpoint,TResult? Function( String profileId,  String serverId)?  discoverServer,TResult? Function( String conversationId,  String name,  String content)?  createArtifact,TResult? Function( String conversationId,  String artifactId)?  readArtifact,TResult? Function( String conversationId,  String artifactId)?  deleteArtifact,TResult? Function()?  newId,TResult? Function( AgentEndpointConfig endpoint)?  saveEndpoint,TResult? Function( AgentServerConfig server)?  saveServer,TResult? Function( AgentProfile profile)?  saveProfile,TResult? Function( String profileId)?  createConversation,TResult? Function( String conversationId,  String profileId)?  applyProfile,TResult? Function( AgentToolKey key,  String schemaDigest,  String destinationDigest,  PermissionRule rule)?  setRule,TResult? Function( String conversationId,  String text)?  startTurn,TResult? Function( String runId,  String generation)?  platformPause,TResult? Function( String runId,  String generation)?  platformStop,TResult? Function( String runId)?  cancelRun,TResult? Function( String runId)?  resumeRun,TResult? Function( String runId)?  retryRun,TResult? Function( AgentApprovalBinding binding)?  approve,TResult? Function( String attemptId)?  deny,TResult? Function( String runId,  List<AgentApprovalBinding> approve,  List<String> deny)?  decideApprovals,TResult? Function( String serverId,  bool trusted)?  setServerTrust,TResult? Function( String conversationId,  AgentContextSelection selection)?  summarizeContext,TResult? Function( String runId,  AgentContextSelection selection)?  applyContextSelection,TResult? Function( String conversationId,  String origin)?  acknowledgeContextDisclosure,}) {final _that = this;
 switch (_that) {
 case AppCommand_SearchConversations() when searchConversations != null:
 return searchConversations(_that.query,_that.offset,_that.limit);case AppCommand_RenameConversation() when renameConversation != null:
@@ -318,7 +323,8 @@ return startTurn(_that.conversationId,_that.text);case AppCommand_PlatformPause(
 return platformPause(_that.runId,_that.generation);case AppCommand_PlatformStop() when platformStop != null:
 return platformStop(_that.runId,_that.generation);case AppCommand_CancelRun() when cancelRun != null:
 return cancelRun(_that.runId);case AppCommand_ResumeRun() when resumeRun != null:
-return resumeRun(_that.runId);case AppCommand_Approve() when approve != null:
+return resumeRun(_that.runId);case AppCommand_RetryRun() when retryRun != null:
+return retryRun(_that.runId);case AppCommand_Approve() when approve != null:
 return approve(_that.binding);case AppCommand_Deny() when deny != null:
 return deny(_that.attemptId);case AppCommand_DecideApprovals() when decideApprovals != null:
 return decideApprovals(_that.runId,_that.approve,_that.deny);case AppCommand_SetServerTrust() when setServerTrust != null:
@@ -1777,6 +1783,72 @@ class _$AppCommand_ResumeRunCopyWithImpl<$Res>
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') $Res call({Object? runId = null,}) {
   return _then(AppCommand_ResumeRun(
+runId: null == runId ? _self.runId : runId // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class AppCommand_RetryRun extends AppCommand {
+  const AppCommand_RetryRun({required this.runId}): super._();
+  
+
+ final  String runId;
+
+/// Create a copy of AppCommand
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$AppCommand_RetryRunCopyWith<AppCommand_RetryRun> get copyWith => _$AppCommand_RetryRunCopyWithImpl<AppCommand_RetryRun>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AppCommand_RetryRun&&(identical(other.runId, runId) || other.runId == runId));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,runId);
+
+@override
+String toString() {
+  return 'AppCommand.retryRun(runId: $runId)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $AppCommand_RetryRunCopyWith<$Res> implements $AppCommandCopyWith<$Res> {
+  factory $AppCommand_RetryRunCopyWith(AppCommand_RetryRun value, $Res Function(AppCommand_RetryRun) _then) = _$AppCommand_RetryRunCopyWithImpl;
+@useResult
+$Res call({
+ String runId
+});
+
+
+
+
+}
+/// @nodoc
+class _$AppCommand_RetryRunCopyWithImpl<$Res>
+    implements $AppCommand_RetryRunCopyWith<$Res> {
+  _$AppCommand_RetryRunCopyWithImpl(this._self, this._then);
+
+  final AppCommand_RetryRun _self;
+  final $Res Function(AppCommand_RetryRun) _then;
+
+/// Create a copy of AppCommand
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? runId = null,}) {
+  return _then(AppCommand_RetryRun(
 runId: null == runId ? _self.runId : runId // ignore: cast_nullable_to_non_nullable
 as String,
   ));

@@ -1127,6 +1127,11 @@ sealed class AppCommand with _$AppCommand {
       AppCommand_CancelRun;
   const factory AppCommand.resumeRun({required String runId}) =
       AppCommand_ResumeRun;
+
+  /// Re-runs a failed turn from its existing input message; replies with
+  /// the new run's id.
+  const factory AppCommand.retryRun({required String runId}) =
+      AppCommand_RetryRun;
   const factory AppCommand.approve({required AgentApprovalBinding binding}) =
       AppCommand_Approve;
   const factory AppCommand.deny({required String attemptId}) = AppCommand_Deny;

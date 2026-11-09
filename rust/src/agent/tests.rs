@@ -3433,3 +3433,135 @@ async fn unknown_outcome_resume_after_settings_edit_is_refused_without_refresh()
     assert!(f.requests.try_recv().is_err());
     assert_eq!(f.writes.load(Ordering::SeqCst), 1);
 }
+
+/// The user messages of `conversation`, in order.
+fn user_messages(f: &Fixture) -> Vec<String> {
+    f.repo
+        .conversation(f.conversation)
+        .unwrap()
+        .messages
+        .into_iter()
+        .filter(|m| m.message.role == "user")
+        .map(|m| m.message.content)
+        .collect()
+}
+
+async fn failed_turn(f: &mut Fixture) -> RunId {
+    let run = f.start().await;
+    f.request().await.finish(Err(CoreError::Authentication));
+    assert_eq!(f.settled(run).await.state, RunState::Failed);
+    run
+}
+
+#[tokio::test]
+async fn retry_reruns_failed_turn_from_its_input_without_a_new_message() {
+    let mut f = Fixture::new();
+    let failed = failed_turn(&mut f).await;
+    let input = f.data(failed).await.input_message_id;
+    assert!(input.is_some());
+    edit_endpoint_url(&f);
+    let retry = f.coordinator.retry(failed).await.unwrap();
+    assert_ne!(retry, failed);
+    let request = f.request().await;
+    // The fixed settings apply, and the input is sent once.
+    assert_eq!(request.request.endpoint.base_url, "https://example.com/v1");
+    let sent: Vec<_> = request
+        .request
+        .messages
+        .iter()
+        .filter(|m| matches!(m.role, ChatRole::User))
+        .map(|m| m.content.as_str())
+        .collect();
+    assert_eq!(sent, ["do it"]);
+    request.finish(Ok(turn(vec![])));
+    let data = f.settled(retry).await;
+    assert_eq!(data.state, RunState::Completed);
+    assert_eq!(data.input_message_id, input);
+    assert_eq!(user_messages(&f), ["do it"]);
+    // The failed run stays failed and is not retried twice.
+    assert_eq!(f.data(failed).await.state, RunState::Failed);
+    assert_eq!(f.coordinator.retry(failed).await, Err(CoreError::Conflict));
+    assert!(f.requests.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn retry_is_refused_for_a_run_that_did_not_fail() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    f.request()
+        .await
+        .finish(Err(CoreError::UnavailableTransport));
+    assert_eq!(f.settled(run).await.state, RunState::Paused);
+    assert_eq!(f.coordinator.retry(run).await, Err(CoreError::Conflict));
+    f.coordinator.resume(run).await.unwrap();
+    f.request().await.finish(Ok(turn(vec![])));
+    assert_eq!(f.settled(run).await.state, RunState::Completed);
+    assert_eq!(f.coordinator.retry(run).await, Err(CoreError::Conflict));
+    assert!(f.requests.try_recv().is_err());
+    assert_eq!(f.coordinator.snapshot().await.unwrap().runs.len(), 1);
+}
+
+#[tokio::test]
+async fn retry_is_refused_while_a_tool_outcome_is_unresolved() {
+    for unresolved in ["Dispatching", "OutcomeUnknown"] {
+        let mut f = Fixture::new();
+        let run = f.start().await;
+        f.waiting(run).await;
+        f.sql(&format!(
+            "UPDATE attempts SET state='{unresolved}' WHERE run_id='{}';
+             UPDATE runs SET state='Failed' WHERE id='{}';",
+            run.0, run.0
+        ))
+        .await;
+        assert_eq!(
+            f.coordinator.retry(run).await,
+            Err(CoreError::Conflict),
+            "{unresolved}"
+        );
+        assert!(f.requests.try_recv().is_err());
+        assert_eq!(f.writes.load(Ordering::SeqCst), 0);
+        assert_eq!(f.coordinator.snapshot().await.unwrap().runs.len(), 1);
+    }
+}
+
+#[tokio::test]
+async fn retry_is_refused_once_a_later_run_exists() {
+    let mut f = Fixture::new();
+    let failed = failed_turn(&mut f).await;
+    let later = f
+        .coordinator
+        .start_turn(f.conversation, "next".into())
+        .await
+        .unwrap();
+    f.request().await.finish(Ok(turn(vec![])));
+    f.settled(later).await;
+    assert_eq!(f.coordinator.retry(failed).await, Err(CoreError::Conflict));
+    assert!(f.requests.try_recv().is_err());
+    assert_eq!(user_messages(&f), ["do it", "next"]);
+}
+
+#[tokio::test]
+async fn retry_is_refused_for_a_summary_run_and_an_unknown_run() {
+    let mut f = Fixture::new();
+    let first = f.start().await;
+    f.request().await.finish(Ok(turn(vec![])));
+    f.settled(first).await;
+    let snapshot = f.repo.conversation(f.conversation).unwrap();
+    let selection = ContextSelection {
+        message_ids: snapshot.messages.iter().map(|m| m.id).collect(),
+        summary_ids: vec![],
+    };
+    let summary = f
+        .coordinator
+        .summarize_context(f.conversation, selection)
+        .await
+        .unwrap();
+    f.request().await.finish(Err(CoreError::Authentication));
+    assert_eq!(f.settled(summary).await.state, RunState::Failed);
+    assert_eq!(f.coordinator.retry(summary).await, Err(CoreError::Conflict));
+    assert_eq!(
+        f.coordinator.retry(RunId::new()).await,
+        Err(CoreError::Conflict)
+    );
+    assert!(f.requests.try_recv().is_err());
+}
