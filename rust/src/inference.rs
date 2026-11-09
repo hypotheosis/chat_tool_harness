@@ -324,11 +324,39 @@ impl<P: CredentialProvider> InferenceClient<P> {
             )
             .await?;
         let mut decoder = StreamDecoder::new(&request.tools)?;
+        let result = self
+            .decode(&mut response, &mut decoder, &request, &events, &cancel)
+            .await;
+        if let (Err(CoreError::Protocol), Some(reason)) = (&result, decoder.problem()) {
+            crate::failure::note(crate::failure::FailureDetail {
+                target: crate::failure::FailureTarget::Inference {
+                    name: request.endpoint.name.clone(),
+                },
+                step: crate::failure::FailureStep::ChatRequest,
+                url: crate::net::endpoint_url(&request.endpoint, "chat/completions")
+                    .ok()
+                    .map(|url| crate::failure::display_url(&url)),
+                // The response itself succeeded; its content is what failed.
+                status: None,
+                reason: Some(reason.to_owned()),
+            });
+        }
+        result
+    }
+    /// Reads the streamed reply into [decoder], forwarding text as it arrives.
+    async fn decode(
+        &self,
+        response: &mut reqwest::Response,
+        decoder: &mut StreamDecoder,
+        request: &InferenceRequest,
+        events: &EventSender,
+        cancel: &Cancellation,
+    ) -> CoreResult<InferenceTurn> {
         loop {
             let chunk = next_chunk(
-                &mut response,
+                response,
                 request.deadline,
-                &cancel,
+                cancel,
                 MAX_RESPONSE_BYTES - decoder.total,
             )
             .await?;
@@ -378,7 +406,38 @@ struct PendingCall {
     id: String,
     name: String,
     args: String,
-    typed: bool,
+}
+/// A rejected reply: its error and, for a protocol problem, why.
+struct Bad {
+    error: CoreError,
+    reason: Option<String>,
+}
+impl From<CoreError> for Bad {
+    fn from(error: CoreError) -> Self {
+        Self {
+            error,
+            reason: None,
+        }
+    }
+}
+/// A protocol problem named by a fixed phrase.
+fn bad(reason: &'static str) -> Bad {
+    Bad {
+        error: CoreError::Protocol,
+        reason: Some(reason.into()),
+    }
+}
+/// The reason for an `error` frame inside a streamed reply: the router's
+/// sanitized message, else a fixed phrase.
+fn stream_error_reason(data: &[u8]) -> String {
+    match crate::failure::reason_from_body(data, &[]) {
+        Some(message) => crate::failure::sanitize_reason(
+            &format!("inference server reported an error mid-reply: {message}"),
+            &[],
+        )
+        .unwrap_or(message),
+        None => "inference server reported an error mid-reply".into(),
+    }
 }
 pub struct StreamDecoder {
     aliases: HashMap<String, ToolKey>,
@@ -391,6 +450,7 @@ pub struct StreamDecoder {
     usage: Option<Usage>,
     finish_reason: Option<String>,
     done: bool,
+    problem: Option<String>,
 }
 impl StreamDecoder {
     pub fn new(tools: &[AdvertisedTool]) -> CoreResult<Self> {
@@ -415,18 +475,34 @@ impl StreamDecoder {
             usage: None,
             finish_reason: None,
             done: false,
+            problem: None,
         })
     }
     pub fn push(&mut self, bytes: &[u8]) -> CoreResult<Vec<String>> {
+        self.push_inner(bytes).map_err(|bad| self.reject(bad))
+    }
+    /// Records why the reply was rejected (a fixed phrase or the router's
+    /// sanitized error message, never reply content) and returns its error.
+    fn reject(&mut self, bad: Bad) -> CoreError {
+        if let Some(reason) = bad.reason {
+            self.problem = Some(reason);
+        }
+        bad.error
+    }
+    /// Why the reply was rejected, when a check named it.
+    pub fn problem(&self) -> Option<&str> {
+        self.problem.as_deref()
+    }
+    fn push_inner(&mut self, bytes: &[u8]) -> Result<Vec<String>, Bad> {
         self.total = self
             .total
             .checked_add(bytes.len())
             .filter(|n| *n <= MAX_RESPONSE_BYTES)
-            .ok_or(CoreError::Limit)?;
+            .ok_or(Bad::from(CoreError::Limit))?;
         let mut out = Vec::new();
         for byte in bytes {
             if self.done {
-                return Err(CoreError::Protocol);
+                return Err(bad("reply continued after [DONE]"));
             }
             if *byte == b'\n' {
                 let line = std::mem::take(&mut self.frame);
@@ -437,14 +513,17 @@ impl StreamDecoder {
                             self.done = true;
                             continue;
                         }
-                        let value: Value =
-                            serde_json::from_slice(&data).map_err(|_| CoreError::Protocol)?;
+                        let value: Value = serde_json::from_slice(&data)
+                            .map_err(|_| bad("reply chunk is not valid JSON"))?;
                         if let Some(error) = value.get("error") {
                             return Err(match error.get("code").and_then(Value::as_str) {
                                 Some("context_length_exceeded" | "context_window_exceeded") => {
-                                    CoreError::ContextLength
+                                    Bad::from(CoreError::ContextLength)
                                 }
-                                _ => CoreError::Protocol,
+                                _ => Bad {
+                                    error: CoreError::Protocol,
+                                    reason: Some(stream_error_reason(&data)),
+                                },
                             });
                         }
                         if let Some(usage) = value.get("usage").filter(|v| !v.is_null()) {
@@ -452,74 +531,98 @@ impl StreamDecoder {
                                 prompt_tokens: usage
                                     .get("prompt_tokens")
                                     .and_then(Value::as_u64)
-                                    .ok_or(CoreError::Protocol)?,
+                                    .ok_or_else(|| bad("usage lacks prompt_tokens"))?,
                                 completion_tokens: usage
                                     .get("completion_tokens")
                                     .and_then(Value::as_u64)
-                                    .ok_or(CoreError::Protocol)?,
+                                    .ok_or_else(|| bad("usage lacks completion_tokens"))?,
                             });
                         }
                         let choices = value
                             .get("choices")
                             .and_then(Value::as_array)
-                            .ok_or(CoreError::Protocol)?;
+                            .ok_or_else(|| bad("reply chunk has no choices"))?;
                         if choices.len() > 1 {
-                            return Err(CoreError::Protocol);
+                            return Err(bad("reply has more than one choice"));
                         }
                         if let Some(choice) = choices.first() {
                             let delta = choice
                                 .get("delta")
                                 .and_then(Value::as_object)
-                                .ok_or(CoreError::Protocol)?;
+                                .ok_or_else(|| bad("reply choice has no delta"))?;
                             if let Some(content) = delta.get("content").filter(|v| !v.is_null()) {
-                                let text = content.as_str().ok_or(CoreError::Protocol)?;
+                                let text = content
+                                    .as_str()
+                                    .ok_or_else(|| bad("reply content is not text"))?;
                                 if self.text.len().saturating_add(text.len()) > MAX_TEXT_BYTES {
-                                    return Err(CoreError::Limit);
+                                    return Err(CoreError::Limit.into());
                                 }
                                 self.text.push_str(text);
                                 out.push(text.to_owned());
                             }
                             if let Some(calls) = delta.get("tool_calls") {
-                                for call in calls.as_array().ok_or(CoreError::Protocol)? {
+                                for call in calls
+                                    .as_array()
+                                    .ok_or_else(|| bad("tool_calls is not a list"))?
+                                {
                                     let index = call
                                         .get("index")
                                         .and_then(Value::as_u64)
-                                        .ok_or(CoreError::Protocol)?;
+                                        .ok_or_else(|| bad("tool call lacks an index"))?;
                                     if index >= MAX_TOOLS as u64 {
-                                        return Err(CoreError::Limit);
+                                        return Err(CoreError::Limit.into());
                                     }
                                     let pending = self.pending.entry(index).or_default();
-                                    if let Some(id) = call.get("id") {
+                                    // Some routers repeat id, type and name in every
+                                    // chunk of a call; the same value again is harmless.
+                                    if let Some(id) = call.get("id").filter(|v| !v.is_null()) {
                                         let id = id
                                             .as_str()
                                             .filter(|s| !s.is_empty() && s.len() <= 256)
-                                            .ok_or(CoreError::Protocol)?;
-                                        if !pending.id.is_empty() || !self.ids.insert(id.to_owned())
-                                        {
-                                            return Err(CoreError::Protocol);
+                                            .ok_or_else(|| {
+                                                bad("tool call id is empty or too long")
+                                            })?;
+                                        if pending.id != id {
+                                            if !pending.id.is_empty() {
+                                                return Err(bad("tool call id changed mid-call"));
+                                            }
+                                            if !self.ids.insert(id.to_owned()) {
+                                                return Err(bad(
+                                                    "tool call id reused by another call",
+                                                ));
+                                            }
+                                            pending.id = id.to_owned();
                                         }
-                                        pending.id = id.to_owned();
                                     }
-                                    if let Some(kind) = call.get("type") {
-                                        if kind != "function" || pending.typed {
-                                            return Err(CoreError::Protocol);
+                                    if let Some(kind) = call.get("type").filter(|v| !v.is_null()) {
+                                        if kind != "function" {
+                                            return Err(bad("tool call type is not \"function\""));
                                         }
-                                        pending.typed = true;
                                     }
                                     if let Some(function) = call.get("function") {
-                                        if let Some(name) = function.get("name") {
-                                            let name = name.as_str().ok_or(CoreError::Protocol)?;
-                                            if !pending.name.is_empty() {
-                                                return Err(CoreError::Protocol);
+                                        if let Some(name) =
+                                            function.get("name").filter(|v| !v.is_null())
+                                        {
+                                            let name = name
+                                                .as_str()
+                                                .ok_or_else(|| bad("tool call name is not text"))?;
+                                            if pending.name != name {
+                                                if !pending.name.is_empty() {
+                                                    return Err(bad(
+                                                        "tool call name changed mid-call",
+                                                    ));
+                                                }
+                                                pending.name = name.to_owned();
                                             }
-                                            pending.name = name.to_owned();
                                         }
                                         if let Some(args) = function.get("arguments") {
-                                            let args = args.as_str().ok_or(CoreError::Protocol)?;
+                                            let args = args.as_str().ok_or_else(|| {
+                                                bad("tool call arguments are not text")
+                                            })?;
                                             if pending.args.len().saturating_add(args.len())
                                                 > MAX_TOOL_JSON_BYTES
                                             {
-                                                return Err(CoreError::Limit);
+                                                return Err(CoreError::Limit.into());
                                             }
                                             pending.args.push_str(args);
                                         }
@@ -529,9 +632,11 @@ impl StreamDecoder {
                             if let Some(reason) =
                                 choice.get("finish_reason").filter(|v| !v.is_null())
                             {
-                                let reason = reason.as_str().ok_or(CoreError::Protocol)?;
+                                let reason = reason
+                                    .as_str()
+                                    .ok_or_else(|| bad("finish_reason is not text"))?;
                                 if self.finish_reason.is_some() {
-                                    return Err(CoreError::Protocol);
+                                    return Err(bad("finish_reason sent twice"));
                                 }
                                 self.finish_reason = Some(reason.to_owned());
                             }
@@ -544,52 +649,67 @@ impl StreamDecoder {
                         event.push(b'\n');
                     }
                     if event.len().saturating_add(data.len()) > MAX_FRAME_BYTES {
-                        return Err(CoreError::Limit);
+                        return Err(CoreError::Limit.into());
                     }
                     event.extend_from_slice(data);
                 } else if !(line.starts_with(b":")
                     || line.starts_with(b"event:")
                     || line.starts_with(b"id:"))
                 {
-                    return Err(CoreError::Protocol);
+                    return Err(bad("reply is not a server-sent event stream"));
                 }
             } else {
                 if self.frame.len() >= MAX_FRAME_BYTES {
-                    return Err(CoreError::Limit);
+                    return Err(CoreError::Limit.into());
                 }
                 self.frame.push(*byte);
             }
         }
         Ok(out)
     }
-    pub fn finish(self) -> CoreResult<InferenceTurn> {
+    /// The completed turn, or why the reply cannot be used (see [problem]).
+    pub fn finish(&mut self) -> CoreResult<InferenceTurn> {
+        self.finish_inner().map_err(|bad| self.reject(bad))
+    }
+    fn finish_inner(&mut self) -> Result<InferenceTurn, Bad> {
         if !self.done || !self.frame.is_empty() || self.event_data.is_some() {
-            return Err(CoreError::Protocol);
+            return Err(bad("reply ended without [DONE]"));
         }
-        let reason = self.finish_reason.ok_or(CoreError::Protocol)?;
+        let reason = self
+            .finish_reason
+            .clone()
+            .ok_or_else(|| bad("reply has no finish_reason"))?;
         if !matches!(reason.as_str(), "stop" | "tool_calls" | "length") {
-            return Err(CoreError::Protocol);
+            return Err(bad("reply has an unknown finish_reason"));
         }
         if reason == "length" && !self.pending.is_empty() {
-            return Err(CoreError::Protocol);
+            return Err(bad("reply hit the output limit during a tool call"));
         }
-        if (reason == "tool_calls") != !self.pending.is_empty() {
-            return Err(CoreError::Protocol);
+        // Some servers finish a tool-call turn with "stop"; tool_calls without
+        // any call is still malformed.
+        if reason == "tool_calls" && self.pending.is_empty() {
+            return Err(bad("finish_reason is tool_calls but no tool call came"));
         }
         let mut calls = Vec::new();
-        for (_, pending) in self.pending {
-            if !pending.typed || pending.id.is_empty() {
-                return Err(CoreError::Protocol);
+        for pending in std::mem::take(&mut self.pending).into_values() {
+            if pending.id.is_empty() {
+                return Err(bad("tool call has no id"));
             }
             let key = self
                 .aliases
                 .get(&pending.name)
-                .ok_or(CoreError::Protocol)?
-                .clone();
-            let parsed =
-                crate::permissions::parse_json(&pending.args).map_err(|_| CoreError::Protocol)?;
+                .cloned()
+                .ok_or_else(|| Bad {
+                    error: CoreError::Protocol,
+                    reason: crate::failure::sanitize_reason(
+                        &format!("model called an unknown tool \"{}\"", pending.name),
+                        &[],
+                    ),
+                })?;
+            let parsed = crate::permissions::parse_json(&pending.args)
+                .map_err(|_| bad("tool call arguments are not valid JSON"))?;
             if !parsed.is_object() {
-                return Err(CoreError::Protocol);
+                return Err(bad("tool call arguments are not a JSON object"));
             }
             calls.push(ToolCall {
                 key,
@@ -598,9 +718,9 @@ impl StreamDecoder {
             });
         }
         Ok(InferenceTurn {
-            text: self.text,
+            text: std::mem::take(&mut self.text),
             calls,
-            usage: self.usage,
+            usage: self.usage.take(),
             finish_reason: reason,
         })
     }
@@ -1224,6 +1344,145 @@ mod tests {
         assert_eq!(detail.step, crate::failure::FailureStep::DiscoverModels);
         assert_eq!(detail.status, Some(401));
         assert_eq!(detail.reason.as_deref(), Some("bad key"));
+        server.await.unwrap();
+    }
+    fn decoded(
+        frames: &[Value],
+        tools: &[AdvertisedTool],
+    ) -> (CoreResult<InferenceTurn>, Option<String>) {
+        let mut decoder = StreamDecoder::new(tools).unwrap();
+        let mut stream = String::new();
+        for frame in frames {
+            stream.push_str(&format!("data: {frame}\n\n"));
+        }
+        stream.push_str("data: [DONE]\n\n");
+        let result = decoder
+            .push(stream.as_bytes())
+            .and_then(|_| decoder.finish());
+        (result, decoder.problem().map(str::to_owned))
+    }
+    #[test]
+    fn mid_stream_error_frame_keeps_the_routers_message() {
+        let (result, problem) = decoded(
+            &[
+                json!({"choices":[{"delta":{"content":"Hel"}}]}),
+                json!({"error":{"message":"upstream backend timed out","code":"server_error"}}),
+            ],
+            &[],
+        );
+        assert_eq!(result.err(), Some(CoreError::Protocol));
+        assert_eq!(
+            problem.as_deref(),
+            Some("inference server reported an error mid-reply: upstream backend timed out")
+        );
+        let (result, problem) =
+            decoded(&[json!({"error":{"code":"context_length_exceeded"}})], &[]);
+        assert_eq!(result.err(), Some(CoreError::ContextLength));
+        assert_eq!(problem, None);
+    }
+    #[test]
+    fn repeated_identical_call_fields_are_accepted_and_changes_rejected() {
+        let tool = advertised("read");
+        let name = tool_alias(&tool.key);
+        let chunk = |args: &str, id: &str, name: &str| json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":id,"type":"function","function":{"name":name,"arguments":args}}]}}]});
+        let finish = json!({"choices":[{"delta":{},"finish_reason":"tool_calls"}]});
+        let (result, _) = decoded(
+            &[
+                chunk("{\"a\":", "c1", &name),
+                chunk("1}", "c1", &name),
+                finish.clone(),
+            ],
+            std::slice::from_ref(&tool),
+        );
+        let turn = result.unwrap();
+        assert_eq!(turn.calls.len(), 1);
+        assert_eq!(turn.calls[0].arguments_json, "{\"a\":1}");
+        let (result, problem) = decoded(
+            &[
+                chunk("{", "c1", &name),
+                chunk("}", "c2", &name),
+                finish.clone(),
+            ],
+            std::slice::from_ref(&tool),
+        );
+        assert_eq!(result.err(), Some(CoreError::Protocol));
+        assert_eq!(problem.as_deref(), Some("tool call id changed mid-call"));
+        let (result, problem) = decoded(
+            &[chunk("{", "c1", &name), chunk("}", "c1", "other"), finish],
+            std::slice::from_ref(&tool),
+        );
+        assert_eq!(result.err(), Some(CoreError::Protocol));
+        assert_eq!(problem.as_deref(), Some("tool call name changed mid-call"));
+    }
+    #[test]
+    fn stop_with_tool_calls_is_a_tool_turn() {
+        let tool = advertised("read");
+        let (result, _) = decoded(
+            &[
+                json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","type":"function","function":{"name":tool_alias(&tool.key),"arguments":"{}"}}]},"finish_reason":"stop"}]}),
+            ],
+            std::slice::from_ref(&tool),
+        );
+        assert_eq!(result.unwrap().calls.len(), 1);
+        let (result, problem) = decoded(
+            &[json!({"choices":[{"delta":{"content":"hi"},"finish_reason":"tool_calls"}]})],
+            std::slice::from_ref(&tool),
+        );
+        assert_eq!(result.err(), Some(CoreError::Protocol));
+        assert_eq!(
+            problem.as_deref(),
+            Some("finish_reason is tool_calls but no tool call came")
+        );
+    }
+    #[test]
+    fn unknown_tool_and_bad_arguments_are_named() {
+        let tool = advertised("read");
+        let call = |name: &str, args: &str| json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","type":"function","function":{"name":name,"arguments":args}}]},"finish_reason":"tool_calls"}]});
+        let (_, problem) = decoded(&[call("made_up", "{}")], std::slice::from_ref(&tool));
+        assert_eq!(
+            problem.as_deref(),
+            Some("model called an unknown tool \"made_up\"")
+        );
+        let (_, problem) = decoded(
+            &[call(&tool_alias(&tool.key), "{not json")],
+            std::slice::from_ref(&tool),
+        );
+        assert_eq!(
+            problem.as_deref(),
+            Some("tool call arguments are not valid JSON")
+        );
+    }
+    #[tokio::test]
+    async fn mid_stream_error_is_noted_against_the_endpoint() {
+        let (base, server) = one_shot(
+            200,
+            "data: {\"error\":{\"message\":\"upstream backend timed out\"}}\n\n",
+        )
+        .await;
+        let mut r = request(vec![]);
+        r.endpoint.base_url = base;
+        r.endpoint.allow_http = true;
+        let (sender, _receiver) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
+        let (result, detail) = crate::failure::scope(async {
+            InferenceClient::new(NoKeyNoted)
+                .unwrap()
+                .stream_turn(r, sender, Cancellation::new())
+                .await
+        })
+        .await;
+        assert_eq!(result.err(), Some(CoreError::Protocol));
+        let detail = detail.expect("detail");
+        assert!(matches!(
+            detail.target,
+            crate::failure::FailureTarget::Inference { .. }
+        ));
+        assert_eq!(detail.step, crate::failure::FailureStep::ChatRequest);
+        assert_eq!(detail.status, None);
+        assert_eq!(
+            detail.reason.as_deref(),
+            Some("inference server reported an error mid-reply: upstream backend timed out")
+        );
+        assert!(detail.url.unwrap().ends_with("/v1/chat/completions"));
         server.await.unwrap();
     }
     #[tokio::test]
