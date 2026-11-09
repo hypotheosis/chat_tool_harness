@@ -134,6 +134,24 @@ void main() {
       }
     },
   );
+  testWidgets('calls issued together run in arrival order', (tester) async {
+    const ref = 'c92677ad-3f0c-4ca5-b10a-c4fcd9bf4131';
+    addTearDown(() => PlatformServices.deleteCredential(ref));
+    Future<Uint8List?> resolve() =>
+        credentials.invokeMethod<Uint8List>('resolve', {'reference': ref});
+    // Nothing is awaited between calls: each must see the one before it.
+    final results = await Future.wait<Object?>([
+      PlatformServices.putCredential(ref, 'first'),
+      resolve(),
+      PlatformServices.putCredential(ref, 'second'),
+      resolve(),
+      PlatformServices.deleteCredential(ref),
+      resolve(),
+    ]);
+    expect(results[1], utf8.encode('first'));
+    expect(results[3], utf8.encode('second'));
+    expect(results[5], isNull);
+  });
   testWidgets('describe reports scheme and length without the secret', (
     tester,
   ) async {
