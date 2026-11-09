@@ -1,6 +1,7 @@
 import 'package:chat_tool_harness/backend/models.dart';
 import 'package:chat_tool_harness/features/files/android_document_access.dart';
 import 'package:chat_tool_harness/features/files/file_controller.dart';
+import 'package:chat_tool_harness/features/screen_controller.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -78,4 +79,30 @@ void main() {
       );
     },
   );
+  test('a platform without document access is unsupported, not a transport '
+      'failure', () async {
+    messenger.setMockMethodCallHandler(MethodChannelDocumentAccess.channel, (
+      _,
+    ) async {
+      throw PlatformException(
+        code: MethodChannelDocumentAccess.unsupportedPlatformCode,
+      );
+    });
+    for (final export in [access.saveArtifact, access.shareArtifact]) {
+      await expectLater(
+        export(content),
+        throwsA(
+          isA<BackendFailure>().having(
+            (e) => e.code,
+            'code',
+            FailureCode.unsupportedPlatform,
+          ),
+        ),
+      );
+    }
+    expect(
+      failureMessage(const BackendFailure(FailureCode.unsupportedPlatform)),
+      'This is not available on this platform yet.',
+    );
+  });
 }

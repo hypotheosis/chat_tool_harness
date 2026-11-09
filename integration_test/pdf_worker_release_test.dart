@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:convert';
 
 import 'package:chat_tool_harness/main.dart' as app;
@@ -37,5 +38,5 @@ void main() {
     expect(pages.map((page) => page.physicalPage), [1, 2]);
     expect(pages.first.text, contains('First'));
     expect(pages.last.text, contains('Second'));
-  });
+  }, skip: !Platform.isAndroid); // The PDF worker host is Android-only for now.
 }

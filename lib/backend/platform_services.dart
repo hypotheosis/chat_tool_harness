@@ -124,6 +124,7 @@ class PlatformServices {
   static const runtime = MethodChannel('chat_tool_harness/agent_runtime');
 
   static Future<String> applicationDataDir() async {
+    if (Platform.isLinux) return linuxDataDir(Platform.environment);
     if (!Platform.isAndroid) {
       throw const BackendFailure(FailureCode.configuration);
     }
@@ -135,6 +136,30 @@ class PlatformServices {
       throw const BackendFailure(FailureCode.storage);
     }
   }
+}
+
+/// The Linux app data directory: `agent` under the application ID in
+/// `$XDG_DATA_HOME`, or in `$HOME/.local/share` when that is unset, empty or
+/// relative (as the XDG Base Directory spec requires). Rust creates it.
+///
+/// Throws [BackendFailure] with [FailureCode.configuration] when neither
+/// gives an absolute path.
+String linuxDataDir(Map<String, String> environment) {
+  const applicationId = 'com.example.chat_tool_harness';
+  final xdg = environment['XDG_DATA_HOME'];
+  final home = environment['HOME'];
+  final String base;
+  if (xdg != null && xdg.startsWith('/')) {
+    base = xdg;
+  } else if (home != null && home.startsWith('/')) {
+    base = '$home/.local/share';
+  } else {
+    throw const BackendFailure(FailureCode.configuration);
+  }
+  final trimmed = base.length > 1 && base.endsWith('/')
+      ? base.substring(0, base.length - 1)
+      : base;
+  return '$trimmed/$applicationId/agent';
 }
 
 /// One owner per Dart engine/isolate; widgets borrow it, never close it.

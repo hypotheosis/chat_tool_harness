@@ -16,6 +16,10 @@ enum FailureCode {
   storage,
   cancelled,
   conflict,
+
+  /// This platform does not provide the feature (for example, saving or
+  /// sharing files on Linux). Dart-only: the backend never reports it.
+  unsupportedPlatform,
 }
 
 /// What failed and where, as noted by the backend. Values are sanitized.

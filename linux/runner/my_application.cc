@@ -6,10 +6,12 @@
 #endif
 
 #include "flutter/generated_plugin_registrant.h"
+#include "platform_channels.h"
 
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  PlatformChannels* channels;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -74,6 +76,8 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  self->channels = platform_channels_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)));
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
@@ -121,6 +125,7 @@ static void my_application_shutdown(GApplication* application) {
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+  g_clear_pointer(&self->channels, platform_channels_free);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 

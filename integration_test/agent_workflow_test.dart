@@ -290,10 +290,13 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(find.text('controlled partial'), findsOneWidget);
-      final notifications = await const MethodChannel(
-        'chat_tool_harness/agent_probe',
-      ).invokeListMethod<dynamic>('notificationState');
-      expect(jsonEncode(notifications), isNot(contains(_secret)));
+      // Only Android shows a run notification.
+      if (Platform.isAndroid) {
+        final notifications = await const MethodChannel(
+          'chat_tool_harness/agent_probe',
+        ).invokeListMethod<dynamic>('notificationState');
+        expect(jsonEncode(notifications), isNot(contains(_secret)));
+      }
       await tap(find.byKey(Key('stop-${run.id}')));
       await tap(find.byKey(const Key('confirm-stop')));
       final stopped = await waitRun(

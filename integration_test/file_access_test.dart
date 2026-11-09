@@ -100,30 +100,45 @@ void main() {
           (await backend.execute(ReadArtifact(owner, id))).artifact!.text,
           artifact.text,
         );
-        const documents = MethodChannelDocumentAccess.channel;
-        await expectLater(
-          documents.invokeMethod<String>('prepareArtifact', {
-            'privatePath': artifact.privatePath,
-            'name': 'answer.md',
-          }),
-          throwsA(isA<PlatformException>()),
-        );
-        // This disposable private fixture exercises the production provider root/channel without opening a chooser.
-        final root = Directory(
-          '${await PlatformServices.applicationDataDir()}/artifacts',
-        );
-        await root.create(recursive: true);
-        uriFixture = File('${root.path}/${await newId()}.txt');
-        await uriFixture.writeAsString(artifact.text);
-        final uri = Uri.parse(
-          (await documents.invokeMethod<String>('prepareArtifact', {
-            'privatePath': uriFixture.path,
-            'name': 'answer.md',
-          }))!,
-        );
-        expect(uri.scheme, 'content');
-        expect(uri.authority, 'com.example.chat_tool_harness.artifacts');
-        expect(uri.path, contains('/generated_text/'));
+        if (Platform.isAndroid) {
+          const documents = MethodChannelDocumentAccess.channel;
+          await expectLater(
+            documents.invokeMethod<String>('prepareArtifact', {
+              'privatePath': artifact.privatePath,
+              'name': 'answer.md',
+            }),
+            throwsA(isA<PlatformException>()),
+          );
+          // This disposable private fixture exercises the production provider root/channel without opening a chooser.
+          final root = Directory(
+            '${await PlatformServices.applicationDataDir()}/artifacts',
+          );
+          await root.create(recursive: true);
+          uriFixture = File('${root.path}/${await newId()}.txt');
+          await uriFixture.writeAsString(artifact.text);
+          final uri = Uri.parse(
+            (await documents.invokeMethod<String>('prepareArtifact', {
+              'privatePath': uriFixture.path,
+              'name': 'answer.md',
+            }))!,
+          );
+          expect(uri.scheme, 'content');
+          expect(uri.authority, 'com.example.chat_tool_harness.artifacts');
+          expect(uri.path, contains('/generated_text/'));
+        } else {
+          // Linux has no file chooser or share sheet: a typed failure, never
+          // a transport error or a pretend success.
+          await expectLater(
+            const MethodChannelDocumentAccess().saveArtifact(artifact),
+            throwsA(
+              isA<BackendFailure>().having(
+                (e) => e.code,
+                'code',
+                FailureCode.unsupportedPlatform,
+              ),
+            ),
+          );
+        }
         await backend.execute(DeleteArtifact(owner, id));
         expect((await backend.snapshot()).artifacts, isEmpty);
         expect(await File(artifact.privatePath).exists(), isFalse);

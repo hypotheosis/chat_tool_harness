@@ -134,6 +134,70 @@ void main() {
       }
     },
   );
+  testWidgets('invalid references and values are rejected; valid ones still '
+      'work', (tester) async {
+    const ref = 'd02677ad-3f0c-4ca5-b10a-c4fcd9bf4131';
+    addTearDown(
+      () => credentials.invokeMethod<void>('delete', {'reference': ref}),
+    );
+    Future<void> put(String reference, Uint8List value) => credentials
+        .invokeMethod<void>('put', {'reference': reference, 'value': value});
+    Future<Uint8List?> resolve() =>
+        credentials.invokeMethod<Uint8List>('resolve', {'reference': ref});
+    final rejected = throwsA(
+      isA<PlatformException>().having(
+        (e) => e.code,
+        'code',
+        'CREDENTIAL_UNAVAILABLE',
+      ),
+    );
+    final one = Uint8List.fromList([65]);
+    for (final reference in [
+      ref.toUpperCase(),
+      '{$ref}',
+      ref.replaceAll('-', ''),
+      '1-1-1-1-1',
+      '',
+    ]) {
+      await expectLater(put(reference, one), rejected, reason: reference);
+      await expectLater(
+        credentials.invokeMethod('resolve', {'reference': reference}),
+        rejected,
+        reason: reference,
+      );
+    }
+    await expectLater(put(ref, Uint8List(0)), rejected, reason: 'empty');
+    await expectLater(
+      put(ref, Uint8List.fromList(List.filled(8193, 65))),
+      rejected,
+      reason: '8193 bytes',
+    );
+    // Nothing was stored by the rejected calls, and the channel still works.
+    expect(await resolve(), isNull);
+    final largest = Uint8List.fromList(List.filled(8192, 66));
+    await put(ref, largest);
+    expect(await resolve(), largest);
+    await put(ref, one);
+    expect(await resolve(), one);
+  });
+  testWidgets('calls issued together run in arrival order', (tester) async {
+    const ref = 'c92677ad-3f0c-4ca5-b10a-c4fcd9bf4131';
+    addTearDown(() => PlatformServices.deleteCredential(ref));
+    Future<Uint8List?> resolve() =>
+        credentials.invokeMethod<Uint8List>('resolve', {'reference': ref});
+    // Nothing is awaited between calls: each must see the one before it.
+    final results = await Future.wait<Object?>([
+      PlatformServices.putCredential(ref, 'first'),
+      resolve(),
+      PlatformServices.putCredential(ref, 'second'),
+      resolve(),
+      PlatformServices.deleteCredential(ref),
+      resolve(),
+    ]);
+    expect(results[1], utf8.encode('first'));
+    expect(results[3], utf8.encode('second'));
+    expect(results[5], isNull);
+  });
   testWidgets('describe reports scheme and length without the secret', (
     tester,
   ) async {
@@ -152,50 +216,54 @@ void main() {
     await PlatformServices.deleteCredential(ref);
     expect(await PlatformServices.describeCredential(ref), isNull);
   });
-  testWidgets('a corrupted or unreadable credential is a failure, not missing', (
-    tester,
-  ) async {
-    const ref = 'b92677ad-3f0c-4ca5-b10a-c4fcd9bf4131';
-    addTearDown(() => PlatformServices.deleteCredential(ref));
-    // CredentialStore keeps ciphertext in Context.noBackupFilesDir/credentials.
-    // On stock Android, Flutter's Directory.systemTemp is Context.cacheDir
-    // (<dataDir>/cache) and noBackupFilesDir is <dataDir>/no_backup, so the
-    // file sits at systemTemp.parent/no_backup (applicationDataDir relies on
-    // the same layout). The existsSync check fails loudly if a device differs.
-    final file = File(
-      '${Directory.systemTemp.parent.path}/no_backup/credentials/$ref',
-    );
-    Future<void> expectFailure(String why) async {
-      await expectLater(
-        PlatformServices.android().resolveCredential(ref),
-        throwsA(isA<PlatformException>()),
-        reason: why,
+  testWidgets(
+    'a corrupted or unreadable credential is a failure, not missing',
+    (tester) async {
+      const ref = 'b92677ad-3f0c-4ca5-b10a-c4fcd9bf4131';
+      addTearDown(() => PlatformServices.deleteCredential(ref));
+      // CredentialStore keeps ciphertext in Context.noBackupFilesDir/credentials.
+      // On stock Android, Flutter's Directory.systemTemp is Context.cacheDir
+      // (<dataDir>/cache) and noBackupFilesDir is <dataDir>/no_backup, so the
+      // file sits at systemTemp.parent/no_backup (applicationDataDir relies on
+      // the same layout). The existsSync check fails loudly if a device differs.
+      final file = File(
+        '${Directory.systemTemp.parent.path}/no_backup/credentials/$ref',
       );
-      await expectLater(
-        PlatformServices.describeCredential(ref),
-        throwsA(
-          isA<BackendFailure>().having(
-            (e) => e.code,
-            'code',
-            FailureCode.authentication,
+      Future<void> expectFailure(String why) async {
+        await expectLater(
+          PlatformServices.android().resolveCredential(ref),
+          throwsA(isA<PlatformException>()),
+          reason: why,
+        );
+        await expectLater(
+          PlatformServices.describeCredential(ref),
+          throwsA(
+            isA<BackendFailure>().having(
+              (e) => e.code,
+              'code',
+              FailureCode.authentication,
+            ),
           ),
-        ),
-        reason: why,
-      );
-    }
+          reason: why,
+        );
+      }
 
-    await PlatformServices.putCredential(ref, 'test-only-corrupt');
-    expect(file.existsSync(), isTrue);
-    // Right size, wrong bytes: GCM authentication fails.
-    await file.writeAsBytes(List<int>.filled(40, 7), flush: true);
-    await expectFailure('garbage ciphertext');
-    // Shorter than IV + tag + 1 byte (29): the size check fails.
-    await file.writeAsBytes(List<int>.filled(10, 7), flush: true);
-    await expectFailure('truncated file');
-    // Present but unreadable: FileNotFoundException must not mean missing.
-    await PlatformServices.putCredential(ref, 'test-only-unreadable');
-    final chmod = await Process.run('chmod', ['000', file.path]);
-    expect(chmod.exitCode, 0, reason: '${chmod.stderr}');
-    await expectFailure('unreadable file');
-  });
+      await PlatformServices.putCredential(ref, 'test-only-corrupt');
+      expect(file.existsSync(), isTrue);
+      // Right size, wrong bytes: GCM authentication fails.
+      await file.writeAsBytes(List<int>.filled(40, 7), flush: true);
+      await expectFailure('garbage ciphertext');
+      // Shorter than IV + tag + 1 byte (29): the size check fails.
+      await file.writeAsBytes(List<int>.filled(10, 7), flush: true);
+      await expectFailure('truncated file');
+      // Present but unreadable: FileNotFoundException must not mean missing.
+      await PlatformServices.putCredential(ref, 'test-only-unreadable');
+      final chmod = await Process.run('chmod', ['000', file.path]);
+      expect(chmod.exitCode, 0, reason: '${chmod.stderr}');
+      await expectFailure('unreadable file');
+      // It corrupts Android's ciphertext files; Linux keeps credentials in the
+      // Secret Service, which this test cannot corrupt.
+    },
+    skip: !Platform.isAndroid,
+  );
 }
