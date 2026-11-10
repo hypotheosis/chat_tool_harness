@@ -1101,7 +1101,7 @@ async fn work(
                             } else {
                                 AttemptState::Succeeded
                             };
-                            let content=serde_json::json!({"isError":outcome.is_error,"text":outcome.text,"structuredContent":outcome.structured_content,"unsupportedContent":outcome.unsupported_content.iter().map(|v|serde_json::json!({"kind":v.kind,"metadata":v.metadata})).collect::<Vec<_>>()}).to_string();
+                            let content = outcome.envelope_json();
                             let content = if content.len() > crate::mcp::MAX_RPC_BYTES {
                                 format!(
                                     "Tool {}; payload too large to retain",
@@ -1145,11 +1145,12 @@ async fn work(
         let purpose = data.context.purpose;
         let profile = data.profile.clone();
         let conversation = data.conversation;
-        let (snapshot, disclosure, selection) = inner
+        let (snapshot, disclosure, selection, calibration) = inner
             .persist(move |repo| {
                 let mut snapshot = repo.conversation(conversation)?;
                 snapshot.profile = profile;
                 let disclosure = state::disclosure(&repo, &snapshot.profile)?;
+                let calibration = state::latest_calibration(&repo, conversation)?;
                 let mut selection = data.context.selection;
                 if purpose == context::ContextPurpose::Turn {
                     if let Some(selection) = &mut selection {
@@ -1164,7 +1165,7 @@ async fn work(
                         }
                     }
                 }
-                Ok((snapshot, disclosure, selection))
+                Ok((snapshot, disclosure, selection, calibration))
             })
             .await?;
         let tools: Vec<_> = definitions.values().cloned().collect();
@@ -1176,6 +1177,7 @@ async fn work(
                 attachments: vec![],
                 purpose,
                 disclosure,
+                calibration,
                 deadline,
             },
         )?;

@@ -716,6 +716,7 @@ async fn disclosure_is_acknowledged_once_per_origin_across_conversations() {
             }],
             purpose: context::ContextPurpose::Turn,
             disclosure,
+            calibration: None,
             deadline: Instant::now(),
         };
         context::assemble_with_usage(snapshot, &[], &request)
@@ -1067,6 +1068,52 @@ async fn over_budget_never_silently_drops_messages() {
     assert_eq!(data.inference_count, 0);
     assert_eq!(data.messages[0].content, "do it");
     assert!(f.requests.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn provider_usage_calibrates_the_next_turn_estimate() {
+    // Regression for issue #12: a later turn must use the rate the provider
+    // reported for an earlier one, not one token per byte.
+    let mut f = Fixture::new();
+    let first = f.start().await;
+    let request = f.request().await;
+    let mut result = turn(vec![]);
+    let first_usage = f.data(first).await.context.usage.unwrap();
+    assert_eq!(
+        first_usage.estimation,
+        TokenEstimation::ConservativeUtf8Bytes
+    );
+    let first_bytes = first_usage.raw_bytes;
+    result.usage = Some(crate::inference::Usage {
+        prompt_tokens: first_bytes / 3,
+        completion_tokens: 1,
+    });
+    request.finish(Ok(result));
+    assert_eq!(f.settled(first).await.state, RunState::Completed);
+    // The byte bound for the next, larger request no longer fits this window,
+    // but the calibrated estimate does.
+    let reserve = u64::from(first_usage.output_reserve);
+    f.set_context_tokens(u32::try_from(first_bytes + 256 + reserve).unwrap());
+    let second = f
+        .coordinator
+        .start_turn(f.conversation, "again".into())
+        .await
+        .unwrap();
+    let request = f.request().await;
+    let usage = f.data(second).await.context.usage.unwrap();
+    assert_eq!(usage.estimation, TokenEstimation::CalibratedUtf8Bytes);
+    assert!(usage.raw_bytes + 256 + reserve > u64::from(usage.window));
+    let sample = context::ContextCalibration {
+        raw_bytes: first_bytes,
+        prompt_tokens: first_bytes / 3,
+    };
+    assert_eq!(
+        usage.estimated_input_tokens,
+        context::estimate_input_tokens(usage.raw_bytes, Some(&sample)).0
+    );
+    assert_eq!(usage.reason, None);
+    request.finish(Ok(turn(vec![])));
+    assert_eq!(f.settled(second).await.state, RunState::Completed);
 }
 
 #[tokio::test]

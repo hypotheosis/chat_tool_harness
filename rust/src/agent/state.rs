@@ -518,6 +518,38 @@ pub fn context_usage(
         tx.commit().map_err(sql_error)
     })
 }
+/// The newest provider-measured request size in this conversation, used to
+/// calibrate the next context estimate. Runs without provider usage, or whose
+/// size was only a lower bound, are skipped.
+pub fn latest_calibration(
+    repo: &Repository,
+    conversation: ConversationId,
+) -> CoreResult<Option<super::context::ContextCalibration>> {
+    repo.with_connection(move |conn| {
+        let mut stmt = conn
+            .prepare("SELECT context_json FROM runs WHERE conversation_id=?1 ORDER BY rowid DESC")
+            .map_err(sql_error)?;
+        let mut rows = stmt
+            .query([conversation.0.to_string()])
+            .map_err(sql_error)?;
+        while let Some(row) = rows.next().map_err(sql_error)? {
+            let context: String = row.get(0).map_err(sql_error)?;
+            let context: super::context::RunContext = parse(&context)?;
+            let Some(usage) = context.usage else {
+                continue;
+            };
+            if let Some(provider) = usage.provider.filter(|p| {
+                p.prompt_tokens > 0 && usage.raw_bytes > 0 && !usage.raw_bytes_is_lower_bound
+            }) {
+                return Ok(Some(super::context::ContextCalibration {
+                    raw_bytes: usage.raw_bytes,
+                    prompt_tokens: provider.prompt_tokens,
+                }));
+            }
+        }
+        Ok(None)
+    })
+}
 pub fn messages_after(
     repo: &Repository,
     conversation: ConversationId,

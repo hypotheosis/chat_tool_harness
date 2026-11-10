@@ -2212,6 +2212,7 @@ impl SseDecode for crate::agent::context::TokenEstimation {
         let mut inner = <i32>::sse_decode(deserializer);
         return match inner {
             0 => crate::agent::context::TokenEstimation::ConservativeUtf8Bytes,
+            1 => crate::agent::context::TokenEstimation::CalibratedUtf8Bytes,
             _ => unreachable!("Invalid variant for TokenEstimation: {}", inner),
         };
     }
@@ -3649,6 +3650,7 @@ impl flutter_rust_bridge::IntoDart for crate::agent::context::TokenEstimation {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
             Self::ConservativeUtf8Bytes => 0.into_dart(),
+            Self::CalibratedUtf8Bytes => 1.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -4993,6 +4995,7 @@ impl SseEncode for crate::agent::context::TokenEstimation {
         <i32>::sse_encode(
             match self {
                 crate::agent::context::TokenEstimation::ConservativeUtf8Bytes => 0,
+                crate::agent::context::TokenEstimation::CalibratedUtf8Bytes => 1,
                 _ => {
                     unimplemented!("");
                 }

@@ -76,6 +76,36 @@ pub struct ToolOutcome {
     pub structured_content: Option<Value>,
     pub unsupported_content: Vec<UnsupportedContent>,
 }
+impl ToolOutcome {
+    /// The JSON envelope retained in history and sent to the model.
+    ///
+    /// Servers that return `structuredContent` usually also return it serialized
+    /// as a text block for older clients. Such a copy would be stored and sent
+    /// twice, so text blocks whose JSON equals `structuredContent` are dropped;
+    /// any other text is kept.
+    pub fn envelope_json(&self) -> String {
+        let text: Vec<&String> = self
+            .text
+            .iter()
+            .filter(|t| {
+                self.structured_content.as_ref().is_none_or(|structured| {
+                    serde_json::from_str::<Value>(t).ok().as_ref() != Some(structured)
+                })
+            })
+            .collect();
+        serde_json::json!({
+            "isError": self.is_error,
+            "text": text,
+            "structuredContent": self.structured_content,
+            "unsupportedContent": self
+                .unsupported_content
+                .iter()
+                .map(|v| serde_json::json!({"kind": v.kind, "metadata": v.metadata}))
+                .collect::<Vec<_>>(),
+        })
+        .to_string()
+    }
+}
 
 pub struct McpClient<P> {
     net: Arc<NetClient<P>>,
@@ -991,6 +1021,54 @@ mod tests {
         net::TcpListener,
         time::Instant,
     };
+
+    #[test]
+    fn envelope_drops_text_that_duplicates_structured_content() {
+        // Regression for issue #12: one result carried 12.5 KB of
+        // structuredContent and a 12.8 KB text copy of it.
+        let outcome = ToolOutcome {
+            is_error: false,
+            text: vec![
+                "{\n  \"n\": 1,\n  \"s\": \"a\"\n}".into(),
+                "Found 1 item.".into(),
+                "{\"n\": 2}".into(),
+            ],
+            structured_content: Some(serde_json::json!({"s": "a", "n": 1})),
+            unsupported_content: vec![UnsupportedContent {
+                kind: "image".into(),
+                metadata: serde_json::json!({"mimeType": "image/png"}),
+            }],
+        };
+        let envelope: Value = serde_json::from_str(&outcome.envelope_json()).unwrap();
+        assert_eq!(
+            envelope,
+            serde_json::json!({
+                "isError": false,
+                "text": ["Found 1 item.", "{\"n\": 2}"],
+                "structuredContent": {"s": "a", "n": 1},
+                "unsupportedContent": [{"kind": "image", "metadata": {"mimeType": "image/png"}}],
+            })
+        );
+    }
+    #[test]
+    fn envelope_keeps_all_text_without_structured_content() {
+        let outcome = ToolOutcome {
+            is_error: true,
+            text: vec!["{\"n\": 1}".into(), "null".into()],
+            structured_content: None,
+            unsupported_content: vec![],
+        };
+        let envelope: Value = serde_json::from_str(&outcome.envelope_json()).unwrap();
+        assert_eq!(
+            envelope,
+            serde_json::json!({
+                "isError": true,
+                "text": ["{\"n\": 1}", "null"],
+                "structuredContent": null,
+                "unsupportedContent": [],
+            })
+        );
+    }
 
     struct NoKey;
     impl CredentialProvider for NoKey {
