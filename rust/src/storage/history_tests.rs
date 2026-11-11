@@ -547,3 +547,95 @@ async fn export_not_a_restorable_backup() {
     assert!(!text.contains("example.test"));
     assert!(!text.contains(&owner.0.to_string()));
 }
+
+// Enough summary-only rows to pass the 1 MiB cap without redaction work, then
+// one corrupt row: an export that reads everything first trips over the corrupt
+// row, while an incrementally bounded one stops at the cap before reaching it.
+const ROWS_PAST_CAP: i64 = 40_000;
+
+#[tokio::test]
+async fn history_export_stops_reading_messages_at_cap() {
+    let (_dir, repo, _, owner, store) = fixture();
+    repo.with_connection(move |c| {
+        let tx = c.transaction().unwrap();
+        let payload = serde_json::json!({"role":"tool","content":"x","calls":[],"call_id":null})
+            .to_string();
+        for ordinal in 0..ROWS_PAST_CAP {
+            tx.execute("INSERT INTO messages(id,conversation_id,snapshot_revision,ordinal,payload) VALUES(?1,?2,1,?3,?4)",params![Uuid::new_v4().to_string(),id(owner),ordinal,payload]).unwrap();
+        }
+        tx.execute("INSERT INTO messages(id,conversation_id,snapshot_revision,ordinal,payload) VALUES(?1,?2,1,?3,'not json')",params![Uuid::new_v4().to_string(),id(owner),ROWS_PAST_CAP]).unwrap();
+        tx.commit().unwrap();
+        Ok(())
+    })
+    .unwrap();
+    assert!(matches!(
+        export_transcript(&repo, &store, owner, ExportOptions::default(), &Keys(None)).await,
+        Err(CoreError::Limit)
+    ));
+    assert!(store.all().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn history_export_checks_cap_on_every_attempt_append() {
+    let (_dir, repo, _, owner, store) = fixture();
+    let run = RunId::new();
+    repo.insert_run_for_test(run, owner, RunState::Failed)
+        .unwrap();
+    repo.with_connection(move |c| {
+        let tx = c.transaction().unwrap();
+        for _ in 0..ROWS_PAST_CAP {
+            tx.execute("INSERT INTO attempts(id,run_id,state,call_json,result_json) VALUES(?1,?2,'Failed',NULL,NULL)",params![Uuid::new_v4().to_string(),id(run)]).unwrap();
+        }
+        tx.execute("INSERT INTO attempts(id,run_id,state,call_json,result_json) VALUES(?1,?2,'Failed','not json',NULL)",params![Uuid::new_v4().to_string(),id(run)]).unwrap();
+        tx.commit().unwrap();
+        Ok(())
+    })
+    .unwrap();
+    assert!(matches!(
+        export_transcript(&repo, &store, owner, ExportOptions::default(), &Keys(None)).await,
+        Err(CoreError::Limit)
+    ));
+    assert!(store.all().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn history_export_refuses_credentials_configured_during_export() {
+    let (_dir, repo, profile, owner, store) = fixture();
+    configured_key(&repo, profile, owner);
+    message(&repo, owner, "user", "late-secret");
+    // Configures another credential while the first one resolves, as a user
+    // saving a server mid-export would. Its value was never resolved, so it
+    // could not be redacted: the export must refuse rather than leak it.
+    struct Reconfigures(Repository);
+    impl CredentialProvider for Reconfigures {
+        fn resolve(
+            &self,
+            _: CredentialRef,
+        ) -> Pin<Box<dyn Future<Output = CoreResult<SecretValue>> + Send + '_>> {
+            Box::pin(async {
+                self.0
+                    .save_server(ServerConfig {
+                        id: ServerId::new(),
+                        name: "late".into(),
+                        url: "https://late.test".into(),
+                        allow_http: false,
+                        secret_headers: vec![("X-Key".into(), CredentialRef::new())],
+                    })
+                    .unwrap();
+                Ok(SecretValue::new("token".into()))
+            })
+        }
+    }
+    assert!(matches!(
+        export_transcript(
+            &repo,
+            &store,
+            owner,
+            ExportOptions::default(),
+            &Reconfigures(repo.clone())
+        )
+        .await,
+        Err(CoreError::Conflict)
+    ));
+    assert!(store.all().unwrap().is_empty());
+}

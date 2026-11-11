@@ -14,50 +14,252 @@ pub struct ExportOptions {
 pub struct ExportBundle {
     pub transcript: ArtifactSummary,
 }
-struct ExportInput {
-    title: String,
-    messages: Vec<crate::agent::context::StoredMessage>,
-    partials: Vec<(String, String, Option<String>)>,
-    attempts: Vec<(String, Option<String>, Option<String>)>,
-    summaries: Vec<crate::agent::context::DerivedContext>,
+/// What an export must redact: credential references to resolve and configured
+/// locations to hide. Read from configuration only, so it stays small however long
+/// the history is.
+#[derive(PartialEq)]
+struct Redactions {
     references: Vec<CredentialRef>,
     exclusions: Vec<String>,
 }
 fn storage(_: impl std::fmt::Debug) -> CoreError {
     CoreError::Storage
 }
-fn input(repo: &Repository, owner: ConversationId) -> CoreResult<ExportInput> {
-    repo.with_connection(move |conn| {
-        let tx=conn.transaction().map_err(storage)?;
-        let owner=owner.0.to_string();
-        let title=tx.query_row("SELECT title FROM conversations WHERE id=?1",[&owner],|r|r.get(0)).optional().map_err(storage)?.ok_or(CoreError::Conflict)?;
-        fn values<T:serde::de::DeserializeOwned>(conn:&rusqlite::Connection,sql:&str,owner:&str)->CoreResult<Vec<T>> {
-            let mut stmt=conn.prepare(sql).map_err(storage)?;
-            let rows=stmt.query_map([owner],|r|r.get::<_,String>(0)).map_err(storage)?;
-            rows.map(|r|serde_json::from_str(&r.map_err(storage)?).map_err(storage)).collect()
+fn values<T: serde::de::DeserializeOwned>(
+    conn: &rusqlite::Connection,
+    sql: &str,
+    owner: &str,
+) -> CoreResult<Vec<T>> {
+    let mut stmt = conn.prepare(sql).map_err(storage)?;
+    let rows = stmt
+        .query_map([owner], |r| r.get::<_, String>(0))
+        .map_err(storage)?;
+    rows.map(|r| serde_json::from_str(&r.map_err(storage)?).map_err(storage))
+        .collect()
+}
+fn redactions(conn: &rusqlite::Connection, owner: &str) -> CoreResult<Redactions> {
+    let snapshots: Vec<ProfileSnapshot> = values(
+        conn,
+        "SELECT payload FROM conversation_snapshots WHERE conversation_id=?1 ORDER BY revision",
+        owner,
+    )?;
+    let endpoints: Vec<EndpointConfig> = values(
+        conn,
+        "SELECT payload FROM endpoints WHERE ?1 IS NOT NULL",
+        owner,
+    )?;
+    let servers: Vec<ServerConfig> = values(
+        conn,
+        "SELECT payload FROM servers WHERE ?1 IS NOT NULL",
+        owner,
+    )?;
+    let mut references = Vec::new();
+    let mut exclusions = Vec::new();
+    let mut endpoint = |e: EndpointConfig| {
+        if let Some(r) = e.credential {
+            references.push(r);
         }
-        let messages=values(&tx,"SELECT payload FROM messages WHERE conversation_id=?1 ORDER BY ordinal",&owner)?;
-        let summaries=values(&tx,"SELECT payload FROM derived_context WHERE conversation_id=?1 ORDER BY rowid",&owner)?;
-        let mut stmt=tx.prepare("SELECT state,partial_text,failure FROM runs WHERE conversation_id=?1 ORDER BY rowid").map_err(storage)?;
-        let partials=stmt.query_map([&owner],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).map_err(storage)?.collect::<Result<Vec<_>,_>>().map_err(storage)?;
-        let mut stmt=tx.prepare("SELECT a.state,a.call_json,a.result_json FROM attempts a JOIN runs r ON r.id=a.run_id WHERE r.conversation_id=?1 ORDER BY r.rowid,a.rowid").map_err(storage)?;
-        let attempts=stmt.query_map([&owner],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).map_err(storage)?.collect::<Result<Vec<_>,_>>().map_err(storage)?;
-        let snapshots:Vec<ProfileSnapshot>=values(&tx,"SELECT payload FROM conversation_snapshots WHERE conversation_id=?1 ORDER BY revision",&owner)?;
-        let endpoints:Vec<EndpointConfig>=values(&tx,"SELECT payload FROM endpoints WHERE ?1 IS NOT NULL",&owner)?;
-        let servers:Vec<ServerConfig>=values(&tx,"SELECT payload FROM servers WHERE ?1 IS NOT NULL",&owner)?;
-        let mut references=Vec::new();
-        let mut exclusions=Vec::new();
-        let mut endpoint = |e:EndpointConfig| { if let Some(r)=e.credential {references.push(r);} exclusions.push(e.base_url); };
-        for e in endpoints { endpoint(e); }
-        for snapshot in &snapshots { endpoint(snapshot.endpoint.clone()); }
-        for server in servers.into_iter().chain(snapshots.into_iter().flat_map(|s|s.servers)) {
-            references.extend(server.secret_headers.into_iter().map(|(_,r)|r));
-            exclusions.push(server.url);
-        }
-        references.sort_by_key(|r|r.0); references.dedup();
-        exclusions.extend(references.iter().map(|r|r.0.to_string()));
-        Ok(ExportInput{title,messages,partials,attempts,summaries,references,exclusions})
+        exclusions.push(e.base_url);
+    };
+    for e in endpoints {
+        endpoint(e);
+    }
+    for snapshot in &snapshots {
+        endpoint(snapshot.endpoint.clone());
+    }
+    for server in servers
+        .into_iter()
+        .chain(snapshots.into_iter().flat_map(|s| s.servers))
+    {
+        references.extend(server.secret_headers.into_iter().map(|(_, r)| r));
+        exclusions.push(server.url);
+    }
+    references.sort_by_key(|r| r.0);
+    references.dedup();
+    exclusions.extend(references.iter().map(|r| r.0.to_string()));
+    Ok(Redactions {
+        references,
+        exclusions,
     })
+}
+fn title(conn: &rusqlite::Connection, owner: &str) -> CoreResult<String> {
+    conn.query_row(
+        "SELECT title FROM conversations WHERE id=?1",
+        [owner],
+        |r| r.get(0),
+    )
+    .optional()
+    .map_err(storage)?
+    .ok_or(CoreError::Conflict)
+}
+fn configuration(repo: &Repository, owner: ConversationId) -> CoreResult<Redactions> {
+    repo.with_connection(move |conn| {
+        let tx = conn.transaction().map_err(storage)?;
+        let owner = owner.0.to_string();
+        title(&tx, &owner)?;
+        redactions(&tx, &owner)
+    })
+}
+
+/// Transcript text that refuses any append taking it past the artifact cap, so an
+/// over-cap export stops as soon as it is known to be over rather than at the end.
+struct Transcript(String);
+impl Transcript {
+    fn push(&mut self, parts: &[&str]) -> CoreResult<()> {
+        let added = parts.iter().map(|p| p.len() as u64).sum::<u64>();
+        if (self.0.len() as u64).saturating_add(added) > MAX_TEXT_BYTES {
+            return Err(CoreError::Limit);
+        }
+        parts.iter().for_each(|p| self.0.push_str(p));
+        Ok(())
+    }
+}
+fn payload<T: serde::de::DeserializeOwned>(row: &rusqlite::Row) -> CoreResult<T> {
+    serde_json::from_str(&row.get::<_, String>(0).map_err(storage)?).map_err(storage)
+}
+
+/// Renders the transcript in one read transaction, holding one history row at a
+/// time. `resolved` is what the credentials were resolved for; if configuration
+/// changed since, a secret could go unredacted, so the export is refused.
+fn render(
+    conn: &mut rusqlite::Connection,
+    owner: ConversationId,
+    options: ExportOptions,
+    resolved: Redactions,
+    secrets: Vec<SecretValue>,
+    private_locations: Vec<String>,
+) -> CoreResult<String> {
+    let tx = conn.transaction().map_err(storage)?;
+    let owner = owner.0.to_string();
+    let title = title(&tx, &owner)?;
+    if redactions(&tx, &owner)? != resolved {
+        return Err(CoreError::Conflict);
+    }
+    let mut redactions: Vec<&str> = secrets
+        .iter()
+        .map(|s| s.as_str())
+        .chain(resolved.exclusions.iter().map(String::as_str))
+        .chain(private_locations.iter().map(String::as_str))
+        .filter(|s| !s.is_empty())
+        .collect();
+    redactions.sort_by_key(|s| std::cmp::Reverse(s.len()));
+    let mut redactor = Redactor::new(&redactions)?;
+    let mut redact = |text: &str| redactor.text(text, 0);
+    let mut out = Transcript(String::new());
+    out.push(&["Transcript — not a restorable backup.\nConfigured secrets are redacted; unknown or user-entered sensitive content and unrecognized encodings may remain. Review before Save/Share.\nTool summaries by default; detailed payloads require opt-in. Stop/deletion never rolls back remote effects.\n\n"])?;
+    out.push(&[if options.include_tool_payloads {
+        "Export detail: DetailedToolPayloads (explicit opt-in; sensitive).\n\n"
+    } else {
+        "Export detail: ToolSummaries (arguments/results omitted).\n\n"
+    }])?;
+    out.push(&["Title: ", &redact(&title)?, "\n\n"])?;
+
+    let mut stmt = tx
+        .prepare("SELECT payload FROM messages WHERE conversation_id=?1 ORDER BY ordinal")
+        .map_err(storage)?;
+    let mut rows = stmt.query([&owner]).map_err(storage)?;
+    while let Some(row) = rows.next().map_err(storage)? {
+        let message: crate::agent::context::StoredMessage = payload(row)?;
+        match message.role.as_str() {
+            "system" => continue,
+            "tool" if !options.include_tool_payloads => {
+                out.push(&["Tool result omitted (summary only).\n\n"])?
+            }
+            "tool" | "user" | "assistant" => {
+                out.push(&[&message.role, ":\n", &redact(&message.content)?, "\n\n"])?
+            }
+            _ => return Err(CoreError::Storage),
+        }
+        for call in &message.calls {
+            out.push(&[
+                "Tool request: ",
+                &redact(&call.key.name)?,
+                " (see outcome below)",
+            ])?;
+            if options.include_tool_payloads {
+                out.push(&[": ", &redact(&call.arguments_json)?])?;
+            }
+            out.push(&["\n\n"])?;
+        }
+    }
+
+    let mut stmt = tx.prepare("SELECT a.state,a.call_json,a.result_json FROM attempts a JOIN runs r ON r.id=a.run_id WHERE r.conversation_id=?1 ORDER BY r.rowid,a.rowid").map_err(storage)?;
+    let mut rows = stmt.query([&owner]).map_err(storage)?;
+    while let Some(row) = rows.next().map_err(storage)? {
+        let status: String = row.get(0).map_err(storage)?;
+        let call: Option<crate::agent::context::StoredCall> = row
+            .get::<_, Option<String>>(1)
+            .map_err(storage)?
+            .map(|call| serde_json::from_str(&call).map_err(storage))
+            .transpose()?;
+        let name = call
+            .as_ref()
+            .map(|c| redact(&c.key.name))
+            .transpose()?
+            .unwrap_or_else(|| "unrecorded tool".into());
+        out.push(&[
+            "Tool outcome: ",
+            &name,
+            " — ",
+            &status,
+            if status == "OutcomeUnknown" || status == "Dispatching" {
+                " — unknown; no remote rollback claimed"
+            } else {
+                ""
+            },
+            "\n",
+        ])?;
+        if options.include_tool_payloads {
+            if let Some(call) = call {
+                out.push(&["Arguments: ", &redact(&call.arguments_json)?, "\n"])?;
+            }
+            if let Some(result) = row.get::<_, Option<String>>(2).map_err(storage)? {
+                out.push(&["Result: ", &redact(&result)?, "\n"])?;
+            }
+        }
+    }
+
+    let mut stmt = tx
+        .prepare(
+            "SELECT state,partial_text,failure FROM runs WHERE conversation_id=?1 ORDER BY rowid",
+        )
+        .map_err(storage)?;
+    let mut rows = stmt.query([&owner]).map_err(storage)?;
+    while let Some(row) = rows.next().map_err(storage)? {
+        let state: String = row.get(0).map_err(storage)?;
+        out.push(&["Run status: ", &state, "\n"])?;
+        let partial: String = row.get(1).map_err(storage)?;
+        if !partial.is_empty() {
+            out.push(&[
+                "Partial assistant message (not completed):\n",
+                &redact(&partial)?,
+                "\n",
+            ])?;
+        }
+        if let Some(failure) = row.get::<_, Option<String>>(2).map_err(storage)? {
+            out.push(&["Error: ", &redact(&failure)?, "\n"])?;
+        }
+    }
+
+    let mut stmt = tx
+        .prepare("SELECT payload FROM derived_context WHERE conversation_id=?1 ORDER BY rowid")
+        .map_err(storage)?;
+    let mut rows = stmt.query([&owner]).map_err(storage)?;
+    while let Some(row) = rows.next().map_err(storage)? {
+        let summary: crate::agent::context::DerivedContext = payload(row)?;
+        out.push(&[
+            "Derived summary (not original messages; partial coverage: ",
+            if summary.partial_coverage {
+                "true"
+            } else {
+                "false"
+            },
+            "):\n",
+            &redact(&summary.text)?,
+            "\n",
+        ])?;
+    }
+    Ok(out.0)
 }
 
 pub async fn export_transcript<P: CredentialProvider>(
@@ -67,14 +269,14 @@ pub async fn export_transcript<P: CredentialProvider>(
     options: ExportOptions,
     credentials: &P,
 ) -> CoreResult<ExportBundle> {
-    let repo = repo.clone();
-    let mut input = tokio::task::spawn_blocking(move || input(&repo, owner))
+    let config = repo.clone();
+    let resolved = tokio::task::spawn_blocking(move || configuration(&config, owner))
         .await
         .map_err(storage)??;
     // References are resolved only for this user action. Neither values nor lookup errors are logged.
     let mut secrets: Vec<SecretValue> = Vec::new();
     let deadline = tokio::time::Instant::now() + crate::net::CONNECT_TIMEOUT;
-    for reference in &input.references {
+    for reference in &resolved.references {
         let value = tokio::time::timeout_at(deadline, credentials.resolve(*reference))
             .await
             .map_err(|_| CoreError::Authentication)?
@@ -88,99 +290,15 @@ pub async fn export_transcript<P: CredentialProvider>(
         }
         secrets.push(value);
     }
-    input.exclusions.extend(store.private_locations());
-    let mut redactions: Vec<&str> = secrets
-        .iter()
-        .map(|s| s.as_str())
-        .chain(input.exclusions.iter().map(String::as_str))
-        .filter(|s| !s.is_empty())
-        .collect();
-    redactions.sort_by_key(|s| std::cmp::Reverse(s.len()));
-    let mut redactor = Redactor::new(&redactions)?;
-    let mut redact = |text: &str| redactor.text(text, 0);
-    let mut text=String::from("Transcript — not a restorable backup.\nConfigured secrets are redacted; unknown or user-entered sensitive content and unrecognized encodings may remain. Review before Save/Share.\nTool summaries by default; detailed payloads require opt-in. Stop/deletion never rolls back remote effects.\n\n");
-    text.push_str(if options.include_tool_payloads {
-        "Export detail: DetailedToolPayloads (explicit opt-in; sensitive).\n\n"
-    } else {
-        "Export detail: ToolSummaries (arguments/results omitted).\n\n"
-    });
-    text.push_str(&format!("Title: {}\n\n", redact(&input.title)?));
-    for message in &input.messages {
-        match message.role.as_str() {
-            "system" => continue,
-            "tool" if !options.include_tool_payloads => {
-                text.push_str("Tool result omitted (summary only).\n\n")
-            }
-            "tool" | "user" | "assistant" => text.push_str(&format!(
-                "{}:\n{}\n\n",
-                message.role,
-                redact(&message.content)?
-            )),
-            _ => return Err(CoreError::Storage),
-        }
-        for call in &message.calls {
-            text.push_str(&format!(
-                "Tool request: {} (see outcome below)",
-                redact(&call.key.name)?
-            ));
-            if options.include_tool_payloads {
-                text.push_str(&format!(": {}", redact(&call.arguments_json)?));
-            }
-            text.push_str("\n\n");
-        }
-        if text.len() as u64 > MAX_TEXT_BYTES {
-            return Err(CoreError::Limit);
-        }
-    }
-    for (status, call, result) in &input.attempts {
-        let call: Option<crate::agent::context::StoredCall> = call
-            .as_ref()
-            .map(|call| serde_json::from_str(call).map_err(storage))
-            .transpose()?;
-        let name = call
-            .as_ref()
-            .map(|c| redact(&c.key.name))
-            .transpose()?
-            .unwrap_or_else(|| "unrecorded tool".into());
-        text.push_str(&format!(
-            "Tool outcome: {name} — {status}{}\n",
-            if status == "OutcomeUnknown" || status == "Dispatching" {
-                " — unknown; no remote rollback claimed"
-            } else {
-                ""
-            }
-        ));
-        if options.include_tool_payloads {
-            if let Some(call) = call {
-                text.push_str(&format!("Arguments: {}\n", redact(&call.arguments_json)?));
-            }
-            if let Some(result) = result {
-                text.push_str(&format!("Result: {}\n", redact(result)?));
-            }
-        }
-    }
-    for (state, partial, failure) in &input.partials {
-        text.push_str(&format!("Run status: {state}\n"));
-        if !partial.is_empty() {
-            text.push_str(&format!(
-                "Partial assistant message (not completed):\n{}\n",
-                redact(partial)?
-            ));
-        }
-        if let Some(failure) = failure {
-            text.push_str(&format!("Error: {}\n", redact(failure)?));
-        }
-    }
-    for summary in &input.summaries {
-        text.push_str(&format!(
-            "Derived summary (not original messages; partial coverage: {}):\n{}\n",
-            summary.partial_coverage,
-            redact(&summary.text)?
-        ));
-    }
-    if text.len() as u64 > MAX_TEXT_BYTES {
-        return Err(CoreError::Limit);
-    }
+    let private_locations = store.private_locations();
+    let repo = repo.clone();
+    let text = tokio::task::spawn_blocking(move || {
+        repo.with_connection(move |conn| {
+            render(conn, owner, options, resolved, secrets, private_locations)
+        })
+    })
+    .await
+    .map_err(storage)??;
     let store = store.clone();
     let transcript =
         tokio::task::spawn_blocking(move || store.create(owner, "transcript.md", &text))
