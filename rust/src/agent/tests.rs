@@ -3819,3 +3819,110 @@ async fn start_retry_rechecks_eligibility_inside_its_transaction() {
     assert_eq!(runs_and_events(&f), before);
     assert_eq!(before.0, [failed.0.to_string(), first.0.to_string()]);
 }
+
+#[tokio::test]
+async fn archive_waits_for_local_cleanup_like_delete_and_blocks_turns_until_restored() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let request = f.request().await;
+    assert_eq!(
+        f.coordinator.set_archived(f.conversation, true).await,
+        Err(CoreError::Conflict)
+    );
+    state::cancel(&f.repo, run).unwrap();
+    // The DB is terminal, but the owned execution still holds its slot.
+    assert_eq!(
+        f.coordinator.set_archived(f.conversation, true).await,
+        Err(CoreError::Conflict)
+    );
+    f.coordinator.cancel(run).await.unwrap();
+    drop(request);
+    f.coordinator
+        .set_archived(f.conversation, true)
+        .await
+        .unwrap();
+    let revision = f
+        .repo
+        .conversation(f.conversation)
+        .unwrap()
+        .profile
+        .revision;
+    let messages = user_messages(&f);
+    assert_eq!(
+        f.coordinator
+            .start_turn(f.conversation, "archived".into())
+            .await,
+        Err(CoreError::Conflict)
+    );
+    // The refused turn left no message, run or profile revision behind.
+    assert_eq!(user_messages(&f), messages);
+    assert_eq!(f.coordinator.snapshot().await.unwrap().runs.len(), 1);
+    assert_eq!(
+        f.repo
+            .conversation(f.conversation)
+            .unwrap()
+            .profile
+            .revision,
+        revision
+    );
+    assert!(f.requests.try_recv().is_err());
+    f.coordinator
+        .set_archived(f.conversation, false)
+        .await
+        .unwrap();
+    let next = f.start().await;
+    f.request().await.finish(Ok(turn(vec![])));
+    assert_eq!(f.settled(next).await.state, RunState::Completed);
+}
+
+#[tokio::test]
+async fn archived_conversation_refuses_resume_retry_and_summary_until_restored() {
+    let mut f = Fixture::new();
+    let paused = f.start().await;
+    f.request()
+        .await
+        .finish(Err(CoreError::UnavailableTransport));
+    assert_eq!(f.settled(paused).await.state, RunState::Paused);
+    // A paused run is not active work, so archiving is allowed.
+    f.coordinator
+        .set_archived(f.conversation, true)
+        .await
+        .unwrap();
+    assert_eq!(f.coordinator.resume(paused).await, Err(CoreError::Conflict));
+    assert_eq!(f.data(paused).await.state, RunState::Paused);
+    f.coordinator
+        .set_archived(f.conversation, false)
+        .await
+        .unwrap();
+    f.coordinator.resume(paused).await.unwrap();
+    f.request().await.finish(Ok(turn(vec![])));
+    assert_eq!(f.settled(paused).await.state, RunState::Completed);
+
+    let failed = failed_turn(&mut f).await;
+    f.coordinator
+        .set_archived(f.conversation, true)
+        .await
+        .unwrap();
+    assert_eq!(f.coordinator.retry(failed).await, Err(CoreError::Conflict));
+    let snapshot = f.repo.conversation(f.conversation).unwrap();
+    assert_eq!(
+        f.coordinator
+            .summarize_context(
+                f.conversation,
+                ContextSelection {
+                    message_ids: snapshot.messages.iter().map(|m| m.id).collect(),
+                    summary_ids: vec![],
+                },
+            )
+            .await,
+        Err(CoreError::Conflict)
+    );
+    assert!(f.requests.try_recv().is_err());
+    f.coordinator
+        .set_archived(f.conversation, false)
+        .await
+        .unwrap();
+    let retry = f.coordinator.retry(failed).await.unwrap();
+    f.request().await.finish(Ok(turn(vec![])));
+    assert_eq!(f.settled(retry).await.state, RunState::Completed);
+}

@@ -785,3 +785,91 @@ async fn chat_turn_with_missing_credential_fails_as_credential_missing() {
     );
     app.close().await.unwrap();
 }
+
+#[tokio::test]
+async fn archive_commands_mark_snapshot_and_search_and_refuse_turns() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = Application::open(
+        dir.path().to_string_lossy().into_owned(),
+        |_| Box::pin(async { CredentialReply::Missing }),
+        |_| Box::pin(async { PlatformReply::Ok }),
+    )
+    .await
+    .unwrap();
+    let endpoint = core::EndpointId::new();
+    let profile = core::ProfileId::new();
+    app.repository
+        .save_endpoint(core::EndpointConfig {
+            id: endpoint,
+            name: "e".into(),
+            base_url: "https://example.invalid/v1".into(),
+            model: "m".into(),
+            context_tokens: 4096,
+            max_output_tokens: 128,
+            temperature: 0.0,
+            allow_http: false,
+            credential: None,
+        })
+        .unwrap();
+    app.repository
+        .save_profile(core::Profile {
+            id: profile,
+            name: "p".into(),
+            endpoint_id: endpoint,
+            server_ids: vec![],
+            mode: core::ProfileMode::ChatOnly,
+            instructions: String::new(),
+            limits: core::RunLimits::default(),
+        })
+        .unwrap();
+    let conversation = app
+        .repository
+        .create_conversation(profile)
+        .unwrap()
+        .0
+        .to_string();
+    let search = |archived_only| AppCommand::SearchConversations {
+        query: String::new(),
+        archived_only,
+        offset: 0,
+        limit: 100,
+    };
+    assert!(!app.snapshot().await.unwrap().conversations[0].archived);
+    app.command(AppCommand::ArchiveConversation {
+        conversation_id: conversation.clone(),
+    })
+    .await
+    .unwrap();
+    let snap = app.snapshot().await.unwrap();
+    assert_eq!(snap.conversations[0].id, conversation);
+    assert!(snap.conversations[0].archived);
+    let found = app.command(search(false)).await.unwrap().history;
+    assert_eq!(found.len(), 1);
+    assert!(found[0].archived);
+    assert_eq!(app.command(search(true)).await.unwrap().history.len(), 1);
+    assert_eq!(
+        app.command(AppCommand::StartTurn {
+            conversation_id: conversation.clone(),
+            text: "hello".into(),
+        })
+        .await
+        .unwrap_err(),
+        CoreError::Conflict
+    );
+    app.command(AppCommand::RestoreConversation {
+        conversation_id: conversation.clone(),
+    })
+    .await
+    .unwrap();
+    assert!(!app.snapshot().await.unwrap().conversations[0].archived);
+    assert!(app.command(search(true)).await.unwrap().history.is_empty());
+    assert_eq!(
+        app.command(AppCommand::ArchiveConversation {
+            conversation_id: "not-a-uuid".into(),
+        })
+        .await
+        .unwrap_err(),
+        CoreError::InvalidInput
+    );
+    app.close().await.unwrap();
+}

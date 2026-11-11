@@ -1011,4 +1011,36 @@ void main() {
     expect(find.text(args), findsOneWidget);
     expect(t.takeException(), isNull);
   });
+  testWidgets('archived conversation offers Restore instead of Send', (
+    t,
+  ) async {
+    final b = UiBackend()
+      ..runs = []
+      ..setConversation(archived: true);
+    await pumpChat(t, b);
+    expect(find.byKey(const Key('archived')), findsOneWidget);
+    expect(
+      t
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Send'))
+          .onPressed,
+      isNull,
+    );
+    await t.tap(find.byKey(const Key('restore-archived')));
+    await t.pumpAndSettle();
+    expect(
+      b.commands.whereType<RestoreConversation>().single.conversationId,
+      'c',
+    );
+    expect(b.commands.whereType<StartTurn>(), isEmpty);
+    b.setConversation(archived: false);
+    b.emit(const AppEvent(sequence: 1, conversationId: 'c'));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('archived')), findsNothing);
+    expect(
+      t
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Send'))
+          .onPressed,
+      isNotNull,
+    );
+  });
 }

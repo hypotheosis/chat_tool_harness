@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Error as SqlError, Result as SqlResult};
 
-const VERSION: i64 = 10;
+const VERSION: i64 = 11;
 
 pub fn apply(connection: &mut Connection) -> SqlResult<()> {
     let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
@@ -36,6 +36,9 @@ pub fn apply(connection: &mut Connection) -> SqlResult<()> {
     }
     if version < 10 {
         migrate_v10(connection)?;
+    }
+    if version < 11 {
+        migrate_v11(connection)?;
     }
     Ok(())
 }
@@ -75,6 +78,23 @@ pub(crate) fn migrate_v9_for_test(connection: &mut Connection) -> SqlResult<()> 
     migrate_v7_for_test(connection)?;
     migrate_v8(connection)?;
     migrate_v9(connection)
+}
+
+fn migrate_v11(connection: &mut Connection) -> SqlResult<()> {
+    let tx = connection.transaction()?;
+    // An archived conversation keeps all of its history; it is only left out
+    // of the Conversations list and accepts no new work until restored.
+    tx.execute_batch(
+        "ALTER TABLE conversations ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;
+        PRAGMA user_version = 11;",
+    )?;
+    tx.commit()
+}
+
+#[cfg(test)]
+pub(crate) fn migrate_v10_for_test(connection: &mut Connection) -> SqlResult<()> {
+    migrate_v9_for_test(connection)?;
+    migrate_v10(connection)
 }
 
 fn migrate_v10(connection: &mut Connection) -> SqlResult<()> {

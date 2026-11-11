@@ -168,10 +168,12 @@ class UiBackend extends FakeBackend {
     rules: current.rules,
   );
 
-  /// Replaces conversation `c` with [profile] and acknowledgement [acknowledged].
+  /// Replaces conversation `c` with [profile], acknowledgement [acknowledged]
+  /// and [archived].
   void setConversation({
     ProfileSnapshot profile = profileSnapshot,
     bool acknowledged = true,
+    bool archived = false,
   }) => current = AppSnapshot(
     sequence: current.sequence,
     endpoints: current.endpoints,
@@ -186,6 +188,7 @@ class UiBackend extends FakeBackend {
             messages: c.messages,
             summaries: c.summaries,
             originAcknowledged: acknowledged,
+            archived: archived,
           )
         else
           c,

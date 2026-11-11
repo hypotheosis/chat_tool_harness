@@ -297,9 +297,14 @@ impl From<ctx::HistoryMessage> for AgentMessage {
     }
 }
 impl AgentConversation {
-    pub(crate) fn new(v: core::ConversationSnapshot, origin_acknowledged: bool) -> Self {
+    pub(crate) fn new(
+        v: core::ConversationSnapshot,
+        origin_acknowledged: bool,
+        archived: bool,
+    ) -> Self {
         Self {
             id: v.id.0.to_string(),
+            archived,
             origin_acknowledged,
             profile: v.profile.into(),
             messages: v.messages.into_iter().map(Into::into).collect(),

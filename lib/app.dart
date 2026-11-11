@@ -152,20 +152,27 @@ class _HomeState extends State<_Home> {
           if (state.snapshot?.conversations.isEmpty ?? false)
             const Text(
               'No conversations. Configure an endpoint and profile in Settings, then start a conversation.',
+            )
+          else if (state.snapshot?.conversations.every((c) => c.archived) ??
+              false)
+            const Text(
+              'All conversations are archived. Find and restore them in History.',
             ),
+          // Archived conversations live in History until restored.
           for (final c in state.snapshot?.conversations ?? <Conversation>[])
-            ListTile(
-              title: Text(c.profile.name),
-              subtitle: Text('${c.id}\n${c.profile.mode.name}'),
-              isThreeLine: true,
-              onTap: () => open(
-                ChatScreen(
-                  backend: widget.backend,
-                  conversationId: c.id,
-                  documents: widget.documents,
+            if (!c.archived)
+              ListTile(
+                title: Text(c.profile.name),
+                subtitle: Text('${c.id}\n${c.profile.mode.name}'),
+                isThreeLine: true,
+                onTap: () => open(
+                  ChatScreen(
+                    backend: widget.backend,
+                    conversationId: c.id,
+                    documents: widget.documents,
+                  ),
                 ),
               ),
-            ),
         ],
       ),
     ),

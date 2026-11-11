@@ -51,6 +51,12 @@ class ChatController extends ScreenController {
     await perform(ResumeRun(runId));
   }
 
+  /// Returns this archived conversation to the Conversations list, so it
+  /// accepts new work again.
+  Future<void> restore() async {
+    await perform(RestoreConversation(conversationId));
+  }
+
   /// Re-runs failed turn [runId] from its own input message, adding none.
   Future<void> retry(String runId) async {
     await perform(RetryRun(runId));

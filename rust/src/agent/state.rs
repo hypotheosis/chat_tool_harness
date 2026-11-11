@@ -168,6 +168,28 @@ pub fn validate_turn_text(text: &str) -> CoreResult<()> {
     }
     Ok(())
 }
+/// Conflict unless `conversation` exists and is not archived: an archived
+/// conversation accepts no new turn, retry, summary or resume until restored.
+fn unarchived(conn: &rusqlite::Connection, conversation: &str) -> CoreResult<()> {
+    let archived: bool = conn
+        .query_row(
+            "SELECT archived FROM conversations WHERE id=?1",
+            [conversation],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(sql_error)?
+        .ok_or(CoreError::Conflict)?;
+    if archived {
+        return Err(CoreError::Conflict);
+    }
+    Ok(())
+}
+/// [`unarchived`] on its own, checked before work that would otherwise record
+/// a new profile revision for a conversation that cannot run.
+pub fn require_unarchived(repo: &Repository, conversation: ConversationId) -> CoreResult<()> {
+    repo.with_connection(move |conn| unarchived(conn, &conversation.0.to_string()))
+}
 pub fn start(
     repo: &Repository,
     run: RunId,
@@ -177,6 +199,7 @@ pub fn start(
     validate_turn_text(&text)?;
     repo.with_connection(move |conn| {
         let tx = conn.transaction().map_err(sql_error)?;
+        unarchived(&tx, &conversation.0.to_string())?;
         let revision: i64 = tx.query_row("SELECT current_revision FROM conversations WHERE id=?1", [conversation.0.to_string()], |r|r.get(0)).optional().map_err(sql_error)?.ok_or(CoreError::Conflict)?;
         let message = StoredMessage { role:"user".into(), content:text, calls:vec![], call_id:None, source_envelope:None };
         let input_id=uuid::Uuid::new_v4().to_string();
@@ -236,6 +259,7 @@ pub fn start_retry(repo: &Repository, run: RunId, failed: RunId) -> CoreResult<(
     repo.with_connection(move |conn| {
         let tx = conn.transaction().map_err(sql_error)?;
         let (conversation, input) = retry_check(&tx, failed)?;
+        unarchived(&tx, &conversation)?;
         tx.execute(
             "INSERT INTO runs(id,conversation_id,snapshot_revision,state,input_message_id) VALUES(?1,?2,(SELECT current_revision FROM conversations WHERE id=?2),'Running',?3)",
             params![run.0.to_string(), conversation, input],
@@ -304,6 +328,7 @@ pub fn resume_on_current(repo: &Repository, run: RunId, from: RunState) -> CoreR
         if status != from {
             return Err(CoreError::Conflict);
         }
+        unarchived(&tx, &conversation)?;
         let changed = tx
             .execute(
                 "UPDATE runs SET state='Running',snapshot_revision=(SELECT c.current_revision FROM conversations c WHERE c.id=runs.conversation_id) WHERE id=?1 AND state=?2",
@@ -484,6 +509,7 @@ pub fn start_summary(
     };
     repo.with_connection(move |conn| {
         let tx=conn.transaction().map_err(sql_error)?;
+        unarchived(&tx,&conversation.0.to_string())?;
         tx.execute("INSERT INTO runs(id,conversation_id,snapshot_revision,state,context_json) VALUES(?1,?2,?3,'Running',?4)",params![run.0.to_string(),conversation.0.to_string(),snapshot.profile.revision,json(&context)?]).map_err(sql_error)?;
         event(&tx,conversation,&format!("run:{}:summary:Running",run.0))?;
         tx.commit().map_err(sql_error)

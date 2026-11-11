@@ -613,6 +613,31 @@ class _ChatScreenState extends State<ChatScreen> {
                         if (decisions(r) case final calls
                             when calls.isNotEmpty && !hasUnresolvedAttempt(r))
                           approvalCard(r, calls),
+                      // The backend refuses new work in an archived conversation.
+                      if (c.archived)
+                        Card(
+                          key: const Key('archived'),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                const Expanded(
+                                  child: Text(
+                                    'Archived. Restore this conversation to send messages.',
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                FilledButton(
+                                  key: const Key('restore-archived'),
+                                  onPressed: state.loading
+                                      ? null
+                                      : state.restore,
+                                  child: const Text('Restore'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       if (unacknowledged && !runAsks)
                         Card(
                           key: const Key('disclosure'),
@@ -659,7 +684,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                   const SizedBox(width: 8),
                   FilledButton(
-                    onPressed: state.loading || unacknowledged
+                    onPressed: state.loading || unacknowledged || c.archived
                         ? null
                         : sendMessage,
                     child: const Text('Send'),

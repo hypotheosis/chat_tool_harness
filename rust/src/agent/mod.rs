@@ -323,6 +323,7 @@ impl Coordinator {
             self.launch(&mut slot, run, move |repo| {
                 // A rejected message must not record a new profile revision.
                 state::validate_turn_text(&text)?;
+                state::require_unarchived(&repo, conversation)?;
                 repo.refresh_profile(conversation)?;
                 state::start(&repo, run, conversation, text)
             })
@@ -349,6 +350,7 @@ impl Coordinator {
             }
             self.launch(&mut slot, run, move |repo| {
                 let conversation = state::retryable(&repo, failed)?;
+                state::require_unarchived(&repo, conversation)?;
                 // Fixed settings (URL, credential) apply to the retry.
                 repo.refresh_profile(conversation)?;
                 state::start_retry(&repo, run, failed)
@@ -375,6 +377,7 @@ impl Coordinator {
                 return Err(CoreError::Conflict);
             }
             self.launch(&mut slot, run, move |repo| {
+                state::require_unarchived(&repo, conversation)?;
                 repo.refresh_profile(conversation)?;
                 state::start_summary(&repo, run, conversation, selection)
             })
@@ -529,6 +532,32 @@ impl Coordinator {
         // Keep admission locked until the transactional active-state recheck and deletion commit.
         db(move || store.delete_conversation(conversation, confirmed_unknown)).await
     }
+    /// Archives or restores `conversation`. Archiving follows deletion's rule:
+    /// refused while one of its runs holds the execution slot, even after its
+    /// stored state became terminal, or is stored as Running. Restoring needs
+    /// no such check, since an archived conversation accepts no new work.
+    pub async fn set_archived(
+        &self,
+        conversation: ConversationId,
+        archived: bool,
+    ) -> CoreResult<()> {
+        let slot = self.inner.running.lock().await;
+        self.inner.admission()?;
+        if archived {
+            self.inner.cleanup_result()?;
+            if let Some(running) = slot.as_ref() {
+                let run = running.execution.run;
+                let repo = self.inner.repository.clone();
+                if db(move || state::load(&repo, run)).await?.conversation == conversation {
+                    return Err(CoreError::Conflict);
+                }
+            }
+        }
+        let repo = self.inner.repository.clone();
+        // Keep admission locked until the transactional recheck commits, so no
+        // turn can start between the check and the archive.
+        db(move || repo.set_conversation_archived(conversation, archived)).await
+    }
     pub async fn cancel(&self, run: RunId) -> CoreResult<()> {
         let done = {
             let slot = self.inner.running.lock().await;
@@ -572,6 +601,7 @@ impl Coordinator {
                 }) {
                     return Err(CoreError::Conflict);
                 }
+                state::require_unarchived(&repo, data.conversation)?;
                 // Fixed settings (URL, credential) apply to the resumed run; the
                 // guards above still keep unknown-outcome attempts from replaying.
                 repo.refresh_profile(data.conversation)?;

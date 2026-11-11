@@ -114,6 +114,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
             onPressed: state.loading ? null : () => state.search(query.text),
             child: const Text('Search'),
           ),
+          FilterChip(
+            key: const Key('history-archived'),
+            label: const Text('Archived'),
+            selected: state.archivedOnly,
+            onSelected: state.loading
+                ? null
+                : (v) {
+                    // Keep the typed query, as the Search button would.
+                    state.query = query.text;
+                    state.showArchived(v);
+                  },
+          ),
           if (state.loading) const LinearProgressIndicator(),
           if (state.error != null) Text(state.error!),
           if (state.rows.isEmpty && !state.loading)
@@ -125,9 +137,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 children: [
                   ListTile(
                     title: Text(row.title),
-                    subtitle: row.hasUnknownOutcomes
-                        ? const Text(
-                            'Unknown tool outcomes — no remote rollback',
+                    subtitle: row.hasUnknownOutcomes || row.archived
+                        ? Text(
+                            [
+                              if (row.archived) 'Archived',
+                              if (row.hasUnknownOutcomes)
+                                'Unknown tool outcomes — no remote rollback',
+                            ].join(' · '),
                           )
                         : null,
                     onTap: state.loading
@@ -165,6 +181,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             : () => delete(row),
                         icon: const Icon(Icons.delete),
                       ),
+                      if (row.archived)
+                        IconButton(
+                          tooltip: 'Restore',
+                          onPressed: state.loading
+                              ? null
+                              : () => state.restore(row.id),
+                          icon: const Icon(Icons.unarchive),
+                        )
+                      else
+                        IconButton(
+                          tooltip: 'Archive',
+                          onPressed: state.loading || state.needsStop(row.id)
+                              ? null
+                              : () => state.archive(row.id),
+                          icon: const Icon(Icons.archive),
+                        ),
                       IconButton(
                         tooltip: 'Export transcript',
                         onPressed: state.loading ? null : () => export(row),

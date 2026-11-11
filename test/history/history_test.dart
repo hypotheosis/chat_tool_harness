@@ -324,4 +324,75 @@ void main() {
     c.dispose();
     await b.close();
   });
+  testWidgets('archive, Archived filter and restore', (tester) async {
+    const archivedRow = ConversationSummary(
+      id: 'owner',
+      title: 'Saved title',
+      hasUnknownOutcomes: false,
+      archived: true,
+    );
+    final b = HistoryBackend()
+      ..pages.addAll([
+        [row],
+        [archivedRow],
+        [archivedRow],
+        [],
+      ]);
+    await tester.pumpWidget(MaterialApp(home: HistoryScreen(backend: b)));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Restore'), findsNothing);
+    await tester.tap(find.byTooltip('Archive'));
+    await tester.pumpAndSettle();
+    expect(
+      b.commands.whereType<ArchiveConversation>().single.conversationId,
+      'owner',
+    );
+    // Still listed, now marked archived, with Restore in place of Archive.
+    expect(
+      find.descendant(of: find.byType(Card), matching: find.text('Archived')),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Archive'), findsNothing);
+    await tester.enterText(find.byKey(const Key('history-search')), 'needle');
+    await tester.tap(find.byKey(const Key('history-archived')));
+    await tester.pumpAndSettle();
+    final filtered = b.commands.whereType<SearchConversations>().last;
+    expect(
+      (filtered.archivedOnly, filtered.query, filtered.offset),
+      (true, 'needle', 0),
+    );
+    await tester.tap(find.byTooltip('Restore'));
+    await tester.pumpAndSettle();
+    expect(
+      b.commands.whereType<RestoreConversation>().single.conversationId,
+      'owner',
+    );
+    expect(
+      b.commands.whereType<SearchConversations>().last.archivedOnly,
+      isTrue,
+    );
+    expect(find.text('No conversations found.'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await b.close();
+  });
+  testWidgets('archive waits for active work to stop', (tester) async {
+    const activeRow = ConversationSummary(
+      id: 'c',
+      title: 'Active',
+      hasUnknownOutcomes: false,
+    );
+    final b = HistoryBackend()
+      ..current = AppSnapshot(runs: [ui.run(runState: RunState.running)])
+      ..pages.add([activeRow]);
+    await tester.pumpWidget(MaterialApp(home: HistoryScreen(backend: b)));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.archive))
+          .onPressed,
+      isNull,
+    );
+    await tester.pumpWidget(const SizedBox());
+    await b.close();
+  });
 }
