@@ -23,13 +23,21 @@ const artifact = ArtifactSummary(
 class HistoryBackend extends FakeBackend {
   final pages = <List<ConversationSummary>>[];
   Completer<CommandReply>? stop;
+  Completer<void>? exportGate;
+  Completer<void>? searchGate;
   @override
   Future<CommandReply> execute(AppCommand c) async {
     await super.execute(c);
     if (c is SearchConversations) {
+      final gate = searchGate;
+      if (gate != null) {
+        searchGate = null;
+        await gate.future;
+      }
       return CommandReply(history: pages.isEmpty ? [row] : pages.removeAt(0));
     }
     if (c is ExportTranscript) {
+      await exportGate?.future;
       return const CommandReply(
         exportBundle: ExportBundle(transcript: artifact),
       );
@@ -234,4 +242,86 @@ void main() {
       await b.close();
     },
   );
+  test(
+    'change events during an export refresh history once it finishes',
+    () async {
+      const stale = ConversationSummary(
+        id: 'owner',
+        title: 'Saved title',
+        hasUnknownOutcomes: false,
+      );
+      final b = HistoryBackend()
+        ..pages.addAll([
+          [stale],
+          [row],
+        ])
+        ..exportGate = Completer<void>();
+      final c = HistoryController(b);
+      await c.connect();
+      expect(c.rows.single.hasUnknownOutcomes, isFalse);
+      final export = c.preview('owner', false);
+      await pumpEventQueue();
+      expect(c.loading, isTrue);
+      b.emit(const AppEvent(sequence: 1, conversationId: 'owner'));
+      b.emit(const AppEvent(sequence: 2, conversationId: 'owner'));
+      await pumpEventQueue();
+      expect(b.commands.whereType<SearchConversations>(), hasLength(1));
+      b.exportGate!.complete();
+      await export;
+      await pumpEventQueue();
+      expect(b.commands.whereType<SearchConversations>(), hasLength(2));
+      expect(c.rows.single.hasUnknownOutcomes, isTrue);
+      expect(c.loading, isFalse);
+      c.dispose();
+      await b.close();
+    },
+  );
+  test('a change during a search runs one more search afterwards', () async {
+    final b = HistoryBackend();
+    final c = HistoryController(b);
+    await c.connect();
+    final gate = b.searchGate = Completer<void>();
+    final search = c.search('q');
+    await pumpEventQueue();
+    b.emit(const AppEvent(sequence: 1, conversationId: 'owner'));
+    await pumpEventQueue();
+    expect(b.commands.whereType<SearchConversations>(), hasLength(2));
+    gate.complete();
+    await search;
+    await pumpEventQueue();
+    final searches = b.commands.whereType<SearchConversations>().toList();
+    expect(searches, hasLength(3));
+    expect(searches.last.query, 'q');
+    expect(c.loading, isFalse);
+    c.dispose();
+    await b.close();
+  });
+  test('a mutation does not queue a redundant refresh', () async {
+    final b = HistoryBackend();
+    final c = HistoryController(b);
+    await c.connect();
+    await c.rename('owner', 'New');
+    await pumpEventQueue();
+    expect(b.commands.whereType<SearchConversations>(), hasLength(2));
+    c.dispose();
+    await b.close();
+  });
+  test('the refresh after a failed action keeps its error', () async {
+    final b = HistoryBackend()..exportGate = Completer<void>();
+    final c = HistoryController(b);
+    await c.connect();
+    final export = c.preview('owner', false);
+    await pumpEventQueue();
+    b.emit(const AppEvent(sequence: 1, conversationId: 'owner'));
+    await pumpEventQueue();
+    b.exportGate!.completeError(
+      const BackendFailure(FailureCode.authentication),
+    );
+    await export;
+    await pumpEventQueue();
+    expect(b.commands.whereType<SearchConversations>(), hasLength(2));
+    expect(c.error, startsWith('Export blocked'));
+    c.dispose();
+    await b.close();
+  });
 }
