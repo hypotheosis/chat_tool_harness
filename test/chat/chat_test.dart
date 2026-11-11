@@ -1043,4 +1043,36 @@ void main() {
       isNotNull,
     );
   });
+  testWidgets('archived conversation offers no Retry, Resume or approval', (
+    t,
+  ) async {
+    final b = UiBackend()
+      ..runs = [
+        run(),
+        turnRun(id: 'paused', state: RunState.paused),
+        turnRun(id: 'new', code: FailureCode.rateLimited),
+      ]
+      ..setConversation(archived: true);
+    await pumpChat(t, b);
+    // Offstage widgets count too, so nothing passes by being scrolled away.
+    Finder key(String k) => find.byKey(Key(k), skipOffstage: false);
+    Finder text(String v) => find.text(v, skipOffstage: false);
+    expect(key('approval-r'), findsNothing);
+    expect(key('resume-paused'), findsNothing);
+    expect(text('Resume'), findsNothing);
+    expect(text('Retry'), findsNothing);
+    // The cards still explain each run; only the actions are withheld.
+    expect(key('run-card-paused'), findsOneWidget);
+    expect(key('run-card-new'), findsOneWidget);
+    b.setConversation(archived: false);
+    b.emit(const AppEvent(sequence: 1, conversationId: 'c'));
+    await t.pumpAndSettle();
+    expect(key('approval-r'), findsOneWidget);
+    expect(key('resume-paused'), findsOneWidget);
+    // The approval card now shares the screen, so the run list may scroll.
+    expect(
+      find.descendant(of: key('run-card-new'), matching: text('Retry')),
+      findsOneWidget,
+    );
+  });
 }

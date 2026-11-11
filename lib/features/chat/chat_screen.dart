@@ -270,6 +270,17 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// Whether [action] starts or continues a run, which the backend refuses
+  /// in an archived conversation.
+  static bool startsWork(RunAction? action) => switch (action) {
+    RunAction.retry ||
+    RunAction.resume ||
+    RunAction.allow ||
+    RunAction.chooseContext => true,
+    RunAction.openSettings || RunAction.reenterCredential => false,
+    RunAction.stop || null => false,
+  };
+
   /// Whether [run]'s own origin is the conversation's acknowledged one.
   bool runOriginAcknowledged(Run run, Conversation c) =>
       c.originAcknowledged &&
@@ -297,7 +308,11 @@ class _ChatScreenState extends State<ChatScreen> {
     final issue = issues[run.id];
     final collapsed =
         run.state == RunState.failed && state.runs.lastOrNull?.id != run.id;
-    final action = collapsed ? null : issue?.action;
+    // An archived conversation refuses new work, so it offers no action that
+    // would start or continue a run; settings and Stop stay.
+    final action = collapsed || (c.archived && startsWork(issue?.action))
+        ? null
+        : issue?.action;
     final busy = state.loading;
     return Column(
       key: ValueKey('run-${run.id}'),
@@ -344,6 +359,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 // The approval card decides pending calls and resumes; Resume
                 // is only for a run whose calls are all decided already.
                 if (run.state == RunState.waitingApproval &&
+                    !c.archived &&
                     decisions(run).isEmpty &&
                     !hasUnresolvedAttempt(run))
                   TextButton(
@@ -609,7 +625,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       ResultBanner(state: state),
                       // Deciding resumes the run, so a run with a call whose outcome
                       // is unknown gets no approval card; Stop is all it offers.
-                      for (final r in state.runs)
+                      // Nor does an archived conversation, which refuses resumes.
+                      for (final r in c.archived ? const <Run>[] : state.runs)
                         if (decisions(r) case final calls
                             when calls.isNotEmpty && !hasUnresolvedAttempt(r))
                           approvalCard(r, calls),
@@ -623,7 +640,7 @@ class _ChatScreenState extends State<ChatScreen> {
                               children: [
                                 const Expanded(
                                   child: Text(
-                                    'Archived. Restore this conversation to send messages.',
+                                    'Archived. Restore this conversation to send messages or continue its runs.',
                                   ),
                                 ),
                                 const SizedBox(width: 8),
