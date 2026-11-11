@@ -1075,4 +1075,35 @@ void main() {
       findsOneWidget,
     );
   });
+  testWidgets('archived conversation keeps Stop and settings actions', (
+    t,
+  ) async {
+    Finder key(String k) => find.byKey(Key(k), skipOffstage: false);
+    Finder text(String v) => find.text(v, skipOffstage: false);
+    // A run waiting for approval whose calls are all decided offers Resume
+    // and Stop inline; archived, only Stop remains.
+    final b = UiBackend()
+      ..runs = [run(state: AttemptState.approved)]
+      ..setConversation(archived: true);
+    await pumpChat(t, b);
+    expect(key('resume-r'), findsNothing);
+    expect(key('stop-r'), findsOneWidget);
+    b.setConversation(archived: false);
+    b.emit(const AppEvent(sequence: 1, conversationId: 'c'));
+    await t.pumpAndSettle();
+    expect(key('resume-r'), findsOneWidget);
+
+    // A failed run still opens its settings while archived.
+    final failed = UiBackend()
+      ..runs = [failedRun(code: FailureCode.protocol)]
+      ..setConversation(archived: true);
+    await pumpChat(t, failed);
+    expect(
+      find.descendant(
+        of: key('run-card-r'),
+        matching: text('Open profile settings'),
+      ),
+      findsOneWidget,
+    );
+  });
 }
