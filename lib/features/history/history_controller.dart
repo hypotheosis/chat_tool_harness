@@ -129,10 +129,13 @@ class HistoryController extends ChangeNotifier {
       DocumentResult.cancelled => 'Cancelled',
     };
   });
-  Future<void> _action(Future<void> Function() action) async {
+  Future<void> _action(
+    Future<void> Function() action, {
+    bool keepError = false,
+  }) async {
     if (loading || _disposed) return;
     loading = true;
-    error = null;
+    if (!keepError) error = null;
     changed();
     try {
       await action();
@@ -149,8 +152,9 @@ class HistoryController extends ChangeNotifier {
       loading = false;
       changed();
     }
+    // Keep the finished action's error visible through the follow-up refresh.
     if (_refreshPending && !_disposed) {
-      unawaited(search(query, pageOffset: offset));
+      unawaited(_action(_search, keepError: true));
     }
   }
 

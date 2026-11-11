@@ -306,4 +306,22 @@ void main() {
     c.dispose();
     await b.close();
   });
+  test('the refresh after a failed action keeps its error', () async {
+    final b = HistoryBackend()..exportGate = Completer<void>();
+    final c = HistoryController(b);
+    await c.connect();
+    final export = c.preview('owner', false);
+    await pumpEventQueue();
+    b.emit(const AppEvent(sequence: 1, conversationId: 'owner'));
+    await pumpEventQueue();
+    b.exportGate!.completeError(
+      const BackendFailure(FailureCode.authentication),
+    );
+    await export;
+    await pumpEventQueue();
+    expect(b.commands.whereType<SearchConversations>(), hasLength(2));
+    expect(c.error, startsWith('Export blocked'));
+    c.dispose();
+    await b.close();
+  });
 }
