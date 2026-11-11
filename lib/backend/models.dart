@@ -82,7 +82,7 @@ enum ToolSupport { supported, unsupported, inconclusive }
 
 enum ContextPurpose { turn, summary }
 
-enum TokenEstimation { conservativeUtf8Bytes }
+enum TokenEstimation { conservativeUtf8Bytes, calibratedUtf8Bytes }
 
 enum ContextChoiceReason {
   windowExceeded,

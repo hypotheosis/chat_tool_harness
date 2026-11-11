@@ -68,11 +68,57 @@ pub struct ContextRequest {
     pub attachments: Vec<AttachmentContext>,
     pub purpose: ContextPurpose,
     pub disclosure: Option<DisclosureAcknowledgment>,
+    /// A provider-measured sample from an earlier request in this conversation.
+    pub calibration: Option<ContextCalibration>,
     pub deadline: Instant,
+}
+/// The serialized size of one earlier request and the prompt tokens the provider
+/// reported for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContextCalibration {
+    pub raw_bytes: u64,
+    pub prompt_tokens: u64,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TokenEstimation {
+    /// One token per serialized UTF-8 byte: an upper bound for byte-level tokenizers.
     ConservativeUtf8Bytes,
+    /// The bytes-per-token rate a provider reported for an earlier request, with
+    /// a safety margin, clamped to between one and four bytes per token.
+    CalibratedUtf8Bytes,
+}
+/// Headroom for chat-template framing that the serialized request does not show.
+const FRAMING_TOKENS: u64 = 256;
+/// The fewest serialized bytes a calibrated estimate assumes per token.
+const MAX_BYTES_PER_TOKEN: u64 = 4;
+
+/// Estimate the input tokens of a request of `bytes` serialized bytes.
+///
+/// No tokenizer is installed. Without a usable sample this counts one token per
+/// byte, which never underestimates a byte-level tokenizer but overestimates
+/// typical traffic three- to four-fold. With a sample it scales by the rate the
+/// provider observed plus 25%, never below `bytes / 4` and never above `bytes`.
+/// A provider context-length rejection remains the backstop when a sample is
+/// optimistic, such as after the conversation's endpoint changes.
+pub fn estimate_input_tokens(
+    bytes: u64,
+    calibration: Option<&ContextCalibration>,
+) -> (u64, TokenEstimation) {
+    let Some(sample) = calibration.filter(|c| c.raw_bytes > 0 && c.prompt_tokens > 0) else {
+        return (
+            bytes.saturating_add(FRAMING_TOKENS),
+            TokenEstimation::ConservativeUtf8Bytes,
+        );
+    };
+    let numerator = u128::from(bytes) * u128::from(sample.prompt_tokens) * 5;
+    let denominator = u128::from(sample.raw_bytes) * 4;
+    let scaled = numerator.div_ceil(denominator);
+    let floor = u128::from(bytes.div_ceil(MAX_BYTES_PER_TOKEN));
+    let tokens = u64::try_from(scaled.clamp(floor, u128::from(bytes))).unwrap_or(bytes);
+    (
+        tokens.saturating_add(FRAMING_TOKENS),
+        TokenEstimation::CalibratedUtf8Bytes,
+    )
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProviderUsage {
@@ -98,6 +144,19 @@ pub struct ContextUsage {
     pub provider: Option<ProviderUsage>,
     pub reason: Option<ContextChoiceReason>,
 }
+impl ContextUsage {
+    /// The sample this usage can calibrate later estimates with: the provider's
+    /// prompt tokens paired with the exact size of the same request.
+    pub fn calibration(&self) -> Option<ContextCalibration> {
+        let provider = self.provider.as_ref()?;
+        let usable =
+            provider.prompt_tokens > 0 && self.raw_bytes > 0 && !self.raw_bytes_is_lower_bound;
+        usable.then_some(ContextCalibration {
+            raw_bytes: self.raw_bytes,
+            prompt_tokens: provider.prompt_tokens,
+        })
+    }
+}
 #[derive(Debug)]
 pub enum ContextDecision {
     Ready(InferenceRequest),
@@ -112,6 +171,9 @@ pub struct RunContext {
     pub usage: Option<ContextUsage>,
     pub derived_entry: Option<MessageId>,
     pub summary: Option<DerivedContext>,
+    /// The newest usable provider sample this run produced. Kept apart from
+    /// `usage`, which each later request replaces before its provider reports.
+    pub calibration: Option<ContextCalibration>,
 }
 
 /// The origin that disclosure is acknowledged for: only a new scheme, host or
@@ -272,7 +334,7 @@ pub(crate) fn assemble_with_usage(
         );
     if lower_bound > MAX_CONTEXT_BYTES {
         usage.raw_bytes = lower_bound as u64;
-        usage.estimated_input_tokens = usage.raw_bytes.saturating_add(256);
+        usage.estimated_input_tokens = usage.raw_bytes.saturating_add(FRAMING_TOKENS);
         usage.reason = Some(ContextChoiceReason::RawLimit);
         return Ok((ContextDecision::NeedsUserChoice(usage.clone()), usage));
     }
@@ -328,9 +390,9 @@ pub(crate) fn assemble_with_usage(
     let bytes = inference.payload()?.len();
     usage.raw_bytes = bytes as u64;
     usage.raw_bytes_is_lower_bound = false;
-    // No exact tokenizer is installed. One token per serialized UTF-8 byte plus framing
-    // headroom is deliberately conservative, never a promise of provider acceptance.
-    usage.estimated_input_tokens = usage.raw_bytes.saturating_add(256);
+    // An estimate, never a promise of provider acceptance.
+    (usage.estimated_input_tokens, usage.estimation) =
+        estimate_input_tokens(usage.raw_bytes, request.calibration.as_ref());
     let document_backed =
         !request.attachments.is_empty() || summaries.iter().any(|s| !s.page_references.is_empty());
     usage.reason = if bytes > MAX_CONTEXT_BYTES

@@ -16,4 +16,11 @@ enum ContextChoiceReason {
 
 enum ContextPurpose { turn, summary }
 
-enum TokenEstimation { conservativeUtf8Bytes }
+enum TokenEstimation {
+  /// One token per serialized UTF-8 byte: an upper bound for byte-level tokenizers.
+  conservativeUtf8Bytes,
+
+  /// The bytes-per-token rate a provider reported for an earlier request, with
+  /// a safety margin, clamped to between one and four bytes per token.
+  calibratedUtf8Bytes,
+}

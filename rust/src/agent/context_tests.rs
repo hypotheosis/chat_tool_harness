@@ -46,6 +46,7 @@ fn request() -> ContextRequest {
         attachments: vec![],
         purpose: ContextPurpose::Turn,
         disclosure: None,
+        calibration: None,
         deadline: Instant::now(),
     }
 }
@@ -435,4 +436,99 @@ fn byte_cap_and_message_cap_pause_instead_of_truncating() {
         assemble_context(&s, &[], &request()).unwrap(),
         ContextDecision::NeedsUserChoice(_)
     ));
+}
+fn calibrated(raw_bytes: u64, prompt_tokens: u64) -> ContextRequest {
+    ContextRequest {
+        calibration: Some(ContextCalibration {
+            raw_bytes,
+            prompt_tokens,
+        }),
+        ..request()
+    }
+}
+#[test]
+fn calibrated_estimate_admits_a_request_the_byte_bound_rejected() {
+    // Regression for issue #12: device data where the provider counted 12,172
+    // tokens for 39,466 bytes, and the next 115,447-byte request was paused
+    // with WindowExceeded on a 131,072-token window with a 32,768 reserve.
+    assert_eq!(
+        estimate_input_tokens(115_447, None),
+        (115_447 + 256, TokenEstimation::ConservativeUtf8Bytes)
+    );
+    let sample = ContextCalibration {
+        raw_bytes: 39_466,
+        prompt_tokens: 12_172,
+    };
+    let (tokens, estimation) = estimate_input_tokens(115_447, Some(&sample));
+    assert_eq!(estimation, TokenEstimation::CalibratedUtf8Bytes);
+    // 115,447 * 12,172 / 39,466 = 35,605.9 observed-rate tokens; +25% rounds up to 44,508.
+    assert_eq!(tokens, 44_508 + 256);
+    assert!(tokens + 32_768 <= 131_072);
+}
+#[test]
+fn calibrated_estimate_is_clamped_between_one_and_four_bytes_per_token() {
+    // An implausibly dense sample (10 bytes/token) is clamped to 4 bytes/token.
+    let dense = ContextCalibration {
+        raw_bytes: 10_000,
+        prompt_tokens: 1_000,
+    };
+    assert_eq!(
+        estimate_input_tokens(4_000, Some(&dense)),
+        (1_000 + 256, TokenEstimation::CalibratedUtf8Bytes)
+    );
+    // A sample with more tokens than bytes never exceeds the byte bound.
+    let sparse = ContextCalibration {
+        raw_bytes: 1_000,
+        prompt_tokens: 5_000,
+    };
+    assert_eq!(
+        estimate_input_tokens(4_000, Some(&sparse)),
+        (4_000 + 256, TokenEstimation::CalibratedUtf8Bytes)
+    );
+}
+#[test]
+fn unusable_calibration_falls_back_to_the_byte_bound() {
+    for sample in [
+        ContextCalibration {
+            raw_bytes: 0,
+            prompt_tokens: 10,
+        },
+        ContextCalibration {
+            raw_bytes: 10,
+            prompt_tokens: 0,
+        },
+    ] {
+        assert_eq!(
+            estimate_input_tokens(4_000, Some(&sample)),
+            (4_000 + 256, TokenEstimation::ConservativeUtf8Bytes)
+        );
+    }
+    assert_eq!(
+        estimate_input_tokens(
+            u64::MAX,
+            Some(&ContextCalibration {
+                raw_bytes: 1,
+                prompt_tokens: 1,
+            })
+        ),
+        (u64::MAX, TokenEstimation::CalibratedUtf8Bytes)
+    );
+}
+#[test]
+fn assembled_usage_reports_calibrated_estimate() {
+    let mut s = snapshot();
+    s.messages.push(message(&"x".repeat(6000)));
+    // The byte bound alone exceeds the 4096-token window.
+    assert!(matches!(
+        assemble_context(&s, &[], &request()).unwrap(),
+        ContextDecision::NeedsUserChoice(ContextUsage {
+            reason: Some(ContextChoiceReason::WindowExceeded),
+            ..
+        })
+    ));
+    let (decision, usage) = assemble_with_usage(&s, &[], &calibrated(4_000, 1_000)).unwrap();
+    ready(decision);
+    assert_eq!(usage.estimation, TokenEstimation::CalibratedUtf8Bytes);
+    assert!(usage.estimated_input_tokens < usage.raw_bytes);
+    assert!(usage.estimated_input_tokens >= usage.raw_bytes / 4);
 }

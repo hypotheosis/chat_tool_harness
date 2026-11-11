@@ -641,6 +641,8 @@ ContextChoiceReason _fromContextChoiceReason(
 TokenEstimation _fromTokenEstimation(ctx.TokenEstimation v) => switch (v) {
   ctx.TokenEstimation.conservativeUtf8Bytes =>
     TokenEstimation.conservativeUtf8Bytes,
+  ctx.TokenEstimation.calibratedUtf8Bytes =>
+    TokenEstimation.calibratedUtf8Bytes,
 };
 
 core.PermissionRule _toPermissionRule(PermissionRule v) => switch (v) {

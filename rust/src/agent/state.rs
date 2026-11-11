@@ -504,6 +504,9 @@ pub fn context_usage(
             )
             .map_err(sql_error)?;
         let mut context: super::context::RunContext = parse(&context)?;
+        if let Some(calibration) = usage.calibration() {
+            context.calibration = Some(calibration);
+        }
         context.usage = Some(usage);
         tx.execute(
             "UPDATE runs SET context_json=?1 WHERE id=?2",
@@ -516,6 +519,30 @@ pub fn context_usage(
             &format!("run:{}:context", run.0),
         )?;
         tx.commit().map_err(sql_error)
+    })
+}
+/// The newest provider-measured request size in this conversation, used to
+/// calibrate the next context estimate. Each run keeps its last usable sample
+/// even after a later request replaces its usage; runs without one are skipped.
+pub fn latest_calibration(
+    repo: &Repository,
+    conversation: ConversationId,
+) -> CoreResult<Option<super::context::ContextCalibration>> {
+    repo.with_connection(move |conn| {
+        let mut stmt = conn
+            .prepare("SELECT context_json FROM runs WHERE conversation_id=?1 ORDER BY rowid DESC")
+            .map_err(sql_error)?;
+        let mut rows = stmt
+            .query([conversation.0.to_string()])
+            .map_err(sql_error)?;
+        while let Some(row) = rows.next().map_err(sql_error)? {
+            let context: String = row.get(0).map_err(sql_error)?;
+            let context: super::context::RunContext = parse(&context)?;
+            if context.calibration.is_some() {
+                return Ok(context.calibration);
+            }
+        }
+        Ok(None)
     })
 }
 pub fn messages_after(

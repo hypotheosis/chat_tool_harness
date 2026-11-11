@@ -716,6 +716,7 @@ async fn disclosure_is_acknowledged_once_per_origin_across_conversations() {
             }],
             purpose: context::ContextPurpose::Turn,
             disclosure,
+            calibration: None,
             deadline: Instant::now(),
         };
         context::assemble_with_usage(snapshot, &[], &request)
@@ -1067,6 +1068,211 @@ async fn over_budget_never_silently_drops_messages() {
     assert_eq!(data.inference_count, 0);
     assert_eq!(data.messages[0].content, "do it");
     assert!(f.requests.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn provider_usage_calibrates_the_next_turn_estimate() {
+    // Regression for issue #12: a later turn must use the rate the provider
+    // reported for an earlier one, not one token per byte.
+    let mut f = Fixture::new();
+    let first = f.start().await;
+    let request = f.request().await;
+    let mut result = turn(vec![]);
+    let first_usage = f.data(first).await.context.usage.unwrap();
+    assert_eq!(
+        first_usage.estimation,
+        TokenEstimation::ConservativeUtf8Bytes
+    );
+    let first_bytes = first_usage.raw_bytes;
+    result.usage = Some(crate::inference::Usage {
+        prompt_tokens: first_bytes / 3,
+        completion_tokens: 1,
+    });
+    request.finish(Ok(result));
+    assert_eq!(f.settled(first).await.state, RunState::Completed);
+    // The byte bound for the next, larger request no longer fits this window,
+    // but the calibrated estimate does.
+    let reserve = u64::from(first_usage.output_reserve);
+    f.set_context_tokens(u32::try_from(first_bytes + 256 + reserve).unwrap());
+    let second = f
+        .coordinator
+        .start_turn(f.conversation, "again".into())
+        .await
+        .unwrap();
+    let request = f.request().await;
+    let usage = f.data(second).await.context.usage.unwrap();
+    assert_eq!(usage.estimation, TokenEstimation::CalibratedUtf8Bytes);
+    assert!(usage.raw_bytes + 256 + reserve > u64::from(usage.window));
+    let sample = context::ContextCalibration {
+        raw_bytes: first_bytes,
+        prompt_tokens: first_bytes / 3,
+    };
+    assert_eq!(
+        usage.estimated_input_tokens,
+        context::estimate_input_tokens(usage.raw_bytes, Some(&sample)).0
+    );
+    assert_eq!(usage.reason, None);
+    request.finish(Ok(turn(vec![])));
+    assert_eq!(f.settled(second).await.state, RunState::Completed);
+}
+
+#[tokio::test]
+async fn calibration_survives_a_later_request_that_is_interrupted() {
+    // A tool round-trip sends a second, larger request. Admitting it replaces the
+    // run's usage before the provider reports, so an interruption must not lose
+    // the sample that admitted it.
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let request = f.request().await;
+    let first_bytes = f.data(run).await.context.usage.unwrap().raw_bytes;
+    let mut result = turn(vec![f.tool_call("id-1")]);
+    result.usage = Some(crate::inference::Usage {
+        prompt_tokens: first_bytes / 3,
+        completion_tokens: 1,
+    });
+    request.finish(Ok(result));
+    let binding = f.settled(run).await.attempts[0].binding.clone().unwrap();
+    f.approve(run, binding).await;
+    f.calls
+        .recv()
+        .await
+        .unwrap()
+        .reply
+        .send(Ok(outcome(false, 2000)))
+        .unwrap();
+    let second = f.request().await;
+    let usage = f.data(run).await.context.usage.unwrap();
+    assert_eq!(usage.estimation, TokenEstimation::CalibratedUtf8Bytes);
+    assert!(usage.raw_bytes > first_bytes);
+    second.finish(Err(CoreError::UnavailableTransport));
+    assert_eq!(f.settled(run).await.state, RunState::Paused);
+    let sample = context::ContextCalibration {
+        raw_bytes: first_bytes,
+        prompt_tokens: first_bytes / 3,
+    };
+    let repo = f.repo.clone();
+    let conversation = f.conversation;
+    assert_eq!(
+        db(move || state::latest_calibration(&repo, conversation))
+            .await
+            .unwrap(),
+        Some(sample)
+    );
+    // Shrink the window below the byte bound of the resumed request.
+    let reserve = u64::from(usage.output_reserve);
+    f.set_context_tokens(u32::try_from(usage.raw_bytes + 256 + reserve - 1).unwrap());
+    f.coordinator.resume(run).await.unwrap();
+    let third = f.request().await;
+    let usage = f.data(run).await.context.usage.unwrap();
+    assert!(usage.raw_bytes + 256 + reserve > u64::from(usage.window));
+    assert_eq!(usage.estimation, TokenEstimation::CalibratedUtf8Bytes);
+    assert_eq!(
+        usage.estimated_input_tokens,
+        context::estimate_input_tokens(usage.raw_bytes, Some(&sample)).0
+    );
+    assert_eq!(usage.reason, None);
+    third.finish(Ok(turn(vec![])));
+    assert_eq!(f.settled(run).await.state, RunState::Completed);
+}
+
+#[tokio::test]
+async fn latest_calibration_selects_the_newest_usable_sample() {
+    fn usage(
+        raw_bytes: u64,
+        lower_bound: bool,
+        prompt_tokens: Option<u64>,
+    ) -> context::ContextUsage {
+        context::ContextUsage {
+            estimation: TokenEstimation::ConservativeUtf8Bytes,
+            estimated_input_tokens: raw_bytes + 256,
+            output_reserve: 0,
+            window: 1_000_000,
+            raw_bytes,
+            raw_bytes_is_lower_bound: lower_bound,
+            provider: prompt_tokens.map(|prompt_tokens| context::ProviderUsage {
+                prompt_tokens,
+                completion_tokens: 1,
+            }),
+            reason: None,
+        }
+    }
+    /// Records each usage, in order, on a new run in `conversation`.
+    fn record(
+        repo: &Repository,
+        conversation: ConversationId,
+        usages: Vec<context::ContextUsage>,
+    ) -> CoreResult<()> {
+        let run = RunId::new();
+        repo.with_connection(move |c| {
+            c.execute(
+                "INSERT INTO runs(id,conversation_id,snapshot_revision,state,context_json) \
+                 VALUES(?1,?2,1,'Completed','{}')",
+                rusqlite::params![run.0.to_string(), conversation.0.to_string()],
+            )
+            .map(|_| ())
+            .map_err(|_| CoreError::Storage)
+        })?;
+        for usage in usages {
+            state::context_usage(repo, run, usage)?;
+        }
+        Ok(())
+    }
+    let valid = context::ContextCalibration {
+        raw_bytes: 900,
+        prompt_tokens: 300,
+    };
+    let unusable = [
+        ("no provider usage", usage(1000, false, None)),
+        ("zero prompt tokens", usage(1000, false, Some(0))),
+        ("zero bytes", usage(0, false, Some(100))),
+        ("lower-bound bytes", usage(1000, true, Some(100))),
+    ];
+    for (case, newer) in unusable {
+        let f = Fixture::new();
+        let (repo, conversation) = (f.repo.clone(), f.conversation);
+        let other = f.repo.create_conversation(f.profile).unwrap();
+        let found = db(move || {
+            assert_eq!(state::latest_calibration(&repo, conversation)?, None);
+            record(&repo, conversation, vec![usage(900, false, Some(300))])?;
+            record(&repo, conversation, vec![newer.clone()])?;
+            // A newer unusable request in the same run keeps the run's sample.
+            record(
+                &repo,
+                conversation,
+                vec![usage(900, false, Some(300)), newer.clone()],
+            )?;
+            record(&repo, other, vec![usage(100, false, Some(99))])?;
+            let only_unusable = repo.create_conversation(f.profile)?;
+            record(&repo, only_unusable, vec![newer])?;
+            Ok((
+                state::latest_calibration(&repo, conversation)?,
+                state::latest_calibration(&repo, only_unusable)?,
+            ))
+        })
+        .await
+        .unwrap();
+        assert_eq!(found, (Some(valid), None), "{case}");
+    }
+    // The newest of several usable samples wins, and other conversations are
+    // never consulted.
+    let f = Fixture::new();
+    let (repo, conversation) = (f.repo.clone(), f.conversation);
+    let other = f.repo.create_conversation(f.profile).unwrap();
+    let found = db(move || {
+        record(&repo, conversation, vec![usage(900, false, Some(300))])?;
+        record(&repo, conversation, vec![usage(800, false, Some(400))])?;
+        record(&repo, other, vec![usage(100, false, Some(99))])?;
+        state::latest_calibration(&repo, conversation)
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        found,
+        Some(context::ContextCalibration {
+            raw_bytes: 800,
+            prompt_tokens: 400,
+        })
+    );
 }
 
 #[tokio::test]
