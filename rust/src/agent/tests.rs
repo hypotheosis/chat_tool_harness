@@ -1176,6 +1176,106 @@ async fn calibration_survives_a_later_request_that_is_interrupted() {
 }
 
 #[tokio::test]
+async fn latest_calibration_selects_the_newest_usable_sample() {
+    fn usage(
+        raw_bytes: u64,
+        lower_bound: bool,
+        prompt_tokens: Option<u64>,
+    ) -> context::ContextUsage {
+        context::ContextUsage {
+            estimation: TokenEstimation::ConservativeUtf8Bytes,
+            estimated_input_tokens: raw_bytes + 256,
+            output_reserve: 0,
+            window: 1_000_000,
+            raw_bytes,
+            raw_bytes_is_lower_bound: lower_bound,
+            provider: prompt_tokens.map(|prompt_tokens| context::ProviderUsage {
+                prompt_tokens,
+                completion_tokens: 1,
+            }),
+            reason: None,
+        }
+    }
+    /// Records each usage, in order, on a new run in `conversation`.
+    fn record(
+        repo: &Repository,
+        conversation: ConversationId,
+        usages: Vec<context::ContextUsage>,
+    ) -> CoreResult<()> {
+        let run = RunId::new();
+        repo.with_connection(move |c| {
+            c.execute(
+                "INSERT INTO runs(id,conversation_id,snapshot_revision,state,context_json) \
+                 VALUES(?1,?2,1,'Completed','{}')",
+                rusqlite::params![run.0.to_string(), conversation.0.to_string()],
+            )
+            .map(|_| ())
+            .map_err(|_| CoreError::Storage)
+        })?;
+        for usage in usages {
+            state::context_usage(repo, run, usage)?;
+        }
+        Ok(())
+    }
+    let valid = context::ContextCalibration {
+        raw_bytes: 900,
+        prompt_tokens: 300,
+    };
+    let unusable = [
+        ("no provider usage", usage(1000, false, None)),
+        ("zero prompt tokens", usage(1000, false, Some(0))),
+        ("zero bytes", usage(0, false, Some(100))),
+        ("lower-bound bytes", usage(1000, true, Some(100))),
+    ];
+    for (case, newer) in unusable {
+        let f = Fixture::new();
+        let (repo, conversation) = (f.repo.clone(), f.conversation);
+        let other = f.repo.create_conversation(f.profile).unwrap();
+        let found = db(move || {
+            assert_eq!(state::latest_calibration(&repo, conversation)?, None);
+            record(&repo, conversation, vec![usage(900, false, Some(300))])?;
+            record(&repo, conversation, vec![newer.clone()])?;
+            // A newer unusable request in the same run keeps the run's sample.
+            record(
+                &repo,
+                conversation,
+                vec![usage(900, false, Some(300)), newer.clone()],
+            )?;
+            record(&repo, other, vec![usage(100, false, Some(99))])?;
+            let only_unusable = repo.create_conversation(f.profile)?;
+            record(&repo, only_unusable, vec![newer])?;
+            Ok((
+                state::latest_calibration(&repo, conversation)?,
+                state::latest_calibration(&repo, only_unusable)?,
+            ))
+        })
+        .await
+        .unwrap();
+        assert_eq!(found, (Some(valid), None), "{case}");
+    }
+    // The newest of several usable samples wins, and other conversations are
+    // never consulted.
+    let f = Fixture::new();
+    let (repo, conversation) = (f.repo.clone(), f.conversation);
+    let other = f.repo.create_conversation(f.profile).unwrap();
+    let found = db(move || {
+        record(&repo, conversation, vec![usage(900, false, Some(300))])?;
+        record(&repo, conversation, vec![usage(800, false, Some(400))])?;
+        record(&repo, other, vec![usage(100, false, Some(99))])?;
+        state::latest_calibration(&repo, conversation)
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        found,
+        Some(context::ContextCalibration {
+            raw_bytes: 800,
+            prompt_tokens: 400,
+        })
+    );
+}
+
+#[tokio::test]
 async fn resumed_inference_replaces_previous_partial_only_at_admission() {
     let mut f = Fixture::new();
     let run = f.start().await;
