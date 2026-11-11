@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Error as SqlError, Result as SqlResult};
 
-const VERSION: i64 = 8;
+const VERSION: i64 = 9;
 
 pub fn apply(connection: &mut Connection) -> SqlResult<()> {
     let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
@@ -30,6 +30,9 @@ pub fn apply(connection: &mut Connection) -> SqlResult<()> {
     }
     if version < 8 {
         migrate_v8(connection)?;
+    }
+    if version < 9 {
+        migrate_v9(connection)?;
     }
     Ok(())
 }
@@ -62,6 +65,21 @@ pub(crate) fn migrate_v1_for_test(connection: &mut Connection) -> SqlResult<()> 
 #[cfg(test)]
 pub(crate) fn migrate_v2_for_test(connection: &mut Connection) -> SqlResult<()> {
     migrate_v2(connection)
+}
+
+fn migrate_v9(connection: &mut Connection) -> SqlResult<()> {
+    let tx = connection.transaction()?;
+    // Transcript export streams a conversation's history in order. Without these,
+    // SQLite scans every conversation's rows and sorts the matches into a temporary
+    // B-tree before returning the first, so export could not stop at its cap.
+    tx.execute_batch(
+        "CREATE INDEX messages_conversation_ordinal ON messages(conversation_id, ordinal);
+        CREATE INDEX runs_conversation ON runs(conversation_id);
+        CREATE INDEX attempts_run ON attempts(run_id);
+        CREATE INDEX derived_context_conversation ON derived_context(conversation_id);
+        PRAGMA user_version = 9;",
+    )?;
+    tx.commit()
 }
 
 fn migrate_v8(connection: &mut Connection) -> SqlResult<()> {

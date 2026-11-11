@@ -101,6 +101,18 @@ fn configuration(repo: &Repository, owner: ConversationId) -> CoreResult<Redacti
     })
 }
 
+/// The history queries an export streams. Each must be answerable from an index in
+/// order, so SQLite yields rows as it finds them instead of first sorting the whole
+/// conversation into a temporary B-tree (`history_export_queries_stream_from_indexes`).
+const MESSAGES_SQL: &str = "SELECT payload FROM messages WHERE conversation_id=?1 ORDER BY ordinal";
+const ATTEMPTS_SQL: &str = "SELECT a.state,a.call_json,a.result_json FROM attempts a JOIN runs r ON r.id=a.run_id WHERE r.conversation_id=?1 ORDER BY r.rowid,a.rowid";
+const RUNS_SQL: &str =
+    "SELECT state,partial_text,failure FROM runs WHERE conversation_id=?1 ORDER BY rowid";
+const SUMMARIES_SQL: &str =
+    "SELECT payload FROM derived_context WHERE conversation_id=?1 ORDER BY rowid";
+#[cfg(test)]
+pub(crate) const HISTORY_QUERIES: [&str; 4] = [MESSAGES_SQL, ATTEMPTS_SQL, RUNS_SQL, SUMMARIES_SQL];
+
 /// Transcript text that refuses any append taking it past the artifact cap, so an
 /// over-cap export stops as soon as it is known to be over rather than at the end.
 struct Transcript(String);
@@ -154,9 +166,7 @@ fn render(
     }])?;
     out.push(&["Title: ", &redact(&title)?, "\n\n"])?;
 
-    let mut stmt = tx
-        .prepare("SELECT payload FROM messages WHERE conversation_id=?1 ORDER BY ordinal")
-        .map_err(storage)?;
+    let mut stmt = tx.prepare(MESSAGES_SQL).map_err(storage)?;
     let mut rows = stmt.query([&owner]).map_err(storage)?;
     while let Some(row) = rows.next().map_err(storage)? {
         let message: crate::agent::context::StoredMessage = payload(row)?;
@@ -183,7 +193,7 @@ fn render(
         }
     }
 
-    let mut stmt = tx.prepare("SELECT a.state,a.call_json,a.result_json FROM attempts a JOIN runs r ON r.id=a.run_id WHERE r.conversation_id=?1 ORDER BY r.rowid,a.rowid").map_err(storage)?;
+    let mut stmt = tx.prepare(ATTEMPTS_SQL).map_err(storage)?;
     let mut rows = stmt.query([&owner]).map_err(storage)?;
     while let Some(row) = rows.next().map_err(storage)? {
         let status: String = row.get(0).map_err(storage)?;
@@ -219,11 +229,7 @@ fn render(
         }
     }
 
-    let mut stmt = tx
-        .prepare(
-            "SELECT state,partial_text,failure FROM runs WHERE conversation_id=?1 ORDER BY rowid",
-        )
-        .map_err(storage)?;
+    let mut stmt = tx.prepare(RUNS_SQL).map_err(storage)?;
     let mut rows = stmt.query([&owner]).map_err(storage)?;
     while let Some(row) = rows.next().map_err(storage)? {
         let state: String = row.get(0).map_err(storage)?;
@@ -241,9 +247,7 @@ fn render(
         }
     }
 
-    let mut stmt = tx
-        .prepare("SELECT payload FROM derived_context WHERE conversation_id=?1 ORDER BY rowid")
-        .map_err(storage)?;
+    let mut stmt = tx.prepare(SUMMARIES_SQL).map_err(storage)?;
     let mut rows = stmt.query([&owner]).map_err(storage)?;
     while let Some(row) = rows.next().map_err(storage)? {
         let summary: crate::agent::context::DerivedContext = payload(row)?;

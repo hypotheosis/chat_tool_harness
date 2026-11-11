@@ -639,3 +639,34 @@ async fn history_export_refuses_credentials_configured_during_export() {
     ));
     assert!(store.all().unwrap().is_empty());
 }
+
+#[test]
+fn history_export_queries_stream_from_indexes() {
+    let (_dir, repo, _, owner, _) = fixture();
+    let plans = repo
+        .with_connection(move |c| {
+            crate::history::HISTORY_QUERIES
+                .iter()
+                .map(|sql| {
+                    let mut stmt = c.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
+                    let detail = stmt
+                        .query_map([id(owner)], |r| r.get::<_, String>(3))
+                        .unwrap()
+                        .collect::<Result<Vec<_>, _>>()
+                        .unwrap();
+                    Ok((sql.to_string(), detail))
+                })
+                .collect::<CoreResult<Vec<_>>>()
+        })
+        .unwrap();
+    for (sql, detail) in plans {
+        // A temporary B-tree means SQLite materialises every matching row before
+        // returning the first; a SCAN reads every conversation's rows.
+        assert!(
+            detail
+                .iter()
+                .all(|d| d.starts_with("SEARCH") && !d.contains("TEMP B-TREE")),
+            "{sql} is not streamed from an index: {detail:?}"
+        );
+    }
+}
