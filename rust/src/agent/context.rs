@@ -74,7 +74,7 @@ pub struct ContextRequest {
 }
 /// The serialized size of one earlier request and the prompt tokens the provider
 /// reported for it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContextCalibration {
     pub raw_bytes: u64,
     pub prompt_tokens: u64,
@@ -144,6 +144,19 @@ pub struct ContextUsage {
     pub provider: Option<ProviderUsage>,
     pub reason: Option<ContextChoiceReason>,
 }
+impl ContextUsage {
+    /// The sample this usage can calibrate later estimates with: the provider's
+    /// prompt tokens paired with the exact size of the same request.
+    pub fn calibration(&self) -> Option<ContextCalibration> {
+        let provider = self.provider.as_ref()?;
+        (provider.prompt_tokens > 0 && self.raw_bytes > 0 && !self.raw_bytes_is_lower_bound).then(
+            || ContextCalibration {
+                raw_bytes: self.raw_bytes,
+                prompt_tokens: provider.prompt_tokens,
+            },
+        )
+    }
+}
 #[derive(Debug)]
 pub enum ContextDecision {
     Ready(InferenceRequest),
@@ -158,6 +171,9 @@ pub struct RunContext {
     pub usage: Option<ContextUsage>,
     pub derived_entry: Option<MessageId>,
     pub summary: Option<DerivedContext>,
+    /// The newest usable provider sample this run produced. Kept apart from
+    /// `usage`, which each later request replaces before its provider reports.
+    pub calibration: Option<ContextCalibration>,
 }
 
 /// The origin that disclosure is acknowledged for: only a new scheme, host or

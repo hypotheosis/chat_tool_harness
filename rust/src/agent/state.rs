@@ -504,6 +504,9 @@ pub fn context_usage(
             )
             .map_err(sql_error)?;
         let mut context: super::context::RunContext = parse(&context)?;
+        if let Some(calibration) = usage.calibration() {
+            context.calibration = Some(calibration);
+        }
         context.usage = Some(usage);
         tx.execute(
             "UPDATE runs SET context_json=?1 WHERE id=?2",
@@ -519,8 +522,8 @@ pub fn context_usage(
     })
 }
 /// The newest provider-measured request size in this conversation, used to
-/// calibrate the next context estimate. Runs without provider usage, or whose
-/// size was only a lower bound, are skipped.
+/// calibrate the next context estimate. Each run keeps its last usable sample
+/// even after a later request replaces its usage; runs without one are skipped.
 pub fn latest_calibration(
     repo: &Repository,
     conversation: ConversationId,
@@ -535,16 +538,8 @@ pub fn latest_calibration(
         while let Some(row) = rows.next().map_err(sql_error)? {
             let context: String = row.get(0).map_err(sql_error)?;
             let context: super::context::RunContext = parse(&context)?;
-            let Some(usage) = context.usage else {
-                continue;
-            };
-            if let Some(provider) = usage.provider.filter(|p| {
-                p.prompt_tokens > 0 && usage.raw_bytes > 0 && !usage.raw_bytes_is_lower_bound
-            }) {
-                return Ok(Some(super::context::ContextCalibration {
-                    raw_bytes: usage.raw_bytes,
-                    prompt_tokens: provider.prompt_tokens,
-                }));
+            if context.calibration.is_some() {
+                return Ok(context.calibration);
             }
         }
         Ok(None)

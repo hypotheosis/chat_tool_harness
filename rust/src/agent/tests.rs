@@ -1117,6 +1117,65 @@ async fn provider_usage_calibrates_the_next_turn_estimate() {
 }
 
 #[tokio::test]
+async fn calibration_survives_a_later_request_that_is_interrupted() {
+    // A tool round-trip sends a second, larger request. Admitting it replaces the
+    // run's usage before the provider reports, so an interruption must not lose
+    // the sample that admitted it.
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let request = f.request().await;
+    let first_bytes = f.data(run).await.context.usage.unwrap().raw_bytes;
+    let mut result = turn(vec![f.tool_call("id-1")]);
+    result.usage = Some(crate::inference::Usage {
+        prompt_tokens: first_bytes / 3,
+        completion_tokens: 1,
+    });
+    request.finish(Ok(result));
+    let binding = f.settled(run).await.attempts[0].binding.clone().unwrap();
+    f.approve(run, binding).await;
+    f.calls
+        .recv()
+        .await
+        .unwrap()
+        .reply
+        .send(Ok(outcome(false, 2000)))
+        .unwrap();
+    let second = f.request().await;
+    let usage = f.data(run).await.context.usage.unwrap();
+    assert_eq!(usage.estimation, TokenEstimation::CalibratedUtf8Bytes);
+    assert!(usage.raw_bytes > first_bytes);
+    second.finish(Err(CoreError::UnavailableTransport));
+    assert_eq!(f.settled(run).await.state, RunState::Paused);
+    let sample = context::ContextCalibration {
+        raw_bytes: first_bytes,
+        prompt_tokens: first_bytes / 3,
+    };
+    let repo = f.repo.clone();
+    let conversation = f.conversation;
+    assert_eq!(
+        db(move || state::latest_calibration(&repo, conversation))
+            .await
+            .unwrap(),
+        Some(sample)
+    );
+    // Shrink the window below the byte bound of the resumed request.
+    let reserve = u64::from(usage.output_reserve);
+    f.set_context_tokens(u32::try_from(usage.raw_bytes + 256 + reserve - 1).unwrap());
+    f.coordinator.resume(run).await.unwrap();
+    let third = f.request().await;
+    let usage = f.data(run).await.context.usage.unwrap();
+    assert!(usage.raw_bytes + 256 + reserve > u64::from(usage.window));
+    assert_eq!(usage.estimation, TokenEstimation::CalibratedUtf8Bytes);
+    assert_eq!(
+        usage.estimated_input_tokens,
+        context::estimate_input_tokens(usage.raw_bytes, Some(&sample)).0
+    );
+    assert_eq!(usage.reason, None);
+    third.finish(Ok(turn(vec![])));
+    assert_eq!(f.settled(run).await.state, RunState::Completed);
+}
+
+#[tokio::test]
 async fn resumed_inference_replaces_previous_partial_only_at_admission() {
     let mut f = Fixture::new();
     let run = f.start().await;
