@@ -149,12 +149,12 @@ impl ContextUsage {
     /// prompt tokens paired with the exact size of the same request.
     pub fn calibration(&self) -> Option<ContextCalibration> {
         let provider = self.provider.as_ref()?;
-        (provider.prompt_tokens > 0 && self.raw_bytes > 0 && !self.raw_bytes_is_lower_bound).then(
-            || ContextCalibration {
-                raw_bytes: self.raw_bytes,
-                prompt_tokens: provider.prompt_tokens,
-            },
-        )
+        let usable =
+            provider.prompt_tokens > 0 && self.raw_bytes > 0 && !self.raw_bytes_is_lower_bound;
+        usable.then_some(ContextCalibration {
+            raw_bytes: self.raw_bytes,
+            prompt_tokens: provider.prompt_tokens,
+        })
     }
 }
 #[derive(Debug)]
