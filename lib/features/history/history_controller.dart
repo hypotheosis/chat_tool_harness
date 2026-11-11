@@ -22,6 +22,11 @@ class HistoryController extends ChangeNotifier {
   StreamSubscription<AppSnapshot>? _subscription;
   bool _disposed = false;
   int _searchGeneration = 0;
+  // A change seen while busy; refreshed once when the current action ends.
+  bool _refreshPending = false;
+  // The session sequence the latest search started from; it covers changes
+  // up to here.
+  int _searchedThrough = -1;
   void changed() {
     if (!_disposed) notifyListeners();
   }
@@ -30,8 +35,13 @@ class HistoryController extends ChangeNotifier {
     await _action(() async {
       await session.connect();
       _subscription = session.changes.listen(
-        (_) {
-          if (!loading) unawaited(search(query, pageOffset: offset));
+        (snapshot) {
+          if (snapshot.sequence <= _searchedThrough) return;
+          if (loading) {
+            _refreshPending = true;
+          } else {
+            unawaited(search(query, pageOffset: offset));
+          }
         },
         onError: (Object e) {
           error = failureMessage(e);
@@ -43,6 +53,9 @@ class HistoryController extends ChangeNotifier {
   }
 
   Future<void> _search() async {
+    // This search observes every change seen so far.
+    _refreshPending = false;
+    _searchedThrough = session.cursor;
     final generation = ++_searchGeneration;
     final reply = await backend.execute(
       SearchConversations(query, offset: offset),
@@ -135,6 +148,9 @@ class HistoryController extends ChangeNotifier {
     } finally {
       loading = false;
       changed();
+    }
+    if (_refreshPending && !_disposed) {
+      unawaited(search(query, pageOffset: offset));
     }
   }
 
