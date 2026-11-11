@@ -1185,3 +1185,51 @@ async fn cancelled_or_unknown_target_tests_keep_the_previous_result() {
     assert_eq!(f.connection_tests().await.len(), 1);
     f.app.close().await.unwrap();
 }
+
+#[tokio::test]
+async fn unsaved_server_tests_store_nothing() {
+    let wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    let unsaved = AppCommand::DiscoverServer {
+        profile_id: f.profile.clone(),
+        server_id: core::ServerId::new().0.to_string(),
+    };
+    assert_eq!(
+        f.app.command(unsaved).await.unwrap_err(),
+        CoreError::Configuration
+    );
+    assert!(f.connection_tests().await.is_empty());
+    f.app.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_result_that_cannot_be_stored_fails_only_a_passing_test() {
+    let mut wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    f.app
+        .repository
+        .with_connection(|conn| {
+            conn.execute_batch("DROP TABLE server_tests")
+                .map_err(|_| CoreError::Storage)
+        })
+        .unwrap();
+    // The test passed, but its result could not be kept.
+    let app = f.app.clone();
+    let command = f.discover();
+    let passed = tokio::spawn(async move { app.command(command).await });
+    wire.initialize(false).await;
+    wire.list().await.rpc(tools(), false);
+    assert_eq!(passed.await.unwrap().unwrap_err(), CoreError::Storage);
+    // A failing test reports its own failure, not the storage one.
+    let app = f.app.clone();
+    let command = f.discover();
+    let failed = tokio::spawn(async move { app.command(command).await });
+    let request = wire.next().await;
+    assert_eq!(request.body["method"], "initialize");
+    request.respond(401, "application/json", "", "{}".into());
+    assert_eq!(
+        failed.await.unwrap().unwrap_err(),
+        CoreError::Authentication
+    );
+    f.app.close().await.unwrap();
+}
