@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'credential_editor.dart';
+import 'last_connection_test.dart';
 import '../../backend/backend.dart';
 import '../../backend/models.dart';
 import '../result_banner.dart';
@@ -64,6 +65,14 @@ class _ServerScreenState extends State<ServerScreen> {
 
   List<String> tools = [];
   List<SkippedTool> skipped = [];
+
+  /// Whether this screen ran a test, whose skipped tools it lists itself.
+  bool testedHere = false;
+
+  /// The stored result of this server's last test.
+  ConnectionTest? get lastTest => state.snapshot?.connectionTests
+      .where((t) => t.serverId == id)
+      .firstOrNull;
   @override
   void initState() {
     super.initState();
@@ -119,8 +128,12 @@ class _ServerScreenState extends State<ServerScreen> {
     setState(() {
       tools = [];
       skipped = [];
+      testedHere = true;
     });
-    final reply = await state.perform(DiscoverServer(profile, id!));
+    final reply = await state.perform(
+      DiscoverServer(profile, id!),
+      refreshOnFailure: true,
+    );
     if (!mounted || reply == null) return;
     setState(() {
       tools = reply.discoveredTools;
@@ -226,6 +239,11 @@ class _ServerScreenState extends State<ServerScreen> {
             OutlinedButton(
               onPressed: state.loading ? null : discover,
               child: const Text('Test connection and discover tools'),
+            ),
+            LastConnectionTest(
+              label: 'Connection',
+              test: lastTest,
+              showSkipped: !testedHere,
             ),
             ResultBanner(state: state),
             for (final tool in tools) SelectableText(tool),

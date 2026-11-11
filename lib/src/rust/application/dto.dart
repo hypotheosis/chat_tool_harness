@@ -41,6 +41,9 @@ class AgentAppSnapshot {
   final List<AgentRun> runs;
   final List<AgentToolRule> rules;
 
+  /// The last result of each connection test.
+  final List<AgentConnectionTest> connectionTests;
+
   const AgentAppSnapshot({
     required this.artifacts,
     required this.retentionLimitBytes,
@@ -51,6 +54,7 @@ class AgentAppSnapshot {
     required this.conversations,
     required this.runs,
     required this.rules,
+    required this.connectionTests,
   });
 
   @override
@@ -63,7 +67,8 @@ class AgentAppSnapshot {
       profiles.hashCode ^
       conversations.hashCode ^
       runs.hashCode ^
-      rules.hashCode;
+      rules.hashCode ^
+      connectionTests.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -78,7 +83,8 @@ class AgentAppSnapshot {
           profiles == other.profiles &&
           conversations == other.conversations &&
           runs == other.runs &&
-          rules == other.rules;
+          rules == other.rules &&
+          connectionTests == other.connectionTests;
 }
 
 class AgentApprovalBinding {
@@ -259,6 +265,82 @@ class AgentCommandReply {
           discoveredRules == other.discoveredRules &&
           id == other.id &&
           artifact == other.artifact;
+}
+
+/// The last finished connection test of one endpoint and kind, or of one MCP
+/// server, kept until the next test replaces it. Cancelled tests replace
+/// nothing.
+class AgentConnectionTest {
+  final ConnectionTestKind kind;
+
+  /// Set for endpoint tests.
+  final String? endpointId;
+
+  /// Set for server tests, with the profile the server was tested through.
+  final String? serverId;
+  final String? profileId;
+
+  /// When the test finished, in milliseconds since the Unix epoch.
+  final PlatformInt64 testedAtMs;
+
+  /// Set when the test failed; the outcome fields below are then empty.
+  final CoreError? failureCode;
+  final AgentFailureDetail? failureDetail;
+
+  /// Distinct models found (`DiscoverModels`).
+  final int? modelCount;
+
+  /// The verdict (`ProbeTools`).
+  final ToolSupport? toolSupport;
+
+  /// Usable tools found, and those skipped with why (`DiscoverServer`).
+  final int? toolCount;
+  final List<AgentSkippedTool> skippedTools;
+
+  const AgentConnectionTest({
+    required this.kind,
+    this.endpointId,
+    this.serverId,
+    this.profileId,
+    required this.testedAtMs,
+    this.failureCode,
+    this.failureDetail,
+    this.modelCount,
+    this.toolSupport,
+    this.toolCount,
+    required this.skippedTools,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      endpointId.hashCode ^
+      serverId.hashCode ^
+      profileId.hashCode ^
+      testedAtMs.hashCode ^
+      failureCode.hashCode ^
+      failureDetail.hashCode ^
+      modelCount.hashCode ^
+      toolSupport.hashCode ^
+      toolCount.hashCode ^
+      skippedTools.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AgentConnectionTest &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          endpointId == other.endpointId &&
+          serverId == other.serverId &&
+          profileId == other.profileId &&
+          testedAtMs == other.testedAtMs &&
+          failureCode == other.failureCode &&
+          failureDetail == other.failureDetail &&
+          modelCount == other.modelCount &&
+          toolSupport == other.toolSupport &&
+          toolCount == other.toolCount &&
+          skippedTools == other.skippedTools;
 }
 
 class AgentContextSelection {
@@ -1163,4 +1245,16 @@ sealed class AppCommand with _$AppCommand {
     required String conversationId,
     required String origin,
   }) = AppCommand_AcknowledgeContextDisclosure;
+}
+
+/// Which connection test ran.
+enum ConnectionTestKind {
+  /// `DiscoverModels` on an endpoint.
+  discoverModels,
+
+  /// `ProbeEndpoint` on an endpoint.
+  probeTools,
+
+  /// `DiscoverServer` on an MCP server.
+  discoverServer,
 }

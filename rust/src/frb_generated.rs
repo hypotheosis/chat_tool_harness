@@ -654,6 +654,8 @@ impl SseDecode for crate::application::dto::AgentAppSnapshot {
             <Vec<crate::application::dto::AgentConversation>>::sse_decode(deserializer);
         let mut var_runs = <Vec<crate::application::dto::AgentRun>>::sse_decode(deserializer);
         let mut var_rules = <Vec<crate::application::dto::AgentToolRule>>::sse_decode(deserializer);
+        let mut var_connectionTests =
+            <Vec<crate::application::dto::AgentConnectionTest>>::sse_decode(deserializer);
         return crate::application::dto::AgentAppSnapshot {
             artifacts: var_artifacts,
             retention_limit_bytes: var_retentionLimitBytes,
@@ -664,6 +666,7 @@ impl SseDecode for crate::application::dto::AgentAppSnapshot {
             conversations: var_conversations,
             runs: var_runs,
             rules: var_rules,
+            connection_tests: var_connectionTests,
         };
     }
 }
@@ -766,6 +769,38 @@ impl SseDecode for crate::application::dto::AgentCommandReply {
             discovered_rules: var_discoveredRules,
             id: var_id,
             artifact: var_artifact,
+        };
+    }
+}
+
+impl SseDecode for crate::application::dto::AgentConnectionTest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_kind = <crate::application::dto::ConnectionTestKind>::sse_decode(deserializer);
+        let mut var_endpointId = <Option<String>>::sse_decode(deserializer);
+        let mut var_serverId = <Option<String>>::sse_decode(deserializer);
+        let mut var_profileId = <Option<String>>::sse_decode(deserializer);
+        let mut var_testedAtMs = <i64>::sse_decode(deserializer);
+        let mut var_failureCode = <Option<crate::error::CoreError>>::sse_decode(deserializer);
+        let mut var_failureDetail =
+            <Option<crate::application::dto::AgentFailureDetail>>::sse_decode(deserializer);
+        let mut var_modelCount = <Option<u32>>::sse_decode(deserializer);
+        let mut var_toolSupport = <Option<crate::inference::ToolSupport>>::sse_decode(deserializer);
+        let mut var_toolCount = <Option<u32>>::sse_decode(deserializer);
+        let mut var_skippedTools =
+            <Vec<crate::application::dto::AgentSkippedTool>>::sse_decode(deserializer);
+        return crate::application::dto::AgentConnectionTest {
+            kind: var_kind,
+            endpoint_id: var_endpointId,
+            server_id: var_serverId,
+            profile_id: var_profileId,
+            tested_at_ms: var_testedAtMs,
+            failure_code: var_failureCode,
+            failure_detail: var_failureDetail,
+            model_count: var_modelCount,
+            tool_support: var_toolSupport,
+            tool_count: var_toolCount,
+            skipped_tools: var_skippedTools,
         };
     }
 }
@@ -1474,6 +1509,19 @@ impl SseDecode for Box<crate::application::dto::AgentFailureDetail> {
     }
 }
 
+impl SseDecode for crate::application::dto::ConnectionTestKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::application::dto::ConnectionTestKind::DiscoverModels,
+            1 => crate::application::dto::ConnectionTestKind::ProbeTools,
+            2 => crate::application::dto::ConnectionTestKind::DiscoverServer,
+            _ => unreachable!("Invalid variant for ConnectionTestKind: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::agent::context::ContextChoiceReason {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1623,6 +1671,20 @@ impl SseDecode for Vec<crate::application::dto::AgentAttempt> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::application::dto::AgentAttempt>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::application::dto::AgentConnectionTest> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::application::dto::AgentConnectionTest>::sse_decode(
                 deserializer,
             ));
         }
@@ -2021,6 +2083,17 @@ impl SseDecode for Option<u16> {
     }
 }
 
+impl SseDecode for Option<u32> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<u32>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for crate::model::PageStatus {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2361,6 +2434,7 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentAppSnapshot
             self.conversations.into_into_dart().into_dart(),
             self.runs.into_into_dart().into_dart(),
             self.rules.into_into_dart().into_dart(),
+            self.connection_tests.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2496,6 +2570,36 @@ impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentCommandRepl
     for crate::application::dto::AgentCommandReply
 {
     fn into_into_dart(self) -> crate::application::dto::AgentCommandReply {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentConnectionTest {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.kind.into_into_dart().into_dart(),
+            self.endpoint_id.into_into_dart().into_dart(),
+            self.server_id.into_into_dart().into_dart(),
+            self.profile_id.into_into_dart().into_dart(),
+            self.tested_at_ms.into_into_dart().into_dart(),
+            self.failure_code.into_into_dart().into_dart(),
+            self.failure_detail.into_into_dart().into_dart(),
+            self.model_count.into_into_dart().into_dart(),
+            self.tool_support.into_into_dart().into_dart(),
+            self.tool_count.into_into_dart().into_dart(),
+            self.skipped_tools.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentConnectionTest
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentConnectionTest>
+    for crate::application::dto::AgentConnectionTest
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentConnectionTest {
         self
     }
 }
@@ -3301,6 +3405,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::model::core::AttemptState>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::ConnectionTestKind {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::DiscoverModels => 0.into_dart(),
+            Self::ProbeTools => 1.into_dart(),
+            Self::DiscoverServer => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::ConnectionTestKind
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::ConnectionTestKind>
+    for crate::application::dto::ConnectionTestKind
+{
+    fn into_into_dart(self) -> crate::application::dto::ConnectionTestKind {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::agent::context::ContextChoiceReason {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -3760,6 +3886,10 @@ impl SseEncode for crate::application::dto::AgentAppSnapshot {
         );
         <Vec<crate::application::dto::AgentRun>>::sse_encode(self.runs, serializer);
         <Vec<crate::application::dto::AgentToolRule>>::sse_encode(self.rules, serializer);
+        <Vec<crate::application::dto::AgentConnectionTest>>::sse_encode(
+            self.connection_tests,
+            serializer,
+        );
     }
 }
 
@@ -3834,6 +3964,29 @@ impl SseEncode for crate::application::dto::AgentCommandReply {
         <Option<String>>::sse_encode(self.id, serializer);
         <Option<crate::application::dto::AgentArtifactContent>>::sse_encode(
             self.artifact,
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::application::dto::AgentConnectionTest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::application::dto::ConnectionTestKind>::sse_encode(self.kind, serializer);
+        <Option<String>>::sse_encode(self.endpoint_id, serializer);
+        <Option<String>>::sse_encode(self.server_id, serializer);
+        <Option<String>>::sse_encode(self.profile_id, serializer);
+        <i64>::sse_encode(self.tested_at_ms, serializer);
+        <Option<crate::error::CoreError>>::sse_encode(self.failure_code, serializer);
+        <Option<crate::application::dto::AgentFailureDetail>>::sse_encode(
+            self.failure_detail,
+            serializer,
+        );
+        <Option<u32>>::sse_encode(self.model_count, serializer);
+        <Option<crate::inference::ToolSupport>>::sse_encode(self.tool_support, serializer);
+        <Option<u32>>::sse_encode(self.tool_count, serializer);
+        <Vec<crate::application::dto::AgentSkippedTool>>::sse_encode(
+            self.skipped_tools,
             serializer,
         );
     }
@@ -4356,6 +4509,23 @@ impl SseEncode for Box<crate::application::dto::AgentFailureDetail> {
     }
 }
 
+impl SseEncode for crate::application::dto::ConnectionTestKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::application::dto::ConnectionTestKind::DiscoverModels => 0,
+                crate::application::dto::ConnectionTestKind::ProbeTools => 1,
+                crate::application::dto::ConnectionTestKind::DiscoverServer => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for crate::agent::context::ContextChoiceReason {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -4508,6 +4678,16 @@ impl SseEncode for Vec<crate::application::dto::AgentAttempt> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::application::dto::AgentAttempt>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::application::dto::AgentConnectionTest> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::application::dto::AgentConnectionTest>::sse_encode(item, serializer);
         }
     }
 }
@@ -4808,6 +4988,16 @@ impl SseEncode for Option<u16> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <u16>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<u32> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <u32>::sse_encode(value, serializer);
         }
     }
 }

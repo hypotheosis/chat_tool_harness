@@ -6,6 +6,7 @@ import 'package:chat_tool_harness/backend/frb_backend.dart';
 import 'package:chat_tool_harness/backend/models.dart';
 import 'package:chat_tool_harness/src/rust/application/dto.dart' as g;
 import 'package:chat_tool_harness/src/rust/error.dart' as errors;
+import 'package:chat_tool_harness/src/rust/inference.dart' as inf;
 import 'support/fake_backend.dart';
 
 void main() {
@@ -186,5 +187,44 @@ void main() {
       allowHttp: false,
     );
     expect(unsaved.trusted, isFalse);
+  });
+  test('connection test results map their outcome, time and failure', () {
+    final passed = connectionTestFromBridge(
+      g.AgentConnectionTest(
+        kind: g.ConnectionTestKind.probeTools,
+        endpointId: 'e',
+        testedAtMs: 1762790400000,
+        toolSupport: inf.ToolSupport.supported,
+        skippedTools: const [],
+      ),
+    );
+    expect(passed.kind, ConnectionTestKind.probeTools);
+    expect(passed.endpointId, 'e');
+    expect(passed.testedAt, DateTime.utc(2025, 11, 10, 16));
+    expect(passed.toolSupport, ToolSupport.supported);
+    expect(passed.failure, isNull);
+    final failed = connectionTestFromBridge(
+      g.AgentConnectionTest(
+        kind: g.ConnectionTestKind.discoverServer,
+        serverId: 's',
+        profileId: 'p',
+        testedAtMs: 0,
+        failureCode: errors.CoreError.authentication,
+        failureDetail: const g.AgentFailureDetail(
+          targetKind: 'mcpServer',
+          targetName: 'tools',
+          step: 'initialize',
+          status: 401,
+          reason: 'unknown API key',
+        ),
+        skippedTools: const [g.AgentSkippedTool(name: 'x', reason: 'why')],
+      ),
+    );
+    expect(failed.kind, ConnectionTestKind.discoverServer);
+    expect((failed.serverId, failed.profileId), ('s', 'p'));
+    expect(failed.failure?.code, FailureCode.authentication);
+    expect(failed.failure?.detail?.status, 401);
+    expect(failed.failure?.detail?.reason, 'unknown API key');
+    expect(failed.skippedTools.single.name, 'x');
   });
 }

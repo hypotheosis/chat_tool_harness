@@ -191,6 +191,42 @@ pub struct AgentAppSnapshot {
     pub conversations: Vec<AgentConversation>,
     pub runs: Vec<AgentRun>,
     pub rules: Vec<AgentToolRule>,
+    /// The last result of each connection test.
+    pub connection_tests: Vec<AgentConnectionTest>,
+}
+/// Which connection test ran.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectionTestKind {
+    /// `DiscoverModels` on an endpoint.
+    DiscoverModels,
+    /// `ProbeEndpoint` on an endpoint.
+    ProbeTools,
+    /// `DiscoverServer` on an MCP server.
+    DiscoverServer,
+}
+/// The last finished connection test of one endpoint and kind, or of one MCP
+/// server, kept until the next test replaces it. Cancelled tests replace
+/// nothing.
+#[derive(Debug, Clone)]
+pub struct AgentConnectionTest {
+    pub kind: ConnectionTestKind,
+    /// Set for endpoint tests.
+    pub endpoint_id: Option<String>,
+    /// Set for server tests, with the profile the server was tested through.
+    pub server_id: Option<String>,
+    pub profile_id: Option<String>,
+    /// When the test finished, in milliseconds since the Unix epoch.
+    pub tested_at_ms: i64,
+    /// Set when the test failed; the outcome fields below are then empty.
+    pub failure_code: Option<crate::error::CoreError>,
+    pub failure_detail: Option<AgentFailureDetail>,
+    /// Distinct models found (`DiscoverModels`).
+    pub model_count: Option<u32>,
+    /// The verdict (`ProbeTools`).
+    pub tool_support: Option<ToolSupport>,
+    /// Usable tools found, and those skipped with why (`DiscoverServer`).
+    pub tool_count: Option<u32>,
+    pub skipped_tools: Vec<AgentSkippedTool>,
 }
 #[derive(Debug, Clone)]
 pub struct AgentAppEvent {

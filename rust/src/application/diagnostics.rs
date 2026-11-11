@@ -287,6 +287,17 @@ pub(super) async fn set_observed_rule(
 }
 
 impl Application {
+    /// The wall clock that dates connection tests.
+    #[cfg(not(test))]
+    fn clock(&self) -> impl FnOnce() -> std::time::SystemTime {
+        std::time::SystemTime::now
+    }
+    /// The wall clock that dates connection tests, or the time a test set.
+    #[cfg(test)]
+    fn clock(&self) -> impl FnOnce() -> std::time::SystemTime {
+        let fixed = *self.test_clock.lock().unwrap();
+        move || fixed.unwrap_or_else(std::time::SystemTime::now)
+    }
     pub(super) async fn diagnostic(&self, command: Diagnostic) -> CoreResult<AgentCommandReply> {
         let lease: DiagnosticLease = self.coordinator.diagnostic_lease().await?;
         let cancel = self.closed.child_token();
@@ -304,13 +315,36 @@ impl Application {
         self.diagnostics.track(completion);
         #[cfg(test)]
         let finished = self.diagnostic_finished.clone();
+        let tested = connection_tests::Target::of(&command);
+        let repo = self.repository.clone();
+        let clock = self.clock();
         // This worker owns resources/lease, never Application/Coordinator ownership.
         tokio::spawn(async move {
             let (result, detail) = crate::failure::scope(operation.run(command)).await;
             let detail = detail.filter(|_| result.is_err());
-            let result = result
+            let mut result = result
                 .map_err(|code| crate::failure::promote(code, detail.as_ref()))
                 .map_err(|code| (code, detail));
+            // Stored before completion is signalled, so the reply's follow-up
+            // snapshot shows it and closing the app waits for the write. A
+            // test whose caller left, or whose app is closing, stores nothing
+            // even if it then finished: MCP teardown runs on its own token.
+            let wanted = !operation.cancel.is_cancelled();
+            if let Some(target) = tested.filter(|_| wanted) {
+                let at = connection_tests::unix_ms(clock());
+                if let Some(record) = connection_tests::record(&target, &result, at) {
+                    let stored = tokio::task::spawn_blocking(move || {
+                        connection_tests::store(&repo, target, record)
+                    })
+                    .await
+                    .unwrap_or(Err(CoreError::Storage));
+                    // A test that passed but could not be kept reports the
+                    // storage failure; a failed test keeps its own failure.
+                    if let (Err(error), Ok(_)) = (stored, &result) {
+                        result = Err((error, None));
+                    }
+                }
+            }
             drop(lease);
             let _ = done.send(true);
             #[cfg(test)]

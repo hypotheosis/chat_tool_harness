@@ -21,6 +21,7 @@ class FakeBackend implements Backend {
         conversations: current.conversations,
         runs: current.runs,
         rules: current.rules,
+        connectionTests: current.connectionTests,
       );
     }
     _events.add(event);

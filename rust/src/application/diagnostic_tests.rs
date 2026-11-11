@@ -1016,3 +1016,297 @@ async fn decide_approvals_on_a_running_run_stores_decisions_without_resuming() {
     );
     f.app.close().await.unwrap();
 }
+
+impl AppFixture {
+    fn set_clock(&self, ms: u64) {
+        *self.app.test_clock.lock().unwrap() =
+            Some(std::time::UNIX_EPOCH + std::time::Duration::from_millis(ms));
+    }
+    async fn connection_tests(&self) -> Vec<AgentConnectionTest> {
+        self.app.snapshot().await.unwrap().connection_tests
+    }
+}
+
+#[tokio::test]
+async fn server_test_result_is_kept_replaced_and_survives_reopening() {
+    let mut wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    assert!(f.connection_tests().await.is_empty());
+    f.set_clock(1_000);
+    let app = f.app.clone();
+    let command = f.discover();
+    let passed = tokio::spawn(async move { app.command(command).await });
+    wire.initialize(false).await;
+    wire.list().await.rpc(
+        json!({"tools":[{"name":"write","inputSchema":{"type":"object"}}, {"name":"bad","inputSchema":"not-an-object"}]}),
+        false,
+    );
+    let reply = passed.await.unwrap().unwrap();
+    let [test] = f.connection_tests().await.try_into().unwrap();
+    assert_eq!(test.kind, ConnectionTestKind::DiscoverServer);
+    assert_eq!(test.server_id.as_deref(), Some(f.server.as_str()));
+    assert_eq!(test.profile_id.as_deref(), Some(f.profile.as_str()));
+    assert_eq!(test.endpoint_id, None);
+    assert_eq!(test.tested_at_ms, 1_000);
+    assert_eq!(test.tool_count, Some(1));
+    assert_eq!(test.skipped_tools, reply.skipped_tools);
+    assert_eq!(test.skipped_tools.len(), 1);
+    assert_eq!(test.failure_code, None);
+
+    // A failing test replaces the passing one, keeping its sanitized detail.
+    f.set_clock(2_000);
+    let app = f.app.clone();
+    let command = f.discover();
+    let failed = tokio::spawn(async move { app.command_with_detail(command).await });
+    let request = wire.next().await;
+    assert_eq!(request.body["method"], "initialize");
+    request.respond(
+        401,
+        "application/json",
+        "",
+        json!({"error":"unknown API key"}).to_string(),
+    );
+    let failure = failed.await.unwrap().unwrap_err();
+    let [test] = f.connection_tests().await.try_into().unwrap();
+    assert_eq!(test.tested_at_ms, 2_000);
+    assert_eq!(test.failure_code, Some(CoreError::Authentication));
+    assert_eq!(test.failure_detail.as_ref(), failure.detail.as_deref());
+    assert_eq!(test.failure_detail.unwrap().status, Some(401));
+    assert_eq!((test.tool_count, test.skipped_tools.len()), (None, 0));
+    f.app.close().await.unwrap();
+
+    // Leaving the screen, or the app, keeps the result.
+    let reopened = Application::open(
+        f._dir.path().to_string_lossy().into_owned(),
+        |_| Box::pin(async { CredentialReply::Missing }),
+        |_| Box::pin(async { PlatformReply::Ok }),
+    )
+    .await
+    .unwrap();
+    let [test] = reopened
+        .snapshot()
+        .await
+        .unwrap()
+        .connection_tests
+        .try_into()
+        .unwrap();
+    assert_eq!(test.tested_at_ms, 2_000);
+    assert_eq!(test.failure_code, Some(CoreError::Authentication));
+    reopened.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn endpoint_keeps_one_result_per_test_kind() {
+    let mut wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    f.set_clock(5_000);
+    let app = f.app.clone();
+    let endpoint_id = f.endpoint.clone();
+    let models = tokio::spawn(async move {
+        app.command(AppCommand::DiscoverModels { endpoint_id })
+            .await
+    });
+    let request = wire.next().await;
+    assert!(
+        request.method.starts_with("GET /models "),
+        "{}",
+        request.method
+    );
+    request.respond(
+        200,
+        "application/json",
+        "",
+        json!({"data":[{"id":"a"},{"id":"b"},{"id":"a"}]}).to_string(),
+    );
+    models.await.unwrap().unwrap();
+    // A probe that cannot reach the endpoint is a second, separate result.
+    f.set_clock(6_000);
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let closed = format!("http://{}", listener.local_addr().unwrap());
+    drop(listener);
+    let mut endpoint: core::EndpointConfig =
+        saved_endpoint(&f.app.repository, &f.endpoint).unwrap();
+    endpoint.base_url = closed;
+    f.app.repository.save_endpoint(endpoint).unwrap();
+    f.app
+        .command(AppCommand::ProbeEndpoint {
+            endpoint_id: f.endpoint.clone(),
+        })
+        .await
+        .unwrap_err();
+    let [models, probe] = f.connection_tests().await.try_into().unwrap();
+    assert_eq!(models.kind, ConnectionTestKind::DiscoverModels);
+    assert_eq!(models.endpoint_id.as_deref(), Some(f.endpoint.as_str()));
+    assert_eq!((models.tested_at_ms, models.model_count), (5_000, Some(2)));
+    assert_eq!(probe.kind, ConnectionTestKind::ProbeTools);
+    assert_eq!(probe.tested_at_ms, 6_000);
+    assert_eq!(probe.failure_code, Some(CoreError::UnavailableTransport));
+    assert_eq!(probe.tool_support, None);
+    f.app.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn cancelled_or_unknown_target_tests_keep_the_previous_result() {
+    let mut wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    f.set_clock(1_000);
+    let app = f.app.clone();
+    let command = f.discover();
+    let passed = tokio::spawn(async move { app.command(command).await });
+    wire.initialize(false).await;
+    wire.list().await.rpc(tools(), false);
+    passed.await.unwrap().unwrap();
+
+    // The caller goes away mid-test: the worker is cancelled and stores nothing.
+    f.set_clock(2_000);
+    let app = f.app.clone();
+    let command = f.discover();
+    let abandoned = tokio::spawn(async move { app.command(command).await });
+    let request = wire.next().await;
+    assert_eq!(request.body["method"], "initialize");
+    let finished = f.app.diagnostic_finished.notified();
+    abandoned.abort();
+    assert!(abandoned.await.unwrap_err().is_cancelled());
+    finished.await;
+    drop(request);
+    let [test] = f.connection_tests().await.try_into().unwrap();
+    assert_eq!((test.tested_at_ms, test.tool_count), (1_000, Some(2)));
+
+    // A test of an endpoint that was never saved stores nothing.
+    assert_eq!(
+        f.app
+            .command(AppCommand::DiscoverModels {
+                endpoint_id: core::EndpointId::new().0.to_string(),
+            })
+            .await
+            .unwrap_err(),
+        CoreError::Conflict
+    );
+    assert_eq!(f.connection_tests().await.len(), 1);
+    f.app.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn unsaved_server_tests_store_nothing() {
+    let wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    let unsaved = AppCommand::DiscoverServer {
+        profile_id: f.profile.clone(),
+        server_id: core::ServerId::new().0.to_string(),
+    };
+    assert_eq!(
+        f.app.command(unsaved).await.unwrap_err(),
+        CoreError::Configuration
+    );
+    assert!(f.connection_tests().await.is_empty());
+    f.app.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_result_that_cannot_be_stored_fails_only_a_passing_test() {
+    let mut wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    f.app
+        .repository
+        .with_connection(|conn| {
+            conn.execute_batch("DROP TABLE server_tests")
+                .map_err(|_| CoreError::Storage)
+        })
+        .unwrap();
+    // The test passed, but its result could not be kept.
+    let app = f.app.clone();
+    let command = f.discover();
+    let passed = tokio::spawn(async move { app.command(command).await });
+    wire.initialize(false).await;
+    wire.list().await.rpc(tools(), false);
+    assert_eq!(passed.await.unwrap().unwrap_err(), CoreError::Storage);
+    // A failing test reports its own failure, not the storage one.
+    let app = f.app.clone();
+    let command = f.discover();
+    let failed = tokio::spawn(async move { app.command(command).await });
+    let request = wire.next().await;
+    assert_eq!(request.body["method"], "initialize");
+    request.respond(401, "application/json", "", "{}".into());
+    assert_eq!(
+        failed.await.unwrap().unwrap_err(),
+        CoreError::Authentication
+    );
+    f.app.close().await.unwrap();
+}
+
+/// Seeds a passing server result at 1 000 ms, then starts a second test at
+/// 2 000 ms that has listed its tools and waits on the session DELETE.
+async fn held_teardown(
+    f: &AppFixture,
+    wire: &mut Wire,
+) -> (
+    tokio::task::JoinHandle<CoreResult<AgentCommandReply>>,
+    Request,
+) {
+    f.set_clock(1_000);
+    let app = f.app.clone();
+    let command = f.discover();
+    let seeded = tokio::spawn(async move { app.command(command).await });
+    wire.initialize(false).await;
+    wire.list().await.rpc(tools(), false);
+    seeded.await.unwrap().unwrap();
+    f.set_clock(2_000);
+    let app = f.app.clone();
+    let command = f.discover();
+    let held = tokio::spawn(async move { app.command(command).await });
+    wire.initialize(true).await;
+    wire.list().await.rpc(tools(), true);
+    let delete = wire.next().await;
+    assert!(
+        delete.method.starts_with("DELETE /mcp "),
+        "{}",
+        delete.method
+    );
+    (held, delete)
+}
+
+#[tokio::test]
+async fn caller_gone_during_teardown_keeps_the_previous_result() {
+    let mut wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    let (held, delete) = held_teardown(&f, &mut wire).await;
+    let finished = f.app.diagnostic_finished.notified();
+    held.abort();
+    assert!(held.await.unwrap_err().is_cancelled());
+    // Teardown still completes, and successfully.
+    delete.respond(200, "application/json", "", String::new());
+    finished.await;
+    let [test] = f.connection_tests().await.try_into().unwrap();
+    assert_eq!(test.tested_at_ms, 1_000);
+    f.app.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn closing_during_teardown_keeps_the_previous_result() {
+    let mut wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    let (held, delete) = held_teardown(&f, &mut wire).await;
+    let app = f.app.clone();
+    let closing = tokio::spawn(async move { app.close().await });
+    // close() cancels before it waits; its gate blocks until the caller ends.
+    f.app.closed.cancelled().await;
+    delete.respond(200, "application/json", "", String::new());
+    let _ = held.await.unwrap();
+    closing.await.unwrap().unwrap();
+    let reopened = Application::open(
+        f._dir.path().to_string_lossy().into_owned(),
+        |_| Box::pin(async { CredentialReply::Missing }),
+        |_| Box::pin(async { PlatformReply::Ok }),
+    )
+    .await
+    .unwrap();
+    let [test] = reopened
+        .snapshot()
+        .await
+        .unwrap()
+        .connection_tests
+        .try_into()
+        .unwrap();
+    assert_eq!(test.tested_at_ms, 1_000);
+    reopened.close().await.unwrap();
+}
