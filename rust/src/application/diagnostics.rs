@@ -326,8 +326,11 @@ impl Application {
                 .map_err(|code| crate::failure::promote(code, detail.as_ref()))
                 .map_err(|code| (code, detail));
             // Stored before completion is signalled, so the reply's follow-up
-            // snapshot shows it and closing the app waits for the write.
-            if let Some(target) = tested {
+            // snapshot shows it and closing the app waits for the write. A
+            // test whose caller left, or whose app is closing, stores nothing
+            // even if it then finished: MCP teardown runs on its own token.
+            let wanted = !operation.cancel.is_cancelled();
+            if let Some(target) = tested.filter(|_| wanted) {
                 let at = connection_tests::unix_ms(clock());
                 if let Some(record) = connection_tests::record(&target, &result, at) {
                     let stored = tokio::task::spawn_blocking(move || {

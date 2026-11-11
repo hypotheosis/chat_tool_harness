@@ -1233,3 +1233,80 @@ async fn a_result_that_cannot_be_stored_fails_only_a_passing_test() {
     );
     f.app.close().await.unwrap();
 }
+
+/// Seeds a passing server result at 1 000 ms, then starts a second test at
+/// 2 000 ms that has listed its tools and waits on the session DELETE.
+async fn held_teardown(
+    f: &AppFixture,
+    wire: &mut Wire,
+) -> (
+    tokio::task::JoinHandle<CoreResult<AgentCommandReply>>,
+    Request,
+) {
+    f.set_clock(1_000);
+    let app = f.app.clone();
+    let command = f.discover();
+    let seeded = tokio::spawn(async move { app.command(command).await });
+    wire.initialize(false).await;
+    wire.list().await.rpc(tools(), false);
+    seeded.await.unwrap().unwrap();
+    f.set_clock(2_000);
+    let app = f.app.clone();
+    let command = f.discover();
+    let held = tokio::spawn(async move { app.command(command).await });
+    wire.initialize(true).await;
+    wire.list().await.rpc(tools(), true);
+    let delete = wire.next().await;
+    assert!(
+        delete.method.starts_with("DELETE /mcp "),
+        "{}",
+        delete.method
+    );
+    (held, delete)
+}
+
+#[tokio::test]
+async fn caller_gone_during_teardown_keeps_the_previous_result() {
+    let mut wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    let (held, delete) = held_teardown(&f, &mut wire).await;
+    let finished = f.app.diagnostic_finished.notified();
+    held.abort();
+    assert!(held.await.unwrap_err().is_cancelled());
+    // Teardown still completes, and successfully.
+    delete.respond(200, "application/json", "", String::new());
+    finished.await;
+    let [test] = f.connection_tests().await.try_into().unwrap();
+    assert_eq!(test.tested_at_ms, 1_000);
+    f.app.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn closing_during_teardown_keeps_the_previous_result() {
+    let mut wire = Wire::open().await;
+    let f = AppFixture::open(&wire.url).await;
+    let (held, delete) = held_teardown(&f, &mut wire).await;
+    let app = f.app.clone();
+    let closing = tokio::spawn(async move { app.close().await });
+    // close() cancels before it waits; its gate blocks until the caller ends.
+    f.app.closed.cancelled().await;
+    delete.respond(200, "application/json", "", String::new());
+    let _ = held.await.unwrap();
+    closing.await.unwrap().unwrap();
+    let reopened = Application::open(
+        f._dir.path().to_string_lossy().into_owned(),
+        |_| Box::pin(async { CredentialReply::Missing }),
+        |_| Box::pin(async { PlatformReply::Ok }),
+    )
+    .await
+    .unwrap();
+    let [test] = reopened
+        .snapshot()
+        .await
+        .unwrap()
+        .connection_tests
+        .try_into()
+        .unwrap();
+    assert_eq!(test.tested_at_ms, 1_000);
+    reopened.close().await.unwrap();
+}
