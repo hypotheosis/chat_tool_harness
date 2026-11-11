@@ -154,6 +154,16 @@ void main() {
               .having((e) => e.detail?.reason, 'reason', 'connection refused'),
         ),
       );
+      // The failed test is kept and reaches the app through the snapshot.
+      final kept = (await backend.snapshot()).connectionTests.single;
+      expect(kept.kind, ConnectionTestKind.discoverModels);
+      expect(kept.endpointId, endpoint);
+      expect(kept.failure?.code, FailureCode.unavailableTransport);
+      expect(kept.failure?.detail?.reason, 'connection refused');
+      expect(
+        DateTime.now().difference(kept.testedAt).inMinutes.abs(),
+        lessThan(5),
+      );
     } finally {
       await backend.close();
       await dir.delete(recursive: true);

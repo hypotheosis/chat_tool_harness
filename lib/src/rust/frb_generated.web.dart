@@ -99,6 +99,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AgentCommandReply dco_decode_agent_command_reply(dynamic raw);
 
   @protected
+  AgentConnectionTest dco_decode_agent_connection_test(dynamic raw);
+
+  @protected
   AgentContextSelection dco_decode_agent_context_selection(dynamic raw);
 
   @protected
@@ -249,6 +252,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int dco_decode_box_autoadd_u_16(dynamic raw);
 
   @protected
+  int dco_decode_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  ConnectionTestKind dco_decode_connection_test_kind(dynamic raw);
+
+  @protected
   ContextChoiceReason dco_decode_context_choice_reason(dynamic raw);
 
   @protected
@@ -285,6 +294,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AgentAttempt> dco_decode_list_agent_attempt(dynamic raw);
+
+  @protected
+  List<AgentConnectionTest> dco_decode_list_agent_connection_test(dynamic raw);
 
   @protected
   List<AgentConversation> dco_decode_list_agent_conversation(dynamic raw);
@@ -395,6 +407,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   int? dco_decode_opt_box_autoadd_u_16(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
 
   @protected
   PageStatus dco_decode_page_status(dynamic raw);
@@ -512,6 +527,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AgentCommandReply sse_decode_agent_command_reply(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentConnectionTest sse_decode_agent_connection_test(
     SseDeserializer deserializer,
   );
 
@@ -714,6 +734,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_box_autoadd_u_16(SseDeserializer deserializer);
 
   @protected
+  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  ConnectionTestKind sse_decode_connection_test_kind(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ContextChoiceReason sse_decode_context_choice_reason(
     SseDeserializer deserializer,
   );
@@ -754,6 +782,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AgentAttempt> sse_decode_list_agent_attempt(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<AgentConnectionTest> sse_decode_list_agent_connection_test(
     SseDeserializer deserializer,
   );
 
@@ -894,6 +927,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   int? sse_decode_opt_box_autoadd_u_16(SseDeserializer deserializer);
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
 
   @protected
   PageStatus sse_decode_page_status(SseDeserializer deserializer);
@@ -1037,6 +1073,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_agent_command_reply(
     AgentCommandReply self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_agent_connection_test(
+    AgentConnectionTest self,
     SseSerializer serializer,
   );
 
@@ -1293,6 +1335,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_connection_test_kind(
+    ConnectionTestKind self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_context_choice_reason(
     ContextChoiceReason self,
     SseSerializer serializer,
@@ -1343,6 +1394,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_agent_attempt(
     List<AgentAttempt> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_agent_connection_test(
+    List<AgentConnectionTest> self,
     SseSerializer serializer,
   );
 
@@ -1513,6 +1570,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
 
   @protected
   void sse_encode_page_status(PageStatus self, SseSerializer serializer);

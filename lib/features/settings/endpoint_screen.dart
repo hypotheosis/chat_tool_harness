@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'credential_editor.dart';
+import 'last_connection_test.dart';
 import '../../backend/backend.dart';
 import '../../backend/models.dart';
 import '../result_banner.dart';
@@ -86,6 +87,7 @@ class _EndpointScreenState extends State<EndpointScreen> {
     });
     final reply = await state.perform(
       probe ? ProbeEndpoint(id!) : DiscoverModels(id!),
+      refreshOnFailure: true,
     );
     if (!mounted || reply == null) return;
     setState(() {
@@ -93,21 +95,17 @@ class _EndpointScreenState extends State<EndpointScreen> {
     });
     state.succeed(
       probe
-          ? switch (reply.toolSupport) {
-              ToolSupport.supported =>
-                'Supported: structured tool calling verified.',
-              ToolSupport.unsupported =>
-                'Unsupported: choose Chat only explicitly in a profile. Profiles were not changed.',
-              _ =>
-                'Inconclusive: no verified structured tool call. Profiles were not changed.',
-            }
-          : switch (models.length) {
-              0 => 'No models available; enter the model ID manually.',
-              1 => '1 model available',
-              final n => '$n models available',
-            },
+          ? toolSupportText(reply.toolSupport)
+          : modelCountText(models.length),
     );
   }
+
+  /// The stored result of this endpoint's last [kind] test.
+  ConnectionTest? lastTest(ConnectionTestKind kind) => state
+      .snapshot
+      ?.connectionTests
+      .where((t) => t.endpointId == id && t.kind == kind)
+      .firstOrNull;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -168,6 +166,14 @@ class _EndpointScreenState extends State<EndpointScreen> {
                   child: const Text('Probe tool support'),
                 ),
               ],
+            ),
+            LastConnectionTest(
+              label: 'Model discovery',
+              test: lastTest(ConnectionTestKind.discoverModels),
+            ),
+            LastConnectionTest(
+              label: 'Tool support probe',
+              test: lastTest(ConnectionTestKind.probeTools),
             ),
             ResultBanner(state: state),
             for (final model in models)

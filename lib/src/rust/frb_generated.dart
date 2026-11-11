@@ -620,8 +620,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AgentAppSnapshot dco_decode_agent_app_snapshot(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
     return AgentAppSnapshot(
       artifacts: dco_decode_list_agent_artifact(arr[0]),
       retentionLimitBytes: dco_decode_u_64(arr[1]),
@@ -632,6 +632,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       conversations: dco_decode_list_agent_conversation(arr[6]),
       runs: dco_decode_list_agent_run(arr[7]),
       rules: dco_decode_list_agent_tool_rule(arr[8]),
+      connectionTests: dco_decode_list_agent_connection_test(arr[9]),
     );
   }
 
@@ -710,6 +711,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       discoveredRules: dco_decode_list_agent_tool_rule(arr[6]),
       id: dco_decode_opt_String(arr[7]),
       artifact: dco_decode_opt_box_autoadd_agent_artifact_content(arr[8]),
+    );
+  }
+
+  @protected
+  AgentConnectionTest dco_decode_agent_connection_test(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
+    return AgentConnectionTest(
+      kind: dco_decode_connection_test_kind(arr[0]),
+      endpointId: dco_decode_opt_String(arr[1]),
+      serverId: dco_decode_opt_String(arr[2]),
+      profileId: dco_decode_opt_String(arr[3]),
+      testedAtMs: dco_decode_i_64(arr[4]),
+      failureCode: dco_decode_opt_box_autoadd_core_error(arr[5]),
+      failureDetail: dco_decode_opt_box_autoadd_agent_failure_detail(arr[6]),
+      modelCount: dco_decode_opt_box_autoadd_u_32(arr[7]),
+      toolSupport: dco_decode_opt_box_autoadd_tool_support(arr[8]),
+      toolCount: dco_decode_opt_box_autoadd_u_32(arr[9]),
+      skippedTools: dco_decode_list_agent_skipped_tool(arr[10]),
     );
   }
 
@@ -1353,6 +1375,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int dco_decode_box_autoadd_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  ConnectionTestKind dco_decode_connection_test_kind(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return ConnectionTestKind.values[raw as int];
+  }
+
+  @protected
   ContextChoiceReason dco_decode_context_choice_reason(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return ContextChoiceReason.values[raw as int];
@@ -1435,6 +1469,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<AgentAttempt> dco_decode_list_agent_attempt(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_agent_attempt).toList();
+  }
+
+  @protected
+  List<AgentConnectionTest> dco_decode_list_agent_connection_test(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_agent_connection_test)
+        .toList();
   }
 
   @protected
@@ -1655,6 +1697,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   int? dco_decode_opt_box_autoadd_u_16(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_u_16(raw);
+  }
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_u_32(raw);
   }
 
   @protected
@@ -1917,6 +1965,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_conversations = sse_decode_list_agent_conversation(deserializer);
     var var_runs = sse_decode_list_agent_run(deserializer);
     var var_rules = sse_decode_list_agent_tool_rule(deserializer);
+    var var_connectionTests = sse_decode_list_agent_connection_test(
+      deserializer,
+    );
     return AgentAppSnapshot(
       artifacts: var_artifacts,
       retentionLimitBytes: var_retentionLimitBytes,
@@ -1927,6 +1978,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       conversations: var_conversations,
       runs: var_runs,
       rules: var_rules,
+      connectionTests: var_connectionTests,
     );
   }
 
@@ -2030,6 +2082,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       discoveredRules: var_discoveredRules,
       id: var_id,
       artifact: var_artifact,
+    );
+  }
+
+  @protected
+  AgentConnectionTest sse_decode_agent_connection_test(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_connection_test_kind(deserializer);
+    var var_endpointId = sse_decode_opt_String(deserializer);
+    var var_serverId = sse_decode_opt_String(deserializer);
+    var var_profileId = sse_decode_opt_String(deserializer);
+    var var_testedAtMs = sse_decode_i_64(deserializer);
+    var var_failureCode = sse_decode_opt_box_autoadd_core_error(deserializer);
+    var var_failureDetail = sse_decode_opt_box_autoadd_agent_failure_detail(
+      deserializer,
+    );
+    var var_modelCount = sse_decode_opt_box_autoadd_u_32(deserializer);
+    var var_toolSupport = sse_decode_opt_box_autoadd_tool_support(deserializer);
+    var var_toolCount = sse_decode_opt_box_autoadd_u_32(deserializer);
+    var var_skippedTools = sse_decode_list_agent_skipped_tool(deserializer);
+    return AgentConnectionTest(
+      kind: var_kind,
+      endpointId: var_endpointId,
+      serverId: var_serverId,
+      profileId: var_profileId,
+      testedAtMs: var_testedAtMs,
+      failureCode: var_failureCode,
+      failureDetail: var_failureDetail,
+      modelCount: var_modelCount,
+      toolSupport: var_toolSupport,
+      toolCount: var_toolCount,
+      skippedTools: var_skippedTools,
     );
   }
 
@@ -2822,6 +2907,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_u_32(deserializer));
+  }
+
+  @protected
+  ConnectionTestKind sse_decode_connection_test_kind(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return ConnectionTestKind.values[inner];
+  }
+
+  @protected
   ContextChoiceReason sse_decode_context_choice_reason(
     SseDeserializer deserializer,
   ) {
@@ -2937,6 +3037,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <AgentAttempt>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_agent_attempt(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AgentConnectionTest> sse_decode_list_agent_connection_test(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AgentConnectionTest>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_agent_connection_test(deserializer));
     }
     return ans_;
   }
@@ -3330,6 +3444,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_u_32(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   PageStatus sse_decode_page_status(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_i_32(deserializer);
@@ -3648,6 +3773,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_agent_conversation(self.conversations, serializer);
     sse_encode_list_agent_run(self.runs, serializer);
     sse_encode_list_agent_tool_rule(self.rules, serializer);
+    sse_encode_list_agent_connection_test(self.connectionTests, serializer);
   }
 
   @protected
@@ -3716,6 +3842,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       self.artifact,
       serializer,
     );
+  }
+
+  @protected
+  void sse_encode_agent_connection_test(
+    AgentConnectionTest self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_connection_test_kind(self.kind, serializer);
+    sse_encode_opt_String(self.endpointId, serializer);
+    sse_encode_opt_String(self.serverId, serializer);
+    sse_encode_opt_String(self.profileId, serializer);
+    sse_encode_i_64(self.testedAtMs, serializer);
+    sse_encode_opt_box_autoadd_core_error(self.failureCode, serializer);
+    sse_encode_opt_box_autoadd_agent_failure_detail(
+      self.failureDetail,
+      serializer,
+    );
+    sse_encode_opt_box_autoadd_u_32(self.modelCount, serializer);
+    sse_encode_opt_box_autoadd_tool_support(self.toolSupport, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.toolCount, serializer);
+    sse_encode_list_agent_skipped_tool(self.skippedTools, serializer);
   }
 
   @protected
@@ -4390,6 +4538,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self, serializer);
+  }
+
+  @protected
+  void sse_encode_connection_test_kind(
+    ConnectionTestKind self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
   void sse_encode_context_choice_reason(
     ContextChoiceReason self,
     SseSerializer serializer,
@@ -4497,6 +4660,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_agent_attempt(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_agent_connection_test(
+    List<AgentConnectionTest> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_agent_connection_test(item, serializer);
     }
   }
 
@@ -4864,6 +5039,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_u_16(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_u_32(self, serializer);
     }
   }
 

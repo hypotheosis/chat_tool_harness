@@ -195,6 +195,11 @@ FailureDetail _fromFailureDetail(g.AgentFailureDetail v) => FailureDetail(
 @visibleForTesting
 g.AppCommand bridgeCommand(AppCommand command) => _command(command);
 
+/// The app model for a bridge connection-test result.
+@visibleForTesting
+ConnectionTest connectionTestFromBridge(g.AgentConnectionTest test) =>
+    _fromConnectionTest(test);
+
 /// The app model for a bridge server configuration.
 @visibleForTesting
 ServerConfig serverFromBridge(g.AgentServerConfig server) =>
@@ -547,6 +552,35 @@ AppSnapshot _fromAppSnapshot(g.AgentAppSnapshot v) => AppSnapshot(
   conversations: v.conversations.map((v) => _fromConversation(v)).toList(),
   runs: v.runs.map((v) => _fromRun(v)).toList(),
   rules: v.rules.map((v) => _fromToolRule(v)).toList(),
+  connectionTests: v.connectionTests.map(_fromConnectionTest).toList(),
+);
+
+ConnectionTest _fromConnectionTest(g.AgentConnectionTest v) => ConnectionTest(
+  kind: switch (v.kind) {
+    g.ConnectionTestKind.discoverModels => ConnectionTestKind.discoverModels,
+    g.ConnectionTestKind.probeTools => ConnectionTestKind.probeTools,
+    g.ConnectionTestKind.discoverServer => ConnectionTestKind.discoverServer,
+  },
+  endpointId: v.endpointId,
+  serverId: v.serverId,
+  profileId: v.profileId,
+  testedAt: DateTime.fromMillisecondsSinceEpoch(
+    v.testedAtMs.toInt(),
+    isUtc: true,
+  ),
+  failure: switch (v.failureCode) {
+    null => null,
+    final code => BackendFailure(
+      _fromCoreError(code),
+      detail: v.failureDetail == null
+          ? null
+          : _fromFailureDetail(v.failureDetail!),
+    ),
+  },
+  modelCount: v.modelCount,
+  toolSupport: v.toolSupport == null ? null : _fromSupport(v.toolSupport!),
+  toolCount: v.toolCount,
+  skippedTools: [for (final t in v.skippedTools) SkippedTool(t.name, t.reason)],
 );
 
 AppEvent _fromAppEvent(g.AgentAppEvent v) =>

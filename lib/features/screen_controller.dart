@@ -201,9 +201,13 @@ class ScreenController extends ChangeNotifier {
     }
   }
 
+  /// Runs [command] and shows its failure. With [refreshOnFailure], a failed
+  /// command also reloads the snapshot (keeping the failure shown), for
+  /// commands that store state even when they fail, such as connection tests.
   Future<CommandReply?> perform(
     AppCommand command, {
     bool approval = false,
+    bool refreshOnFailure = false,
   }) async {
     if (_disposed || loading) return null;
     loading = true;
@@ -213,6 +217,14 @@ class ScreenController extends ChangeNotifier {
       return await session.execute(command);
     } catch (e) {
       _fail(e, approval: approval);
+      if (refreshOnFailure && !_disposed) {
+        try {
+          await session.refresh();
+        } catch (_) {
+          // The command's failure stays shown; the previous snapshot remains
+          // until the next successful load.
+        }
+      }
       return null;
     } finally {
       loading = false;

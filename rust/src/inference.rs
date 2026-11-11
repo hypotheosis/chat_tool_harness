@@ -215,7 +215,7 @@ pub enum InferenceEvent {
     WarningChatOnly,
 }
 /// Mandatory diagnostic for endpoint capability UI; never infer support from event delivery.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ToolSupport {
     Supported,
     Unsupported,

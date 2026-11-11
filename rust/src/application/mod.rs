@@ -1,3 +1,4 @@
+mod connection_tests;
 mod diagnostics;
 pub mod dto;
 mod mapping;
@@ -89,6 +90,9 @@ pub struct Application {
     registry_hook: std::sync::Mutex<Option<crate::mcp::RegistryHook>>,
     #[cfg(test)]
     diagnostic_finished: Arc<tokio::sync::Notify>,
+    /// Replaces the wall clock that dates connection tests.
+    #[cfg(test)]
+    test_clock: std::sync::Mutex<Option<std::time::SystemTime>>,
     repository: Repository,
     artifacts: ArtifactStore,
     coordinator: Coordinator,
@@ -135,6 +139,8 @@ impl Application {
             registry_hook: std::sync::Mutex::new(None),
             #[cfg(test)]
             diagnostic_finished: Arc::new(tokio::sync::Notify::new()),
+            #[cfg(test)]
+            test_clock: std::sync::Mutex::new(None),
             artifacts,
             credentials,
             repository,
@@ -574,7 +580,10 @@ impl Application {
             .into_iter()
             .map(Into::into)
             .collect();
+        let repo = self.repository.clone();
+        let connection_tests = blocking(move || connection_tests::all(&repo)).await?;
         Ok(AgentAppSnapshot {
+            connection_tests,
             artifacts,
             retention_limit_bytes: RETENTION_BYTES,
             sequence,

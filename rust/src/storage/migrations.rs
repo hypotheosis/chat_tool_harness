@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Error as SqlError, Result as SqlResult};
 
-const VERSION: i64 = 9;
+const VERSION: i64 = 10;
 
 pub fn apply(connection: &mut Connection) -> SqlResult<()> {
     let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
@@ -34,6 +34,9 @@ pub fn apply(connection: &mut Connection) -> SqlResult<()> {
     if version < 9 {
         migrate_v9(connection)?;
     }
+    if version < 10 {
+        migrate_v10(connection)?;
+    }
     Ok(())
 }
 
@@ -65,6 +68,34 @@ pub(crate) fn migrate_v1_for_test(connection: &mut Connection) -> SqlResult<()> 
 #[cfg(test)]
 pub(crate) fn migrate_v2_for_test(connection: &mut Connection) -> SqlResult<()> {
     migrate_v2(connection)
+}
+
+#[cfg(test)]
+pub(crate) fn migrate_v9_for_test(connection: &mut Connection) -> SqlResult<()> {
+    migrate_v7_for_test(connection)?;
+    migrate_v8(connection)?;
+    migrate_v9(connection)
+}
+
+fn migrate_v10(connection: &mut Connection) -> SqlResult<()> {
+    let tx = connection.transaction()?;
+    // The last result of each connection test: one per endpoint and test kind,
+    // one per MCP server. Like trusted_servers, a future endpoint or server
+    // delete must remove these rows first.
+    tx.execute_batch(
+        "CREATE TABLE endpoint_tests (
+            endpoint_id TEXT NOT NULL REFERENCES endpoints(id),
+            kind TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            PRIMARY KEY(endpoint_id, kind)
+        );
+        CREATE TABLE server_tests (
+            server_id TEXT PRIMARY KEY REFERENCES servers(id),
+            payload TEXT NOT NULL
+        );
+        PRAGMA user_version = 10;",
+    )?;
+    tx.commit()
 }
 
 fn migrate_v9(connection: &mut Connection) -> SqlResult<()> {

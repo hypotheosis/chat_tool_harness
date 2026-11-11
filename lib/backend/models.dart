@@ -424,6 +424,7 @@ class AppSnapshot {
     this.rules = const [],
     this.artifacts = const [],
     this.retentionLimitBytes = 268435456,
+    this.connectionTests = const [],
   });
   final int sequence;
   final List<EndpointConfig> endpoints;
@@ -434,6 +435,42 @@ class AppSnapshot {
   final List<ToolRule> rules;
   final List<ArtifactSummary> artifacts;
   final int retentionLimitBytes;
+
+  /// The last result of each connection test.
+  final List<ConnectionTest> connectionTests;
+}
+
+enum ConnectionTestKind { discoverModels, probeTools, discoverServer }
+
+/// The last finished connection test of one endpoint and kind, or of one MCP
+/// server, kept by the backend until the next test replaces it.
+class ConnectionTest {
+  const ConnectionTest({
+    required this.kind,
+    this.endpointId,
+    this.serverId,
+    this.profileId,
+    required this.testedAt,
+    this.failure,
+    this.modelCount,
+    this.toolSupport,
+    this.toolCount,
+    this.skippedTools = const [],
+  });
+  final ConnectionTestKind kind;
+  final String? endpointId;
+  final String? serverId;
+
+  /// The profile a server was tested through.
+  final String? profileId;
+  final DateTime testedAt;
+
+  /// Set when the test failed; the outcome fields are then empty.
+  final BackendFailure? failure;
+  final int? modelCount;
+  final ToolSupport? toolSupport;
+  final int? toolCount;
+  final List<SkippedTool> skippedTools;
 }
 
 class AppEvent {
