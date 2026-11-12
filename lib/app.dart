@@ -5,6 +5,7 @@ import 'backend/engine_lifecycle.dart';
 import 'backend/models.dart';
 import 'features/screen_controller.dart';
 import 'features/chat/chat_screen.dart';
+import 'features/conversation_delete.dart';
 import 'features/settings/endpoint_screen.dart';
 import 'features/settings/server_screen.dart';
 import 'features/profiles/profile_screen.dart';
@@ -111,6 +112,63 @@ class _HomeState extends State<_Home> {
     }
   }
 
+  /// Offers Delete for [c], or Stop and wait while it has active work.
+  Future<void> actions(Conversation c) async {
+    final runs = state.snapshot?.runs ?? const <Run>[];
+    final active = runsToStop(runs, c.id);
+    final action = await showModalBottomSheet<void Function()>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(title: Text(c.profile.name), subtitle: Text(c.id)),
+            if (active.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.stop),
+                title: const Text('Stop and wait'),
+                onTap: () => Navigator.pop(context, () => stop(active)),
+              ),
+            ListTile(
+              leading: const Icon(Icons.delete),
+              title: const Text('Delete'),
+              subtitle: active.isEmpty
+                  ? null
+                  : const Text('Stop active work and wait before deletion.'),
+              // Deletion waits until active work has stopped.
+              enabled: active.isEmpty,
+              onTap: () => Navigator.pop(context, () => delete(c.id)),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (mounted) action?.call();
+  }
+
+  /// Stops [runs], waiting for each to tear down locally; stops at the first
+  /// failure.
+  Future<void> stop(List<Run> runs) async {
+    for (final run in runs) {
+      if (await state.perform(CancelRun(run.id)) == null) return;
+    }
+  }
+
+  Future<void> delete(String id) async {
+    // Read before the dialog, so the warning matches what is confirmed.
+    final unknown = hasUnknownOutcomes(
+      state.snapshot?.runs ?? const <Run>[],
+      id,
+    );
+    final confirmed = await confirmDeleteConversation(
+      context,
+      unknownOutcomes: unknown,
+    );
+    if (mounted && confirmed) {
+      await state.perform(DeleteConversation(id, confirmedUnknown: unknown));
+    }
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: state,
@@ -165,6 +223,12 @@ class _HomeState extends State<_Home> {
                 title: Text(c.profile.name),
                 subtitle: Text('${c.id}\n${c.profile.mode.name}'),
                 isThreeLine: true,
+                onLongPress: state.loading ? null : () => actions(c),
+                trailing: IconButton(
+                  tooltip: 'Conversation actions',
+                  icon: const Icon(Icons.more_vert),
+                  onPressed: state.loading ? null : () => actions(c),
+                ),
                 onTap: () => open(
                   ChatScreen(
                     backend: widget.backend,

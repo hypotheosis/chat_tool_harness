@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../backend/backend.dart';
 import '../../backend/models.dart';
+import '../conversation_delete.dart';
 import '../files/file_controller.dart';
 import '../files/file_panel.dart';
 import '../profiles/profile_screen.dart';
@@ -172,6 +173,20 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
     if (stop == true) await state.stop(run.id);
+  }
+
+  /// Confirms, deletes this conversation and leaves the screen once deleted.
+  Future<void> delete() async {
+    // Read before the dialog, so the warning matches what is confirmed.
+    final unknown = state.unknownOutcomes;
+    final confirmed = await confirmDeleteConversation(
+      context,
+      unknownOutcomes: unknown,
+    );
+    if (!mounted || !confirmed) return;
+    if (await state.delete(confirmedUnknown: unknown) && mounted) {
+      Navigator.pop(context);
+    }
   }
 
   Future<void> open(Widget screen) async {
@@ -796,6 +811,26 @@ class _ChatScreenState extends State<ChatScreen> {
               tooltip: 'Refresh',
               icon: const Icon(Icons.refresh),
             ),
+            if (c != null)
+              PopupMenuButton<void Function()>(
+                key: const Key('chat-more'),
+                tooltip: 'More',
+                enabled: !state.loading,
+                onSelected: (action) => action(),
+                itemBuilder: (_) => [
+                  if (state.needsStop)
+                    PopupMenuItem(
+                      value: state.stopAndWait,
+                      child: const Text('Stop and wait'),
+                    ),
+                  PopupMenuItem(
+                    // Deletion waits until active work has stopped.
+                    enabled: !state.needsStop,
+                    value: delete,
+                    child: const Text('Delete conversation'),
+                  ),
+                ],
+              ),
           ],
         ),
         body: LayoutBuilder(

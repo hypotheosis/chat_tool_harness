@@ -1,4 +1,5 @@
 import '../../backend/models.dart';
+import '../conversation_delete.dart';
 import '../screen_controller.dart';
 
 class ChatController extends ScreenController {
@@ -50,6 +51,32 @@ class ChatController extends ScreenController {
   Future<void> resume(String runId) async {
     await perform(ResumeRun(runId));
   }
+
+  /// Whether work must be stopped before this conversation can be deleted.
+  bool get needsStop =>
+      runsToStop(snapshot?.runs ?? const <Run>[], conversationId).isNotEmpty;
+
+  /// Whether deletion must confirm tool calls with unknown outcomes.
+  bool get unknownOutcomes =>
+      hasUnknownOutcomes(snapshot?.runs ?? const <Run>[], conversationId);
+
+  /// Stops every active run of this conversation, waiting for each to tear
+  /// down locally; stops at the first failure.
+  Future<void> stopAndWait() async {
+    for (final run in runsToStop(
+      snapshot?.runs ?? const <Run>[],
+      conversationId,
+    )) {
+      if (await perform(CancelRun(run.id)) == null) return;
+    }
+  }
+
+  /// Deletes this conversation permanently; true when the backend did.
+  Future<bool> delete({required bool confirmedUnknown}) async =>
+      await perform(
+        DeleteConversation(conversationId, confirmedUnknown: confirmedUnknown),
+      ) !=
+      null;
 
   /// Returns this archived conversation to the Conversations list, so it
   /// accepts new work again.
