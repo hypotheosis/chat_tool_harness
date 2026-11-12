@@ -172,18 +172,22 @@ impl Application {
         let id = match command {
             AppCommand::SearchConversations {
                 query,
+                archived_only,
                 offset,
                 limit,
             } => {
-                history = blocking(move || repo.search_conversations(&query, offset, limit))
-                    .await?
-                    .into_iter()
-                    .map(|v| AgentConversationSummary {
-                        id: v.id.0.to_string(),
-                        title: v.title,
-                        has_unknown_outcomes: v.has_unknown_outcomes,
-                    })
-                    .collect();
+                history = blocking(move || {
+                    repo.search_conversations(&query, archived_only, offset, limit)
+                })
+                .await?
+                .into_iter()
+                .map(|v| AgentConversationSummary {
+                    id: v.id.0.to_string(),
+                    title: v.title,
+                    has_unknown_outcomes: v.has_unknown_outcomes,
+                    archived: v.archived,
+                })
+                .collect();
                 None
             }
             AppCommand::RenameConversation {
@@ -206,6 +210,18 @@ impl Application {
                         core::ConversationId(uuid(&conversation_id)?),
                         confirmed_unknown,
                     )
+                    .await?;
+                None
+            }
+            AppCommand::ArchiveConversation { conversation_id } => {
+                self.coordinator
+                    .set_archived(core::ConversationId(uuid(&conversation_id)?), true)
+                    .await?;
+                None
+            }
+            AppCommand::RestoreConversation { conversation_id } => {
+                self.coordinator
+                    .set_archived(core::ConversationId(uuid(&conversation_id)?), false)
                     .await?;
                 None
             }
@@ -710,8 +726,8 @@ fn configuration_snapshot(repo: &Repository) -> CoreResult<ConfigSnapshot> {
             Ok(AgentServerConfig { trusted, ..config.into() })
         }).collect::<CoreResult<Vec<_>>>()?;
         let profiles=values::<core::Profile>(conn,"SELECT payload FROM profiles ORDER BY rowid")?.into_iter().map(Into::into).collect();
-        let mut stmt=conn.prepare("SELECT id FROM conversations ORDER BY rowid").map_err(|_|CoreError::Storage)?;
-        let ids=stmt.query_map([],|r|r.get::<_,String>(0)).map_err(|_|CoreError::Storage)?.map(|r|r.map_err(|_|CoreError::Storage)).collect::<CoreResult<Vec<_>>>()?;
+        let mut stmt=conn.prepare("SELECT id,archived FROM conversations ORDER BY rowid").map_err(|_|CoreError::Storage)?;
+        let ids=stmt.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,bool>(1)?))).map_err(|_|CoreError::Storage)?.map(|r|r.map_err(|_|CoreError::Storage)).collect::<CoreResult<Vec<_>>>()?;
         let mut stmt=conn.prepare("SELECT o.profile_id,o.server_key,o.tool_name,o.schema_json,o.schema_digest,o.destination_digest,CASE WHEN r.definition_digest=o.definition_digest THEN coalesce(r.rule,'Ask') ELSE 'Ask' END FROM observed_tool_definitions o LEFT JOIN tool_permission_rules r ON r.profile_id=o.profile_id AND r.server_key=o.server_key AND r.tool_name=o.tool_name ORDER BY o.rowid").map_err(|_|CoreError::Storage)?;
         let rules=stmt.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,String>(5)?,r.get::<_,String>(6)?))).map_err(|_|CoreError::Storage)?.map(|row| {
             let (profile,server,name,schema_json,schema_digest,destination_digest,rule)=row.map_err(|_|CoreError::Storage)?;
@@ -721,7 +737,7 @@ fn configuration_snapshot(repo: &Repository) -> CoreResult<ConfigSnapshot> {
     })?;
     let conversations = ids
         .into_iter()
-        .map(|id| {
+        .map(|(id, archived)| {
             let snapshot = repo.conversation(core::ConversationId(uuid(&id)?))?;
             // A misconfigured endpoint has no origin, so nothing can be acknowledged for it.
             let acknowledged =
@@ -729,7 +745,7 @@ fn configuration_snapshot(repo: &Repository) -> CoreResult<ConfigSnapshot> {
                     Ok(origin) => crate::agent::origin_acknowledged(repo, &origin)?,
                     Err(_) => false,
                 };
-            Ok(AgentConversation::new(snapshot, acknowledged))
+            Ok(AgentConversation::new(snapshot, acknowledged, archived))
         })
         .collect::<CoreResult<_>>()?;
     Ok((sequence, endpoints, servers, profiles, conversations, rules))

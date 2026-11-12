@@ -182,4 +182,103 @@ void main() {
       }
     },
   );
+  testWidgets(
+    'real bridge archive keeps history and refuses turns until restored',
+    (tester) async {
+      final dir = await Directory.systemTemp.createTemp('issue8-archive-');
+      final services = PlatformServices(
+        resolveCredential: (_) async => null,
+        setServiceActive: (r) async {
+          if (r.active) throw StateError('fixture refuses network admission');
+        },
+      );
+      var b = await FrbBackend.open(dir.path, services);
+      try {
+        Future<String> id() async => (await b.execute(const NewId())).id!;
+        final endpoint = await id(), profile = await id();
+        await b.execute(
+          SaveEndpoint(
+            EndpointConfig(
+              id: endpoint,
+              name: 'endpoint',
+              baseUrl: 'https://never-contact.invalid/v1',
+              model: 'manual',
+              contextTokens: 4096,
+              maxOutputTokens: 128,
+              temperature: 0,
+              allowHttp: false,
+            ),
+          ),
+        );
+        await b.execute(
+          SaveProfile(
+            Profile(
+              id: profile,
+              name: 'fixture',
+              endpointId: endpoint,
+              serverIds: const [],
+              instructions: '',
+              limits: const RunLimits(),
+              mode: ProfileMode.chatOnly,
+            ),
+          ),
+        );
+        final owner = (await b.execute(CreateConversation(profile))).id!;
+        await b.execute(RenameConversation(owner, 'Archived 東京'));
+        final file = (await b.execute(
+          CreateArtifact(owner, 'kept.txt', 'kept'),
+        )).id!;
+        await b.execute(ArchiveConversation(owner));
+        await b.close();
+        // The archived flag survives a reopen, across snapshot and search.
+        b = await FrbBackend.open(dir.path, services);
+        expect(
+          (await b.snapshot()).conversations
+              .singleWhere((c) => c.id == owner)
+              .archived,
+          isTrue,
+        );
+        final found = (await b.execute(
+          const SearchConversations('東京'),
+        )).history.single;
+        expect((found.id, found.archived), (owner, true));
+        expect(
+          (await b.execute(
+            const SearchConversations('', archivedOnly: true),
+          )).history.single.id,
+          owner,
+        );
+        expect(
+          (await b.execute(ReadArtifact(owner, file))).artifact!.text,
+          'kept',
+        );
+        await expectLater(
+          b.execute(StartTurn(owner, 'refused')),
+          throwsA(
+            isA<BackendFailure>().having(
+              (e) => e.code,
+              'archived',
+              FailureCode.conflict,
+            ),
+          ),
+        );
+        await b.execute(RestoreConversation(owner));
+        expect(
+          (await b.execute(
+            const SearchConversations('', archivedOnly: true),
+          )).history,
+          isEmpty,
+        );
+        expect(
+          (await b.snapshot()).conversations
+              .singleWhere((c) => c.id == owner)
+              .archived,
+          isFalse,
+        );
+      } finally {
+        await b.close();
+        await dir.delete(recursive: true);
+      }
+    },
+  );
 }

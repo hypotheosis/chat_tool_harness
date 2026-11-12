@@ -54,7 +54,10 @@ fn history_search_titles_and_messages_only() {
         .create(owner, "excluded.txt", "attachment-only")
         .unwrap();
     for q in ["'", "%", "_", "東京"] {
-        assert_eq!(repo.search_conversations(q, 0, 100).unwrap().len(), 1);
+        assert_eq!(
+            repo.search_conversations(q, false, 0, 100).unwrap().len(),
+            1
+        );
     }
     for q in [
         "attachment-only",
@@ -62,17 +65,23 @@ fn history_search_titles_and_messages_only() {
         "private-config",
         "' OR 1=1 --",
     ] {
-        assert!(repo.search_conversations(q, 0, 100).unwrap().is_empty());
+        assert!(repo
+            .search_conversations(q, false, 0, 100)
+            .unwrap()
+            .is_empty());
     }
     for _ in 0..101 {
         repo.create_conversation(profile).unwrap();
     }
-    let first = repo.search_conversations("", 0, u32::MAX).unwrap();
-    let second = repo.search_conversations("", 100, 100).unwrap();
+    let first = repo.search_conversations("", false, 0, u32::MAX).unwrap();
+    let second = repo.search_conversations("", false, 100, 100).unwrap();
     assert_eq!(first.len(), 100);
     assert_eq!(second.len(), 2);
     assert!(!first.iter().any(|a| second.iter().any(|b| a.id == b.id)));
-    assert!(repo.search_conversations("", 0, 0).unwrap().is_empty());
+    assert!(repo
+        .search_conversations("", false, 0, 0)
+        .unwrap()
+        .is_empty());
 }
 #[test]
 fn rename_persists() {
@@ -81,7 +90,10 @@ fn rename_persists() {
     assert!(repo.rename_conversation(owner, "  ").is_err());
     let reopened = Repository::open(&dir.path().join("db")).unwrap();
     assert_eq!(
-        reopened.search_conversations("Renamed", 0, 1).unwrap()[0].title,
+        reopened
+            .search_conversations("Renamed", false, 0, 1)
+            .unwrap()[0]
+            .title,
         "Renamed 東京 %"
     );
 }
@@ -156,7 +168,10 @@ fn history_delete_fault_rolls_back_and_crash_reconciles() {
     ArtifactStore::open(repo.clone(), &dir.path().join("artifacts")).unwrap();
     assert!(!tombstone.exists());
     assert!(unrelated.exists());
-    assert!(repo.search_conversations("", 0, 100).unwrap().is_empty());
+    assert!(repo
+        .search_conversations("", false, 0, 100)
+        .unwrap()
+        .is_empty());
 }
 #[tokio::test]
 async fn history_export_limit_keeps_history_and_creates_no_artifact() {
@@ -291,7 +306,7 @@ async fn export_never_includes_configured_secrets() {
         Err(CoreError::Authentication)
     ));
     assert_eq!(store.all().unwrap().len(), before);
-    assert!(repo.search_conversations("echoed", 0, 100).is_ok());
+    assert!(repo.search_conversations("echoed", false, 0, 100).is_ok());
     assert!(repo.conversation(owner).is_ok());
 }
 #[tokio::test]
@@ -530,7 +545,10 @@ async fn history_b1_redaction_bounds_fail_closed_without_artifact_or_history_cha
                 .content,
             original
         );
-        assert_eq!(repo.search_conversations("", 0, 100).unwrap().len(), 1);
+        assert_eq!(
+            repo.search_conversations("", false, 0, 100).unwrap().len(),
+            1
+        );
     }
 }
 
@@ -667,6 +685,123 @@ fn history_export_queries_stream_from_indexes() {
                 .iter()
                 .all(|d| d.starts_with("SEARCH") && !d.contains("TEMP B-TREE")),
             "{sql} is not streamed from an index: {detail:?}"
+        );
+    }
+}
+fn events(repo: &Repository, owner: ConversationId) -> Vec<String> {
+    repo.with_connection(move |c| {
+        let mut stmt = c
+            .prepare("SELECT payload FROM events WHERE conversation_id=?1 ORDER BY id")
+            .unwrap();
+        let rows = stmt
+            .query_map([id(owner)], |r| r.get::<_, String>(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        Ok(rows)
+    })
+    .unwrap()
+}
+#[test]
+fn archive_keeps_history_searchable_and_restore_clears_it() {
+    let (_dir, repo, profile, owner, store) = fixture();
+    let other = repo.create_conversation(profile).unwrap();
+    message(&repo, owner, "user", "archived needle");
+    let file = store.create(owner, "kept.txt", "kept").unwrap();
+    let run = RunId::new();
+    repo.insert_run_for_test(run, owner, RunState::Completed)
+        .unwrap();
+    repo.set_conversation_archived(owner, true).unwrap();
+
+    // Still found by default search, marked, and kept with everything it owns.
+    let found = repo.search_conversations("needle", false, 0, 100).unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].id, owner);
+    assert!(found[0].archived);
+    let all = repo.search_conversations("", false, 0, 100).unwrap();
+    assert_eq!(
+        all.iter().map(|s| (s.id, s.archived)).collect::<Vec<_>>(),
+        [(owner, true), (other, false)]
+    );
+    let archived = repo.search_conversations("", true, 0, 100).unwrap();
+    assert_eq!(archived.iter().map(|s| s.id).collect::<Vec<_>>(), [owner]);
+    assert_eq!(repo.conversation(owner).unwrap().messages.len(), 1);
+    assert_eq!(store.read(owner, file.id).unwrap().1, "kept");
+    let runs: i64 = repo
+        .with_connection(move |c| {
+            Ok(c.query_row(
+                "SELECT count(*) FROM runs WHERE conversation_id=?1",
+                [id(owner)],
+                |r| r.get(0),
+            )
+            .unwrap())
+        })
+        .unwrap();
+    assert_eq!(runs, 1);
+
+    repo.set_conversation_archived(owner, false).unwrap();
+    assert!(repo
+        .search_conversations("", true, 0, 100)
+        .unwrap()
+        .is_empty());
+    assert!(!repo.search_conversations("needle", false, 0, 100).unwrap()[0].archived);
+    assert_eq!(
+        events(&repo, owner)
+            .into_iter()
+            .filter(|e| e.starts_with("conversation-"))
+            .collect::<Vec<_>>(),
+        ["conversation-archived", "conversation-restored"]
+    );
+}
+#[test]
+fn archive_is_refused_while_a_run_is_running_and_repeats_change_nothing() {
+    let (_dir, repo, _, owner, _store) = fixture();
+    let run = RunId::new();
+    repo.insert_run_for_test(run, owner, RunState::Running)
+        .unwrap();
+    assert_eq!(
+        repo.set_conversation_archived(owner, true),
+        Err(CoreError::Conflict)
+    );
+    assert!(repo
+        .search_conversations("", true, 0, 100)
+        .unwrap()
+        .is_empty());
+    repo.with_connection(move |c| {
+        c.execute("UPDATE runs SET state='Cancelled' WHERE id=?1", [id(run)])
+            .unwrap();
+        Ok(())
+    })
+    .unwrap();
+    // Unknown tool outcomes need no confirmation: archiving keeps the record.
+    repo.insert_attempt_for_test(AttemptId::new(), run, AttemptState::OutcomeUnknown)
+        .unwrap();
+    let before = events(&repo, owner).len();
+    repo.set_conversation_archived(owner, true).unwrap();
+    repo.set_conversation_archived(owner, true).unwrap();
+    assert_eq!(events(&repo, owner).len(), before + 1);
+    repo.set_conversation_archived(owner, false).unwrap();
+    repo.set_conversation_archived(owner, false).unwrap();
+    assert_eq!(events(&repo, owner).len(), before + 2);
+}
+#[test]
+fn archive_is_allowed_while_a_run_waits_for_approval() {
+    let (_dir, repo, _, owner, _store) = fixture();
+    repo.insert_run_for_test(RunId::new(), owner, RunState::WaitingApproval)
+        .unwrap();
+    repo.set_conversation_archived(owner, true).unwrap();
+    assert_eq!(
+        repo.search_conversations("", true, 0, 100).unwrap().len(),
+        1
+    );
+}
+#[test]
+fn archive_of_missing_conversation_is_a_conflict() {
+    let (_dir, repo, _, _, _) = fixture();
+    for archived in [true, false] {
+        assert_eq!(
+            repo.set_conversation_archived(ConversationId::new(), archived),
+            Err(CoreError::Conflict)
         );
     }
 }

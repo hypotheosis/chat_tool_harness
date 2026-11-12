@@ -415,6 +415,9 @@ class AgentConversation {
   final String id;
   final AgentProfileSnapshot profile;
 
+  /// Left out of the Conversations list and refused new work until restored.
+  final bool archived;
+
   /// Whether the app has acknowledged disclosure for `profile.inference_origin`.
   final bool originAcknowledged;
   final List<AgentMessage> messages;
@@ -423,6 +426,7 @@ class AgentConversation {
   const AgentConversation({
     required this.id,
     required this.profile,
+    required this.archived,
     required this.originAcknowledged,
     required this.messages,
     required this.summaries,
@@ -432,6 +436,7 @@ class AgentConversation {
   int get hashCode =>
       id.hashCode ^
       profile.hashCode ^
+      archived.hashCode ^
       originAcknowledged.hashCode ^
       messages.hashCode ^
       summaries.hashCode;
@@ -443,6 +448,7 @@ class AgentConversation {
           runtimeType == other.runtimeType &&
           id == other.id &&
           profile == other.profile &&
+          archived == other.archived &&
           originAcknowledged == other.originAcknowledged &&
           messages == other.messages &&
           summaries == other.summaries;
@@ -452,16 +458,21 @@ class AgentConversationSummary {
   final String id;
   final String title;
   final bool hasUnknownOutcomes;
+  final bool archived;
 
   const AgentConversationSummary({
     required this.id,
     required this.title,
     required this.hasUnknownOutcomes,
+    required this.archived,
   });
 
   @override
   int get hashCode =>
-      id.hashCode ^ title.hashCode ^ hasUnknownOutcomes.hashCode;
+      id.hashCode ^
+      title.hashCode ^
+      hasUnknownOutcomes.hashCode ^
+      archived.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -470,7 +481,8 @@ class AgentConversationSummary {
           runtimeType == other.runtimeType &&
           id == other.id &&
           title == other.title &&
-          hasUnknownOutcomes == other.hasUnknownOutcomes;
+          hasUnknownOutcomes == other.hasUnknownOutcomes &&
+          archived == other.archived;
 }
 
 class AgentDerivedContext {
@@ -1135,8 +1147,11 @@ class AgentToolRule {
 sealed class AppCommand with _$AppCommand {
   const AppCommand._();
 
+  /// Archived conversations are included and marked; `archived_only` keeps
+  /// just those.
   const factory AppCommand.searchConversations({
     required String query,
+    required bool archivedOnly,
     required int offset,
     required int limit,
   }) = AppCommand_SearchConversations;
@@ -1148,6 +1163,17 @@ sealed class AppCommand with _$AppCommand {
     required String conversationId,
     required bool confirmedUnknown,
   }) = AppCommand_DeleteConversation;
+
+  /// Hides a conversation from the Conversations list, keeping its messages,
+  /// files and run history. A Conflict while it has active work.
+  const factory AppCommand.archiveConversation({
+    required String conversationId,
+  }) = AppCommand_ArchiveConversation;
+
+  /// Returns an archived conversation to the Conversations list.
+  const factory AppCommand.restoreConversation({
+    required String conversationId,
+  }) = AppCommand_RestoreConversation;
   const factory AppCommand.exportTranscript({
     required String conversationId,
     required bool includeToolPayloads,

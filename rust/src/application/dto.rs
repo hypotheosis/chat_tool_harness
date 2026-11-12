@@ -167,6 +167,8 @@ pub struct AgentRun {
 pub struct AgentConversation {
     pub id: String,
     pub profile: AgentProfileSnapshot,
+    /// Left out of the Conversations list and refused new work until restored.
+    pub archived: bool,
     /// Whether the app has acknowledged disclosure for `profile.inference_origin`.
     pub origin_acknowledged: bool,
     pub messages: Vec<AgentMessage>,
@@ -269,6 +271,7 @@ pub struct AgentConversationSummary {
     pub id: String,
     pub title: String,
     pub has_unknown_outcomes: bool,
+    pub archived: bool,
 }
 #[derive(Debug, Clone)]
 pub struct AgentExportBundle {
@@ -276,8 +279,11 @@ pub struct AgentExportBundle {
 }
 #[derive(Debug, Clone)]
 pub enum AppCommand {
+    /// Archived conversations are included and marked; `archived_only` keeps
+    /// just those.
     SearchConversations {
         query: String,
+        archived_only: bool,
         offset: u32,
         limit: u32,
     },
@@ -288,6 +294,15 @@ pub enum AppCommand {
     DeleteConversation {
         conversation_id: String,
         confirmed_unknown: bool,
+    },
+    /// Hides a conversation from the Conversations list, keeping its messages,
+    /// files and run history. A Conflict while it has active work.
+    ArchiveConversation {
+        conversation_id: String,
+    },
+    /// Returns an archived conversation to the Conversations list.
+    RestoreConversation {
+        conversation_id: String,
     },
     ExportTranscript {
         conversation_id: String,

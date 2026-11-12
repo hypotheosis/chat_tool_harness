@@ -388,11 +388,16 @@ class Conversation {
     required this.messages,
     required this.summaries,
     this.originAcknowledged = false,
+    this.archived = false,
   });
   final String id;
   final ProfileSnapshot profile;
   final List<Message> messages;
   final List<DerivedContext> summaries;
+
+  /// Left out of the Conversations list; the backend refuses new turns,
+  /// retries, summaries and resumes until it is restored.
+  final bool archived;
 
   /// Whether disclosure was acknowledged, app-wide, for `profile.inferenceOrigin`.
   final bool originAcknowledged;

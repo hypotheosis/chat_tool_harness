@@ -69,4 +69,21 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Add endpoint'), findsOneWidget);
   });
+  testWidgets('home_leaves_out_archived_conversations', (t) async {
+    final b = UiBackend()..setConversation(archived: true);
+    await t.pumpWidget(AgentApp(backend: b));
+    await t.pumpAndSettle();
+    expect(find.textContaining('Old profile'), findsNothing);
+    expect(
+      find.textContaining('All conversations are archived'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('No conversations'), findsNothing);
+    b.setConversation(archived: false);
+    b.emit(const AppEvent(sequence: 1, conversationId: 'c'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('Old profile'), findsOneWidget);
+    expect(find.textContaining('All conversations are archived'), findsNothing);
+    await t.pumpWidget(const SizedBox());
+  });
 }

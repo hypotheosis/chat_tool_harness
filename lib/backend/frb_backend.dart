@@ -229,6 +229,7 @@ g.AppCommand _command(AppCommand command) => switch (command) {
   ),
   SearchConversations() => g.AppCommand.searchConversations(
     query: command.query,
+    archivedOnly: command.archivedOnly,
     offset: bridgeUnsigned(BigInt.from(command.offset), 32).toInt(),
     limit: bridgeUnsigned(BigInt.from(command.limit), 32).toInt(),
   ),
@@ -239,6 +240,12 @@ g.AppCommand _command(AppCommand command) => switch (command) {
   DeleteConversation() => g.AppCommand.deleteConversation(
     conversationId: command.conversationId,
     confirmedUnknown: command.confirmedUnknown,
+  ),
+  ArchiveConversation() => g.AppCommand.archiveConversation(
+    conversationId: command.conversationId,
+  ),
+  RestoreConversation() => g.AppCommand.restoreConversation(
+    conversationId: command.conversationId,
   ),
   ExportTranscript() => g.AppCommand.exportTranscript(
     conversationId: command.conversationId,
@@ -532,6 +539,7 @@ Conversation _fromConversation(g.AgentConversation v) => Conversation(
   messages: v.messages.map((v) => _fromMessage(v)).toList(),
   summaries: v.summaries.map((v) => _fromDerivedContext(v)).toList(),
   originAcknowledged: v.originAcknowledged,
+  archived: v.archived,
 );
 
 ToolRule _fromToolRule(g.AgentToolRule v) => ToolRule(
@@ -614,6 +622,7 @@ CommandReply _fromCommandReply(g.AgentCommandReply v) => CommandReply(
           id: v.id,
           title: v.title,
           hasUnknownOutcomes: v.hasUnknownOutcomes,
+          archived: v.archived,
         ),
       )
       .toList(),

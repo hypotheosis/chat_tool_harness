@@ -769,14 +769,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AgentConversation dco_decode_agent_conversation(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return AgentConversation(
       id: dco_decode_String(arr[0]),
       profile: dco_decode_agent_profile_snapshot(arr[1]),
-      originAcknowledged: dco_decode_bool(arr[2]),
-      messages: dco_decode_list_agent_message(arr[3]),
-      summaries: dco_decode_list_agent_derived_context(arr[4]),
+      archived: dco_decode_bool(arr[2]),
+      originAcknowledged: dco_decode_bool(arr[3]),
+      messages: dco_decode_list_agent_message(arr[4]),
+      summaries: dco_decode_list_agent_derived_context(arr[5]),
     );
   }
 
@@ -784,12 +785,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AgentConversationSummary dco_decode_agent_conversation_summary(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return AgentConversationSummary(
       id: dco_decode_String(arr[0]),
       title: dco_decode_String(arr[1]),
       hasUnknownOutcomes: dco_decode_bool(arr[2]),
+      archived: dco_decode_bool(arr[3]),
     );
   }
 
@@ -1084,8 +1086,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 0:
         return AppCommand_SearchConversations(
           query: dco_decode_String(raw[1]),
-          offset: dco_decode_u_32(raw[2]),
-          limit: dco_decode_u_32(raw[3]),
+          archivedOnly: dco_decode_bool(raw[2]),
+          offset: dco_decode_u_32(raw[3]),
+          limit: dco_decode_u_32(raw[4]),
         );
       case 1:
         return AppCommand_RenameConversation(
@@ -1098,114 +1101,122 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           confirmedUnknown: dco_decode_bool(raw[2]),
         );
       case 3:
+        return AppCommand_ArchiveConversation(
+          conversationId: dco_decode_String(raw[1]),
+        );
+      case 4:
+        return AppCommand_RestoreConversation(
+          conversationId: dco_decode_String(raw[1]),
+        );
+      case 5:
         return AppCommand_ExportTranscript(
           conversationId: dco_decode_String(raw[1]),
           includeToolPayloads: dco_decode_bool(raw[2]),
         );
-      case 4:
-        return AppCommand_DiscoverModels(endpointId: dco_decode_String(raw[1]));
-      case 5:
-        return AppCommand_ProbeEndpoint(endpointId: dco_decode_String(raw[1]));
       case 6:
+        return AppCommand_DiscoverModels(endpointId: dco_decode_String(raw[1]));
+      case 7:
+        return AppCommand_ProbeEndpoint(endpointId: dco_decode_String(raw[1]));
+      case 8:
         return AppCommand_DiscoverServer(
           profileId: dco_decode_String(raw[1]),
           serverId: dco_decode_String(raw[2]),
         );
-      case 7:
+      case 9:
         return AppCommand_CreateArtifact(
           conversationId: dco_decode_String(raw[1]),
           name: dco_decode_String(raw[2]),
           content: dco_decode_String(raw[3]),
         );
-      case 8:
+      case 10:
         return AppCommand_ReadArtifact(
           conversationId: dco_decode_String(raw[1]),
           artifactId: dco_decode_String(raw[2]),
         );
-      case 9:
+      case 11:
         return AppCommand_DeleteArtifact(
           conversationId: dco_decode_String(raw[1]),
           artifactId: dco_decode_String(raw[2]),
         );
-      case 10:
+      case 12:
         return AppCommand_NewId();
-      case 11:
+      case 13:
         return AppCommand_SaveEndpoint(
           endpoint: dco_decode_box_autoadd_agent_endpoint_config(raw[1]),
         );
-      case 12:
+      case 14:
         return AppCommand_SaveServer(
           server: dco_decode_box_autoadd_agent_server_config(raw[1]),
         );
-      case 13:
+      case 15:
         return AppCommand_SaveProfile(
           profile: dco_decode_box_autoadd_agent_profile(raw[1]),
         );
-      case 14:
+      case 16:
         return AppCommand_CreateConversation(
           profileId: dco_decode_String(raw[1]),
         );
-      case 15:
+      case 17:
         return AppCommand_ApplyProfile(
           conversationId: dco_decode_String(raw[1]),
           profileId: dco_decode_String(raw[2]),
         );
-      case 16:
+      case 18:
         return AppCommand_SetRule(
           key: dco_decode_box_autoadd_agent_tool_key(raw[1]),
           schemaDigest: dco_decode_String(raw[2]),
           destinationDigest: dco_decode_String(raw[3]),
           rule: dco_decode_permission_rule(raw[4]),
         );
-      case 17:
+      case 19:
         return AppCommand_StartTurn(
           conversationId: dco_decode_String(raw[1]),
           text: dco_decode_String(raw[2]),
         );
-      case 18:
+      case 20:
         return AppCommand_PlatformPause(
           runId: dco_decode_String(raw[1]),
           generation: dco_decode_String(raw[2]),
         );
-      case 19:
+      case 21:
         return AppCommand_PlatformStop(
           runId: dco_decode_String(raw[1]),
           generation: dco_decode_String(raw[2]),
         );
-      case 20:
-        return AppCommand_CancelRun(runId: dco_decode_String(raw[1]));
-      case 21:
-        return AppCommand_ResumeRun(runId: dco_decode_String(raw[1]));
       case 22:
-        return AppCommand_RetryRun(runId: dco_decode_String(raw[1]));
+        return AppCommand_CancelRun(runId: dco_decode_String(raw[1]));
       case 23:
+        return AppCommand_ResumeRun(runId: dco_decode_String(raw[1]));
+      case 24:
+        return AppCommand_RetryRun(runId: dco_decode_String(raw[1]));
+      case 25:
         return AppCommand_Approve(
           binding: dco_decode_box_autoadd_agent_approval_binding(raw[1]),
         );
-      case 24:
+      case 26:
         return AppCommand_Deny(attemptId: dco_decode_String(raw[1]));
-      case 25:
+      case 27:
         return AppCommand_DecideApprovals(
           runId: dco_decode_String(raw[1]),
           approve: dco_decode_list_agent_approval_binding(raw[2]),
           deny: dco_decode_list_String(raw[3]),
         );
-      case 26:
+      case 28:
         return AppCommand_SetServerTrust(
           serverId: dco_decode_String(raw[1]),
           trusted: dco_decode_bool(raw[2]),
         );
-      case 27:
+      case 29:
         return AppCommand_SummarizeContext(
           conversationId: dco_decode_String(raw[1]),
           selection: dco_decode_box_autoadd_agent_context_selection(raw[2]),
         );
-      case 28:
+      case 30:
         return AppCommand_ApplyContextSelection(
           runId: dco_decode_String(raw[1]),
           selection: dco_decode_box_autoadd_agent_context_selection(raw[2]),
         );
-      case 29:
+      case 31:
         return AppCommand_AcknowledgeContextDisclosure(
           conversationId: dco_decode_String(raw[1]),
           origin: dco_decode_String(raw[2]),
@@ -2167,12 +2178,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_id = sse_decode_String(deserializer);
     var var_profile = sse_decode_agent_profile_snapshot(deserializer);
+    var var_archived = sse_decode_bool(deserializer);
     var var_originAcknowledged = sse_decode_bool(deserializer);
     var var_messages = sse_decode_list_agent_message(deserializer);
     var var_summaries = sse_decode_list_agent_derived_context(deserializer);
     return AgentConversation(
       id: var_id,
       profile: var_profile,
+      archived: var_archived,
       originAcknowledged: var_originAcknowledged,
       messages: var_messages,
       summaries: var_summaries,
@@ -2187,10 +2200,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_id = sse_decode_String(deserializer);
     var var_title = sse_decode_String(deserializer);
     var var_hasUnknownOutcomes = sse_decode_bool(deserializer);
+    var var_archived = sse_decode_bool(deserializer);
     return AgentConversationSummary(
       id: var_id,
       title: var_title,
       hasUnknownOutcomes: var_hasUnknownOutcomes,
+      archived: var_archived,
     );
   }
 
@@ -2544,10 +2559,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     switch (tag_) {
       case 0:
         var var_query = sse_decode_String(deserializer);
+        var var_archivedOnly = sse_decode_bool(deserializer);
         var var_offset = sse_decode_u_32(deserializer);
         var var_limit = sse_decode_u_32(deserializer);
         return AppCommand_SearchConversations(
           query: var_query,
+          archivedOnly: var_archivedOnly,
           offset: var_offset,
           limit: var_limit,
         );
@@ -2567,25 +2584,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         );
       case 3:
         var var_conversationId = sse_decode_String(deserializer);
+        return AppCommand_ArchiveConversation(
+          conversationId: var_conversationId,
+        );
+      case 4:
+        var var_conversationId = sse_decode_String(deserializer);
+        return AppCommand_RestoreConversation(
+          conversationId: var_conversationId,
+        );
+      case 5:
+        var var_conversationId = sse_decode_String(deserializer);
         var var_includeToolPayloads = sse_decode_bool(deserializer);
         return AppCommand_ExportTranscript(
           conversationId: var_conversationId,
           includeToolPayloads: var_includeToolPayloads,
         );
-      case 4:
+      case 6:
         var var_endpointId = sse_decode_String(deserializer);
         return AppCommand_DiscoverModels(endpointId: var_endpointId);
-      case 5:
+      case 7:
         var var_endpointId = sse_decode_String(deserializer);
         return AppCommand_ProbeEndpoint(endpointId: var_endpointId);
-      case 6:
+      case 8:
         var var_profileId = sse_decode_String(deserializer);
         var var_serverId = sse_decode_String(deserializer);
         return AppCommand_DiscoverServer(
           profileId: var_profileId,
           serverId: var_serverId,
         );
-      case 7:
+      case 9:
         var var_conversationId = sse_decode_String(deserializer);
         var var_name = sse_decode_String(deserializer);
         var var_content = sse_decode_String(deserializer);
@@ -2594,46 +2621,46 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           name: var_name,
           content: var_content,
         );
-      case 8:
+      case 10:
         var var_conversationId = sse_decode_String(deserializer);
         var var_artifactId = sse_decode_String(deserializer);
         return AppCommand_ReadArtifact(
           conversationId: var_conversationId,
           artifactId: var_artifactId,
         );
-      case 9:
+      case 11:
         var var_conversationId = sse_decode_String(deserializer);
         var var_artifactId = sse_decode_String(deserializer);
         return AppCommand_DeleteArtifact(
           conversationId: var_conversationId,
           artifactId: var_artifactId,
         );
-      case 10:
+      case 12:
         return AppCommand_NewId();
-      case 11:
+      case 13:
         var var_endpoint = sse_decode_box_autoadd_agent_endpoint_config(
           deserializer,
         );
         return AppCommand_SaveEndpoint(endpoint: var_endpoint);
-      case 12:
+      case 14:
         var var_server = sse_decode_box_autoadd_agent_server_config(
           deserializer,
         );
         return AppCommand_SaveServer(server: var_server);
-      case 13:
+      case 15:
         var var_profile = sse_decode_box_autoadd_agent_profile(deserializer);
         return AppCommand_SaveProfile(profile: var_profile);
-      case 14:
+      case 16:
         var var_profileId = sse_decode_String(deserializer);
         return AppCommand_CreateConversation(profileId: var_profileId);
-      case 15:
+      case 17:
         var var_conversationId = sse_decode_String(deserializer);
         var var_profileId = sse_decode_String(deserializer);
         return AppCommand_ApplyProfile(
           conversationId: var_conversationId,
           profileId: var_profileId,
         );
-      case 16:
+      case 18:
         var var_key = sse_decode_box_autoadd_agent_tool_key(deserializer);
         var var_schemaDigest = sse_decode_String(deserializer);
         var var_destinationDigest = sse_decode_String(deserializer);
@@ -2644,45 +2671,45 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           destinationDigest: var_destinationDigest,
           rule: var_rule,
         );
-      case 17:
+      case 19:
         var var_conversationId = sse_decode_String(deserializer);
         var var_text = sse_decode_String(deserializer);
         return AppCommand_StartTurn(
           conversationId: var_conversationId,
           text: var_text,
         );
-      case 18:
+      case 20:
         var var_runId = sse_decode_String(deserializer);
         var var_generation = sse_decode_String(deserializer);
         return AppCommand_PlatformPause(
           runId: var_runId,
           generation: var_generation,
         );
-      case 19:
+      case 21:
         var var_runId = sse_decode_String(deserializer);
         var var_generation = sse_decode_String(deserializer);
         return AppCommand_PlatformStop(
           runId: var_runId,
           generation: var_generation,
         );
-      case 20:
-        var var_runId = sse_decode_String(deserializer);
-        return AppCommand_CancelRun(runId: var_runId);
-      case 21:
-        var var_runId = sse_decode_String(deserializer);
-        return AppCommand_ResumeRun(runId: var_runId);
       case 22:
         var var_runId = sse_decode_String(deserializer);
-        return AppCommand_RetryRun(runId: var_runId);
+        return AppCommand_CancelRun(runId: var_runId);
       case 23:
+        var var_runId = sse_decode_String(deserializer);
+        return AppCommand_ResumeRun(runId: var_runId);
+      case 24:
+        var var_runId = sse_decode_String(deserializer);
+        return AppCommand_RetryRun(runId: var_runId);
+      case 25:
         var var_binding = sse_decode_box_autoadd_agent_approval_binding(
           deserializer,
         );
         return AppCommand_Approve(binding: var_binding);
-      case 24:
+      case 26:
         var var_attemptId = sse_decode_String(deserializer);
         return AppCommand_Deny(attemptId: var_attemptId);
-      case 25:
+      case 27:
         var var_runId = sse_decode_String(deserializer);
         var var_approve = sse_decode_list_agent_approval_binding(deserializer);
         var var_deny = sse_decode_list_String(deserializer);
@@ -2691,14 +2718,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           approve: var_approve,
           deny: var_deny,
         );
-      case 26:
+      case 28:
         var var_serverId = sse_decode_String(deserializer);
         var var_trusted = sse_decode_bool(deserializer);
         return AppCommand_SetServerTrust(
           serverId: var_serverId,
           trusted: var_trusted,
         );
-      case 27:
+      case 29:
         var var_conversationId = sse_decode_String(deserializer);
         var var_selection = sse_decode_box_autoadd_agent_context_selection(
           deserializer,
@@ -2707,7 +2734,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           conversationId: var_conversationId,
           selection: var_selection,
         );
-      case 28:
+      case 30:
         var var_runId = sse_decode_String(deserializer);
         var var_selection = sse_decode_box_autoadd_agent_context_selection(
           deserializer,
@@ -2716,7 +2743,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           runId: var_runId,
           selection: var_selection,
         );
-      case 29:
+      case 31:
         var var_conversationId = sse_decode_String(deserializer);
         var var_origin = sse_decode_String(deserializer);
         return AppCommand_AcknowledgeContextDisclosure(
@@ -3900,6 +3927,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.id, serializer);
     sse_encode_agent_profile_snapshot(self.profile, serializer);
+    sse_encode_bool(self.archived, serializer);
     sse_encode_bool(self.originAcknowledged, serializer);
     sse_encode_list_agent_message(self.messages, serializer);
     sse_encode_list_agent_derived_context(self.summaries, serializer);
@@ -3914,6 +3942,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.id, serializer);
     sse_encode_String(self.title, serializer);
     sse_encode_bool(self.hasUnknownOutcomes, serializer);
+    sse_encode_bool(self.archived, serializer);
   }
 
   @protected
@@ -4161,11 +4190,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     switch (self) {
       case AppCommand_SearchConversations(
         query: final query,
+        archivedOnly: final archivedOnly,
         offset: final offset,
         limit: final limit,
       ):
         sse_encode_i_32(0, serializer);
         sse_encode_String(query, serializer);
+        sse_encode_bool(archivedOnly, serializer);
         sse_encode_u_32(offset, serializer);
         sse_encode_u_32(limit, serializer);
       case AppCommand_RenameConversation(
@@ -4182,24 +4213,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(2, serializer);
         sse_encode_String(conversationId, serializer);
         sse_encode_bool(confirmedUnknown, serializer);
+      case AppCommand_ArchiveConversation(conversationId: final conversationId):
+        sse_encode_i_32(3, serializer);
+        sse_encode_String(conversationId, serializer);
+      case AppCommand_RestoreConversation(conversationId: final conversationId):
+        sse_encode_i_32(4, serializer);
+        sse_encode_String(conversationId, serializer);
       case AppCommand_ExportTranscript(
         conversationId: final conversationId,
         includeToolPayloads: final includeToolPayloads,
       ):
-        sse_encode_i_32(3, serializer);
+        sse_encode_i_32(5, serializer);
         sse_encode_String(conversationId, serializer);
         sse_encode_bool(includeToolPayloads, serializer);
       case AppCommand_DiscoverModels(endpointId: final endpointId):
-        sse_encode_i_32(4, serializer);
+        sse_encode_i_32(6, serializer);
         sse_encode_String(endpointId, serializer);
       case AppCommand_ProbeEndpoint(endpointId: final endpointId):
-        sse_encode_i_32(5, serializer);
+        sse_encode_i_32(7, serializer);
         sse_encode_String(endpointId, serializer);
       case AppCommand_DiscoverServer(
         profileId: final profileId,
         serverId: final serverId,
       ):
-        sse_encode_i_32(6, serializer);
+        sse_encode_i_32(8, serializer);
         sse_encode_String(profileId, serializer);
         sse_encode_String(serverId, serializer);
       case AppCommand_CreateArtifact(
@@ -4207,7 +4244,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         name: final name,
         content: final content,
       ):
-        sse_encode_i_32(7, serializer);
+        sse_encode_i_32(9, serializer);
         sse_encode_String(conversationId, serializer);
         sse_encode_String(name, serializer);
         sse_encode_String(content, serializer);
@@ -4215,35 +4252,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         conversationId: final conversationId,
         artifactId: final artifactId,
       ):
-        sse_encode_i_32(8, serializer);
+        sse_encode_i_32(10, serializer);
         sse_encode_String(conversationId, serializer);
         sse_encode_String(artifactId, serializer);
       case AppCommand_DeleteArtifact(
         conversationId: final conversationId,
         artifactId: final artifactId,
       ):
-        sse_encode_i_32(9, serializer);
+        sse_encode_i_32(11, serializer);
         sse_encode_String(conversationId, serializer);
         sse_encode_String(artifactId, serializer);
       case AppCommand_NewId():
-        sse_encode_i_32(10, serializer);
+        sse_encode_i_32(12, serializer);
       case AppCommand_SaveEndpoint(endpoint: final endpoint):
-        sse_encode_i_32(11, serializer);
+        sse_encode_i_32(13, serializer);
         sse_encode_box_autoadd_agent_endpoint_config(endpoint, serializer);
       case AppCommand_SaveServer(server: final server):
-        sse_encode_i_32(12, serializer);
+        sse_encode_i_32(14, serializer);
         sse_encode_box_autoadd_agent_server_config(server, serializer);
       case AppCommand_SaveProfile(profile: final profile):
-        sse_encode_i_32(13, serializer);
+        sse_encode_i_32(15, serializer);
         sse_encode_box_autoadd_agent_profile(profile, serializer);
       case AppCommand_CreateConversation(profileId: final profileId):
-        sse_encode_i_32(14, serializer);
+        sse_encode_i_32(16, serializer);
         sse_encode_String(profileId, serializer);
       case AppCommand_ApplyProfile(
         conversationId: final conversationId,
         profileId: final profileId,
       ):
-        sse_encode_i_32(15, serializer);
+        sse_encode_i_32(17, serializer);
         sse_encode_String(conversationId, serializer);
         sse_encode_String(profileId, serializer);
       case AppCommand_SetRule(
@@ -4252,7 +4289,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         destinationDigest: final destinationDigest,
         rule: final rule,
       ):
-        sse_encode_i_32(16, serializer);
+        sse_encode_i_32(18, serializer);
         sse_encode_box_autoadd_agent_tool_key(key, serializer);
         sse_encode_String(schemaDigest, serializer);
         sse_encode_String(destinationDigest, serializer);
@@ -4261,44 +4298,44 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         conversationId: final conversationId,
         text: final text,
       ):
-        sse_encode_i_32(17, serializer);
+        sse_encode_i_32(19, serializer);
         sse_encode_String(conversationId, serializer);
         sse_encode_String(text, serializer);
       case AppCommand_PlatformPause(
         runId: final runId,
         generation: final generation,
       ):
-        sse_encode_i_32(18, serializer);
+        sse_encode_i_32(20, serializer);
         sse_encode_String(runId, serializer);
         sse_encode_String(generation, serializer);
       case AppCommand_PlatformStop(
         runId: final runId,
         generation: final generation,
       ):
-        sse_encode_i_32(19, serializer);
+        sse_encode_i_32(21, serializer);
         sse_encode_String(runId, serializer);
         sse_encode_String(generation, serializer);
       case AppCommand_CancelRun(runId: final runId):
-        sse_encode_i_32(20, serializer);
-        sse_encode_String(runId, serializer);
-      case AppCommand_ResumeRun(runId: final runId):
-        sse_encode_i_32(21, serializer);
-        sse_encode_String(runId, serializer);
-      case AppCommand_RetryRun(runId: final runId):
         sse_encode_i_32(22, serializer);
         sse_encode_String(runId, serializer);
-      case AppCommand_Approve(binding: final binding):
+      case AppCommand_ResumeRun(runId: final runId):
         sse_encode_i_32(23, serializer);
+        sse_encode_String(runId, serializer);
+      case AppCommand_RetryRun(runId: final runId):
+        sse_encode_i_32(24, serializer);
+        sse_encode_String(runId, serializer);
+      case AppCommand_Approve(binding: final binding):
+        sse_encode_i_32(25, serializer);
         sse_encode_box_autoadd_agent_approval_binding(binding, serializer);
       case AppCommand_Deny(attemptId: final attemptId):
-        sse_encode_i_32(24, serializer);
+        sse_encode_i_32(26, serializer);
         sse_encode_String(attemptId, serializer);
       case AppCommand_DecideApprovals(
         runId: final runId,
         approve: final approve,
         deny: final deny,
       ):
-        sse_encode_i_32(25, serializer);
+        sse_encode_i_32(27, serializer);
         sse_encode_String(runId, serializer);
         sse_encode_list_agent_approval_binding(approve, serializer);
         sse_encode_list_String(deny, serializer);
@@ -4306,28 +4343,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         serverId: final serverId,
         trusted: final trusted,
       ):
-        sse_encode_i_32(26, serializer);
+        sse_encode_i_32(28, serializer);
         sse_encode_String(serverId, serializer);
         sse_encode_bool(trusted, serializer);
       case AppCommand_SummarizeContext(
         conversationId: final conversationId,
         selection: final selection,
       ):
-        sse_encode_i_32(27, serializer);
+        sse_encode_i_32(29, serializer);
         sse_encode_String(conversationId, serializer);
         sse_encode_box_autoadd_agent_context_selection(selection, serializer);
       case AppCommand_ApplyContextSelection(
         runId: final runId,
         selection: final selection,
       ):
-        sse_encode_i_32(28, serializer);
+        sse_encode_i_32(30, serializer);
         sse_encode_String(runId, serializer);
         sse_encode_box_autoadd_agent_context_selection(selection, serializer);
       case AppCommand_AcknowledgeContextDisclosure(
         conversationId: final conversationId,
         origin: final origin,
       ):
-        sse_encode_i_32(29, serializer);
+        sse_encode_i_32(31, serializer);
         sse_encode_String(conversationId, serializer);
         sse_encode_String(origin, serializer);
     }

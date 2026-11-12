@@ -1011,4 +1011,99 @@ void main() {
     expect(find.text(args), findsOneWidget);
     expect(t.takeException(), isNull);
   });
+  testWidgets('archived conversation offers Restore instead of Send', (
+    t,
+  ) async {
+    final b = UiBackend()
+      ..runs = []
+      ..setConversation(archived: true);
+    await pumpChat(t, b);
+    expect(find.byKey(const Key('archived')), findsOneWidget);
+    expect(
+      t
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Send'))
+          .onPressed,
+      isNull,
+    );
+    await t.tap(find.byKey(const Key('restore-archived')));
+    await t.pumpAndSettle();
+    expect(
+      b.commands.whereType<RestoreConversation>().single.conversationId,
+      'c',
+    );
+    expect(b.commands.whereType<StartTurn>(), isEmpty);
+    b.setConversation(archived: false);
+    b.emit(const AppEvent(sequence: 1, conversationId: 'c'));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('archived')), findsNothing);
+    expect(
+      t
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Send'))
+          .onPressed,
+      isNotNull,
+    );
+  });
+  testWidgets('archived conversation offers no Retry, Resume or approval', (
+    t,
+  ) async {
+    final b = UiBackend()
+      ..runs = [
+        run(),
+        turnRun(id: 'paused', state: RunState.paused),
+        turnRun(id: 'new', code: FailureCode.rateLimited),
+      ]
+      ..setConversation(archived: true);
+    await pumpChat(t, b);
+    // Offstage widgets count too, so nothing passes by being scrolled away.
+    Finder key(String k) => find.byKey(Key(k), skipOffstage: false);
+    Finder text(String v) => find.text(v, skipOffstage: false);
+    expect(key('approval-r'), findsNothing);
+    expect(key('resume-paused'), findsNothing);
+    expect(text('Resume'), findsNothing);
+    expect(text('Retry'), findsNothing);
+    // The cards still explain each run; only the actions are withheld.
+    expect(key('run-card-paused'), findsOneWidget);
+    expect(key('run-card-new'), findsOneWidget);
+    b.setConversation(archived: false);
+    b.emit(const AppEvent(sequence: 1, conversationId: 'c'));
+    await t.pumpAndSettle();
+    expect(key('approval-r'), findsOneWidget);
+    expect(key('resume-paused'), findsOneWidget);
+    // The approval card now shares the screen, so the run list may scroll.
+    expect(
+      find.descendant(of: key('run-card-new'), matching: text('Retry')),
+      findsOneWidget,
+    );
+  });
+  testWidgets('archived conversation keeps Stop and settings actions', (
+    t,
+  ) async {
+    Finder key(String k) => find.byKey(Key(k), skipOffstage: false);
+    Finder text(String v) => find.text(v, skipOffstage: false);
+    // A run waiting for approval whose calls are all decided offers Resume
+    // and Stop inline; archived, only Stop remains.
+    final b = UiBackend()
+      ..runs = [run(state: AttemptState.approved)]
+      ..setConversation(archived: true);
+    await pumpChat(t, b);
+    expect(key('resume-r'), findsNothing);
+    expect(key('stop-r'), findsOneWidget);
+    b.setConversation(archived: false);
+    b.emit(const AppEvent(sequence: 1, conversationId: 'c'));
+    await t.pumpAndSettle();
+    expect(key('resume-r'), findsOneWidget);
+
+    // A failed run still opens its settings while archived.
+    final failed = UiBackend()
+      ..runs = [failedRun(code: FailureCode.protocol)]
+      ..setConversation(archived: true);
+    await pumpChat(t, failed);
+    expect(
+      find.descendant(
+        of: key('run-card-r'),
+        matching: text('Open profile settings'),
+      ),
+      findsOneWidget,
+    );
+  });
 }

@@ -13,6 +13,9 @@ class HistoryController extends ChangeNotifier {
   final AndroidDocumentAccess? documents;
   List<ConversationSummary> rows = [];
   String query = '';
+
+  /// Whether the list shows only archived conversations.
+  bool archivedOnly = false;
   int offset = 0;
   bool loading = false;
   bool get hasNext => rows.length == 100;
@@ -58,7 +61,7 @@ class HistoryController extends ChangeNotifier {
     _searchedThrough = session.cursor;
     final generation = ++_searchGeneration;
     final reply = await backend.execute(
-      SearchConversations(query, offset: offset),
+      SearchConversations(query, archivedOnly: archivedOnly, offset: offset),
     );
     if (!_disposed && generation == _searchGeneration) rows = reply.history;
   }
@@ -70,6 +73,14 @@ class HistoryController extends ChangeNotifier {
     await _action(_search);
   }
 
+  /// Switches between all conversations and only archived ones, from the
+  /// first page.
+  Future<void> showArchived(bool value) async {
+    if (loading || _disposed) return;
+    archivedOnly = value;
+    await search(query);
+  }
+
   Future<void> nextPage() => search(query, pageOffset: offset + 100);
   Future<void> previousPage() =>
       search(query, pageOffset: offset >= 100 ? offset - 100 : 0);
@@ -77,6 +88,8 @@ class HistoryController extends ChangeNotifier {
       _mutate(RenameConversation(owner, title));
   Future<void> delete(String owner, {required bool confirmedUnknown}) =>
       _mutate(DeleteConversation(owner, confirmedUnknown: confirmedUnknown));
+  Future<void> archive(String owner) => _mutate(ArchiveConversation(owner));
+  Future<void> restore(String owner) => _mutate(RestoreConversation(owner));
   Future<void> _mutate(AppCommand command) => _action(() async {
     await session.execute(command);
     await _search();
@@ -84,6 +97,11 @@ class HistoryController extends ChangeNotifier {
   List<Run> runs(String owner) => (session.current?.runs ?? <Run>[])
       .where((r) => r.conversationId == owner)
       .toList();
+
+  /// Whether a run of [owner] is executing now. The backend refuses archiving
+  /// only then; a run waiting for approval has released its slot.
+  bool isRunning(String owner) =>
+      runs(owner).any((r) => r.state == RunState.running);
   bool needsStop(String owner) => runs(owner).any(
     (r) => r.state == RunState.running || r.state == RunState.waitingApproval,
   );

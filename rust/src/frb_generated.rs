@@ -849,6 +849,7 @@ impl SseDecode for crate::application::dto::AgentConversation {
         let mut var_id = <String>::sse_decode(deserializer);
         let mut var_profile =
             <crate::application::dto::AgentProfileSnapshot>::sse_decode(deserializer);
+        let mut var_archived = <bool>::sse_decode(deserializer);
         let mut var_originAcknowledged = <bool>::sse_decode(deserializer);
         let mut var_messages =
             <Vec<crate::application::dto::AgentMessage>>::sse_decode(deserializer);
@@ -857,6 +858,7 @@ impl SseDecode for crate::application::dto::AgentConversation {
         return crate::application::dto::AgentConversation {
             id: var_id,
             profile: var_profile,
+            archived: var_archived,
             origin_acknowledged: var_originAcknowledged,
             messages: var_messages,
             summaries: var_summaries,
@@ -870,10 +872,12 @@ impl SseDecode for crate::application::dto::AgentConversationSummary {
         let mut var_id = <String>::sse_decode(deserializer);
         let mut var_title = <String>::sse_decode(deserializer);
         let mut var_hasUnknownOutcomes = <bool>::sse_decode(deserializer);
+        let mut var_archived = <bool>::sse_decode(deserializer);
         return crate::application::dto::AgentConversationSummary {
             id: var_id,
             title: var_title,
             has_unknown_outcomes: var_hasUnknownOutcomes,
+            archived: var_archived,
         };
     }
 }
@@ -1241,10 +1245,12 @@ impl SseDecode for crate::application::dto::AppCommand {
         match tag_ {
             0 => {
                 let mut var_query = <String>::sse_decode(deserializer);
+                let mut var_archivedOnly = <bool>::sse_decode(deserializer);
                 let mut var_offset = <u32>::sse_decode(deserializer);
                 let mut var_limit = <u32>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::SearchConversations {
                     query: var_query,
+                    archived_only: var_archivedOnly,
                     offset: var_offset,
                     limit: var_limit,
                 };
@@ -1267,25 +1273,37 @@ impl SseDecode for crate::application::dto::AppCommand {
             }
             3 => {
                 let mut var_conversationId = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::ArchiveConversation {
+                    conversation_id: var_conversationId,
+                };
+            }
+            4 => {
+                let mut var_conversationId = <String>::sse_decode(deserializer);
+                return crate::application::dto::AppCommand::RestoreConversation {
+                    conversation_id: var_conversationId,
+                };
+            }
+            5 => {
+                let mut var_conversationId = <String>::sse_decode(deserializer);
                 let mut var_includeToolPayloads = <bool>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::ExportTranscript {
                     conversation_id: var_conversationId,
                     include_tool_payloads: var_includeToolPayloads,
                 };
             }
-            4 => {
+            6 => {
                 let mut var_endpointId = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::DiscoverModels {
                     endpoint_id: var_endpointId,
                 };
             }
-            5 => {
+            7 => {
                 let mut var_endpointId = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::ProbeEndpoint {
                     endpoint_id: var_endpointId,
                 };
             }
-            6 => {
+            8 => {
                 let mut var_profileId = <String>::sse_decode(deserializer);
                 let mut var_serverId = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::DiscoverServer {
@@ -1293,7 +1311,7 @@ impl SseDecode for crate::application::dto::AppCommand {
                     server_id: var_serverId,
                 };
             }
-            7 => {
+            9 => {
                 let mut var_conversationId = <String>::sse_decode(deserializer);
                 let mut var_name = <String>::sse_decode(deserializer);
                 let mut var_content = <String>::sse_decode(deserializer);
@@ -1303,7 +1321,7 @@ impl SseDecode for crate::application::dto::AppCommand {
                     content: var_content,
                 };
             }
-            8 => {
+            10 => {
                 let mut var_conversationId = <String>::sse_decode(deserializer);
                 let mut var_artifactId = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::ReadArtifact {
@@ -1311,7 +1329,7 @@ impl SseDecode for crate::application::dto::AppCommand {
                     artifact_id: var_artifactId,
                 };
             }
-            9 => {
+            11 => {
                 let mut var_conversationId = <String>::sse_decode(deserializer);
                 let mut var_artifactId = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::DeleteArtifact {
@@ -1319,35 +1337,35 @@ impl SseDecode for crate::application::dto::AppCommand {
                     artifact_id: var_artifactId,
                 };
             }
-            10 => {
+            12 => {
                 return crate::application::dto::AppCommand::NewId;
             }
-            11 => {
+            13 => {
                 let mut var_endpoint =
                     <crate::application::dto::AgentEndpointConfig>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::SaveEndpoint {
                     endpoint: var_endpoint,
                 };
             }
-            12 => {
+            14 => {
                 let mut var_server =
                     <crate::application::dto::AgentServerConfig>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::SaveServer { server: var_server };
             }
-            13 => {
+            15 => {
                 let mut var_profile =
                     <crate::application::dto::AgentProfile>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::SaveProfile {
                     profile: var_profile,
                 };
             }
-            14 => {
+            16 => {
                 let mut var_profileId = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::CreateConversation {
                     profile_id: var_profileId,
                 };
             }
-            15 => {
+            17 => {
                 let mut var_conversationId = <String>::sse_decode(deserializer);
                 let mut var_profileId = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::ApplyProfile {
@@ -1355,7 +1373,7 @@ impl SseDecode for crate::application::dto::AppCommand {
                     profile_id: var_profileId,
                 };
             }
-            16 => {
+            18 => {
                 let mut var_key = <crate::application::dto::AgentToolKey>::sse_decode(deserializer);
                 let mut var_schemaDigest = <String>::sse_decode(deserializer);
                 let mut var_destinationDigest = <String>::sse_decode(deserializer);
@@ -1367,7 +1385,7 @@ impl SseDecode for crate::application::dto::AppCommand {
                     rule: var_rule,
                 };
             }
-            17 => {
+            19 => {
                 let mut var_conversationId = <String>::sse_decode(deserializer);
                 let mut var_text = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::StartTurn {
@@ -1375,7 +1393,7 @@ impl SseDecode for crate::application::dto::AppCommand {
                     text: var_text,
                 };
             }
-            18 => {
+            20 => {
                 let mut var_runId = <String>::sse_decode(deserializer);
                 let mut var_generation = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::PlatformPause {
@@ -1383,7 +1401,7 @@ impl SseDecode for crate::application::dto::AppCommand {
                     generation: var_generation,
                 };
             }
-            19 => {
+            21 => {
                 let mut var_runId = <String>::sse_decode(deserializer);
                 let mut var_generation = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::PlatformStop {
@@ -1391,32 +1409,32 @@ impl SseDecode for crate::application::dto::AppCommand {
                     generation: var_generation,
                 };
             }
-            20 => {
+            22 => {
                 let mut var_runId = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::CancelRun { run_id: var_runId };
             }
-            21 => {
+            23 => {
                 let mut var_runId = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::ResumeRun { run_id: var_runId };
             }
-            22 => {
+            24 => {
                 let mut var_runId = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::RetryRun { run_id: var_runId };
             }
-            23 => {
+            25 => {
                 let mut var_binding =
                     <crate::application::dto::AgentApprovalBinding>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::Approve {
                     binding: var_binding,
                 };
             }
-            24 => {
+            26 => {
                 let mut var_attemptId = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::Deny {
                     attempt_id: var_attemptId,
                 };
             }
-            25 => {
+            27 => {
                 let mut var_runId = <String>::sse_decode(deserializer);
                 let mut var_approve =
                     <Vec<crate::application::dto::AgentApprovalBinding>>::sse_decode(deserializer);
@@ -1427,7 +1445,7 @@ impl SseDecode for crate::application::dto::AppCommand {
                     deny: var_deny,
                 };
             }
-            26 => {
+            28 => {
                 let mut var_serverId = <String>::sse_decode(deserializer);
                 let mut var_trusted = <bool>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::SetServerTrust {
@@ -1435,7 +1453,7 @@ impl SseDecode for crate::application::dto::AppCommand {
                     trusted: var_trusted,
                 };
             }
-            27 => {
+            29 => {
                 let mut var_conversationId = <String>::sse_decode(deserializer);
                 let mut var_selection =
                     <crate::application::dto::AgentContextSelection>::sse_decode(deserializer);
@@ -1444,7 +1462,7 @@ impl SseDecode for crate::application::dto::AppCommand {
                     selection: var_selection,
                 };
             }
-            28 => {
+            30 => {
                 let mut var_runId = <String>::sse_decode(deserializer);
                 let mut var_selection =
                     <crate::application::dto::AgentContextSelection>::sse_decode(deserializer);
@@ -1453,7 +1471,7 @@ impl SseDecode for crate::application::dto::AppCommand {
                     selection: var_selection,
                 };
             }
-            29 => {
+            31 => {
                 let mut var_conversationId = <String>::sse_decode(deserializer);
                 let mut var_origin = <String>::sse_decode(deserializer);
                 return crate::application::dto::AppCommand::AcknowledgeContextDisclosure {
@@ -2657,6 +2675,7 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentConversatio
         [
             self.id.into_into_dart().into_dart(),
             self.profile.into_into_dart().into_dart(),
+            self.archived.into_into_dart().into_dart(),
             self.origin_acknowledged.into_into_dart().into_dart(),
             self.messages.into_into_dart().into_dart(),
             self.summaries.into_into_dart().into_dart(),
@@ -2682,6 +2701,7 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentConversatio
             self.id.into_into_dart().into_dart(),
             self.title.into_into_dart().into_dart(),
             self.has_unknown_outcomes.into_into_dart().into_dart(),
+            self.archived.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -3157,11 +3177,13 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AppCommand {
         match self {
             crate::application::dto::AppCommand::SearchConversations {
                 query,
+                archived_only,
                 offset,
                 limit,
             } => [
                 0.into_dart(),
                 query.into_into_dart().into_dart(),
+                archived_only.into_into_dart().into_dart(),
                 offset.into_into_dart().into_dart(),
                 limit.into_into_dart().into_dart(),
             ]
@@ -3184,26 +3206,32 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AppCommand {
                 confirmed_unknown.into_into_dart().into_dart(),
             ]
             .into_dart(),
+            crate::application::dto::AppCommand::ArchiveConversation { conversation_id } => {
+                [3.into_dart(), conversation_id.into_into_dart().into_dart()].into_dart()
+            }
+            crate::application::dto::AppCommand::RestoreConversation { conversation_id } => {
+                [4.into_dart(), conversation_id.into_into_dart().into_dart()].into_dart()
+            }
             crate::application::dto::AppCommand::ExportTranscript {
                 conversation_id,
                 include_tool_payloads,
             } => [
-                3.into_dart(),
+                5.into_dart(),
                 conversation_id.into_into_dart().into_dart(),
                 include_tool_payloads.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::application::dto::AppCommand::DiscoverModels { endpoint_id } => {
-                [4.into_dart(), endpoint_id.into_into_dart().into_dart()].into_dart()
+                [6.into_dart(), endpoint_id.into_into_dart().into_dart()].into_dart()
             }
             crate::application::dto::AppCommand::ProbeEndpoint { endpoint_id } => {
-                [5.into_dart(), endpoint_id.into_into_dart().into_dart()].into_dart()
+                [7.into_dart(), endpoint_id.into_into_dart().into_dart()].into_dart()
             }
             crate::application::dto::AppCommand::DiscoverServer {
                 profile_id,
                 server_id,
             } => [
-                6.into_dart(),
+                8.into_dart(),
                 profile_id.into_into_dart().into_dart(),
                 server_id.into_into_dart().into_dart(),
             ]
@@ -3213,7 +3241,7 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AppCommand {
                 name,
                 content,
             } => [
-                7.into_dart(),
+                9.into_dart(),
                 conversation_id.into_into_dart().into_dart(),
                 name.into_into_dart().into_dart(),
                 content.into_into_dart().into_dart(),
@@ -3223,7 +3251,7 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AppCommand {
                 conversation_id,
                 artifact_id,
             } => [
-                8.into_dart(),
+                10.into_dart(),
                 conversation_id.into_into_dart().into_dart(),
                 artifact_id.into_into_dart().into_dart(),
             ]
@@ -3232,29 +3260,29 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AppCommand {
                 conversation_id,
                 artifact_id,
             } => [
-                9.into_dart(),
+                11.into_dart(),
                 conversation_id.into_into_dart().into_dart(),
                 artifact_id.into_into_dart().into_dart(),
             ]
             .into_dart(),
-            crate::application::dto::AppCommand::NewId => [10.into_dart()].into_dart(),
+            crate::application::dto::AppCommand::NewId => [12.into_dart()].into_dart(),
             crate::application::dto::AppCommand::SaveEndpoint { endpoint } => {
-                [11.into_dart(), endpoint.into_into_dart().into_dart()].into_dart()
+                [13.into_dart(), endpoint.into_into_dart().into_dart()].into_dart()
             }
             crate::application::dto::AppCommand::SaveServer { server } => {
-                [12.into_dart(), server.into_into_dart().into_dart()].into_dart()
+                [14.into_dart(), server.into_into_dart().into_dart()].into_dart()
             }
             crate::application::dto::AppCommand::SaveProfile { profile } => {
-                [13.into_dart(), profile.into_into_dart().into_dart()].into_dart()
+                [15.into_dart(), profile.into_into_dart().into_dart()].into_dart()
             }
             crate::application::dto::AppCommand::CreateConversation { profile_id } => {
-                [14.into_dart(), profile_id.into_into_dart().into_dart()].into_dart()
+                [16.into_dart(), profile_id.into_into_dart().into_dart()].into_dart()
             }
             crate::application::dto::AppCommand::ApplyProfile {
                 conversation_id,
                 profile_id,
             } => [
-                15.into_dart(),
+                17.into_dart(),
                 conversation_id.into_into_dart().into_dart(),
                 profile_id.into_into_dart().into_dart(),
             ]
@@ -3265,7 +3293,7 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AppCommand {
                 destination_digest,
                 rule,
             } => [
-                16.into_dart(),
+                18.into_dart(),
                 key.into_into_dart().into_dart(),
                 schema_digest.into_into_dart().into_dart(),
                 destination_digest.into_into_dart().into_dart(),
@@ -3276,51 +3304,51 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AppCommand {
                 conversation_id,
                 text,
             } => [
-                17.into_dart(),
+                19.into_dart(),
                 conversation_id.into_into_dart().into_dart(),
                 text.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::application::dto::AppCommand::PlatformPause { run_id, generation } => [
-                18.into_dart(),
+                20.into_dart(),
                 run_id.into_into_dart().into_dart(),
                 generation.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::application::dto::AppCommand::PlatformStop { run_id, generation } => [
-                19.into_dart(),
+                21.into_dart(),
                 run_id.into_into_dart().into_dart(),
                 generation.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::application::dto::AppCommand::CancelRun { run_id } => {
-                [20.into_dart(), run_id.into_into_dart().into_dart()].into_dart()
-            }
-            crate::application::dto::AppCommand::ResumeRun { run_id } => {
-                [21.into_dart(), run_id.into_into_dart().into_dart()].into_dart()
-            }
-            crate::application::dto::AppCommand::RetryRun { run_id } => {
                 [22.into_dart(), run_id.into_into_dart().into_dart()].into_dart()
             }
+            crate::application::dto::AppCommand::ResumeRun { run_id } => {
+                [23.into_dart(), run_id.into_into_dart().into_dart()].into_dart()
+            }
+            crate::application::dto::AppCommand::RetryRun { run_id } => {
+                [24.into_dart(), run_id.into_into_dart().into_dart()].into_dart()
+            }
             crate::application::dto::AppCommand::Approve { binding } => {
-                [23.into_dart(), binding.into_into_dart().into_dart()].into_dart()
+                [25.into_dart(), binding.into_into_dart().into_dart()].into_dart()
             }
             crate::application::dto::AppCommand::Deny { attempt_id } => {
-                [24.into_dart(), attempt_id.into_into_dart().into_dart()].into_dart()
+                [26.into_dart(), attempt_id.into_into_dart().into_dart()].into_dart()
             }
             crate::application::dto::AppCommand::DecideApprovals {
                 run_id,
                 approve,
                 deny,
             } => [
-                25.into_dart(),
+                27.into_dart(),
                 run_id.into_into_dart().into_dart(),
                 approve.into_into_dart().into_dart(),
                 deny.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::application::dto::AppCommand::SetServerTrust { server_id, trusted } => [
-                26.into_dart(),
+                28.into_dart(),
                 server_id.into_into_dart().into_dart(),
                 trusted.into_into_dart().into_dart(),
             ]
@@ -3329,13 +3357,13 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AppCommand {
                 conversation_id,
                 selection,
             } => [
-                27.into_dart(),
+                29.into_dart(),
                 conversation_id.into_into_dart().into_dart(),
                 selection.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::application::dto::AppCommand::ApplyContextSelection { run_id, selection } => [
-                28.into_dart(),
+                30.into_dart(),
                 run_id.into_into_dart().into_dart(),
                 selection.into_into_dart().into_dart(),
             ]
@@ -3344,7 +3372,7 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AppCommand {
                 conversation_id,
                 origin,
             } => [
-                29.into_dart(),
+                31.into_dart(),
                 conversation_id.into_into_dart().into_dart(),
                 origin.into_into_dart().into_dart(),
             ]
@@ -4022,6 +4050,7 @@ impl SseEncode for crate::application::dto::AgentConversation {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.id, serializer);
         <crate::application::dto::AgentProfileSnapshot>::sse_encode(self.profile, serializer);
+        <bool>::sse_encode(self.archived, serializer);
         <bool>::sse_encode(self.origin_acknowledged, serializer);
         <Vec<crate::application::dto::AgentMessage>>::sse_encode(self.messages, serializer);
         <Vec<crate::application::dto::AgentDerivedContext>>::sse_encode(self.summaries, serializer);
@@ -4034,6 +4063,7 @@ impl SseEncode for crate::application::dto::AgentConversationSummary {
         <String>::sse_encode(self.id, serializer);
         <String>::sse_encode(self.title, serializer);
         <bool>::sse_encode(self.has_unknown_outcomes, serializer);
+        <bool>::sse_encode(self.archived, serializer);
     }
 }
 
@@ -4271,11 +4301,13 @@ impl SseEncode for crate::application::dto::AppCommand {
         match self {
             crate::application::dto::AppCommand::SearchConversations {
                 query,
+                archived_only,
                 offset,
                 limit,
             } => {
                 <i32>::sse_encode(0, serializer);
                 <String>::sse_encode(query, serializer);
+                <bool>::sse_encode(archived_only, serializer);
                 <u32>::sse_encode(offset, serializer);
                 <u32>::sse_encode(limit, serializer);
             }
@@ -4295,27 +4327,35 @@ impl SseEncode for crate::application::dto::AppCommand {
                 <String>::sse_encode(conversation_id, serializer);
                 <bool>::sse_encode(confirmed_unknown, serializer);
             }
+            crate::application::dto::AppCommand::ArchiveConversation { conversation_id } => {
+                <i32>::sse_encode(3, serializer);
+                <String>::sse_encode(conversation_id, serializer);
+            }
+            crate::application::dto::AppCommand::RestoreConversation { conversation_id } => {
+                <i32>::sse_encode(4, serializer);
+                <String>::sse_encode(conversation_id, serializer);
+            }
             crate::application::dto::AppCommand::ExportTranscript {
                 conversation_id,
                 include_tool_payloads,
             } => {
-                <i32>::sse_encode(3, serializer);
+                <i32>::sse_encode(5, serializer);
                 <String>::sse_encode(conversation_id, serializer);
                 <bool>::sse_encode(include_tool_payloads, serializer);
             }
             crate::application::dto::AppCommand::DiscoverModels { endpoint_id } => {
-                <i32>::sse_encode(4, serializer);
+                <i32>::sse_encode(6, serializer);
                 <String>::sse_encode(endpoint_id, serializer);
             }
             crate::application::dto::AppCommand::ProbeEndpoint { endpoint_id } => {
-                <i32>::sse_encode(5, serializer);
+                <i32>::sse_encode(7, serializer);
                 <String>::sse_encode(endpoint_id, serializer);
             }
             crate::application::dto::AppCommand::DiscoverServer {
                 profile_id,
                 server_id,
             } => {
-                <i32>::sse_encode(6, serializer);
+                <i32>::sse_encode(8, serializer);
                 <String>::sse_encode(profile_id, serializer);
                 <String>::sse_encode(server_id, serializer);
             }
@@ -4324,7 +4364,7 @@ impl SseEncode for crate::application::dto::AppCommand {
                 name,
                 content,
             } => {
-                <i32>::sse_encode(7, serializer);
+                <i32>::sse_encode(9, serializer);
                 <String>::sse_encode(conversation_id, serializer);
                 <String>::sse_encode(name, serializer);
                 <String>::sse_encode(content, serializer);
@@ -4333,7 +4373,7 @@ impl SseEncode for crate::application::dto::AppCommand {
                 conversation_id,
                 artifact_id,
             } => {
-                <i32>::sse_encode(8, serializer);
+                <i32>::sse_encode(10, serializer);
                 <String>::sse_encode(conversation_id, serializer);
                 <String>::sse_encode(artifact_id, serializer);
             }
@@ -4341,34 +4381,34 @@ impl SseEncode for crate::application::dto::AppCommand {
                 conversation_id,
                 artifact_id,
             } => {
-                <i32>::sse_encode(9, serializer);
+                <i32>::sse_encode(11, serializer);
                 <String>::sse_encode(conversation_id, serializer);
                 <String>::sse_encode(artifact_id, serializer);
             }
             crate::application::dto::AppCommand::NewId => {
-                <i32>::sse_encode(10, serializer);
+                <i32>::sse_encode(12, serializer);
             }
             crate::application::dto::AppCommand::SaveEndpoint { endpoint } => {
-                <i32>::sse_encode(11, serializer);
+                <i32>::sse_encode(13, serializer);
                 <crate::application::dto::AgentEndpointConfig>::sse_encode(endpoint, serializer);
             }
             crate::application::dto::AppCommand::SaveServer { server } => {
-                <i32>::sse_encode(12, serializer);
+                <i32>::sse_encode(14, serializer);
                 <crate::application::dto::AgentServerConfig>::sse_encode(server, serializer);
             }
             crate::application::dto::AppCommand::SaveProfile { profile } => {
-                <i32>::sse_encode(13, serializer);
+                <i32>::sse_encode(15, serializer);
                 <crate::application::dto::AgentProfile>::sse_encode(profile, serializer);
             }
             crate::application::dto::AppCommand::CreateConversation { profile_id } => {
-                <i32>::sse_encode(14, serializer);
+                <i32>::sse_encode(16, serializer);
                 <String>::sse_encode(profile_id, serializer);
             }
             crate::application::dto::AppCommand::ApplyProfile {
                 conversation_id,
                 profile_id,
             } => {
-                <i32>::sse_encode(15, serializer);
+                <i32>::sse_encode(17, serializer);
                 <String>::sse_encode(conversation_id, serializer);
                 <String>::sse_encode(profile_id, serializer);
             }
@@ -4378,7 +4418,7 @@ impl SseEncode for crate::application::dto::AppCommand {
                 destination_digest,
                 rule,
             } => {
-                <i32>::sse_encode(16, serializer);
+                <i32>::sse_encode(18, serializer);
                 <crate::application::dto::AgentToolKey>::sse_encode(key, serializer);
                 <String>::sse_encode(schema_digest, serializer);
                 <String>::sse_encode(destination_digest, serializer);
@@ -4388,38 +4428,38 @@ impl SseEncode for crate::application::dto::AppCommand {
                 conversation_id,
                 text,
             } => {
-                <i32>::sse_encode(17, serializer);
+                <i32>::sse_encode(19, serializer);
                 <String>::sse_encode(conversation_id, serializer);
                 <String>::sse_encode(text, serializer);
             }
             crate::application::dto::AppCommand::PlatformPause { run_id, generation } => {
-                <i32>::sse_encode(18, serializer);
+                <i32>::sse_encode(20, serializer);
                 <String>::sse_encode(run_id, serializer);
                 <String>::sse_encode(generation, serializer);
             }
             crate::application::dto::AppCommand::PlatformStop { run_id, generation } => {
-                <i32>::sse_encode(19, serializer);
+                <i32>::sse_encode(21, serializer);
                 <String>::sse_encode(run_id, serializer);
                 <String>::sse_encode(generation, serializer);
             }
             crate::application::dto::AppCommand::CancelRun { run_id } => {
-                <i32>::sse_encode(20, serializer);
-                <String>::sse_encode(run_id, serializer);
-            }
-            crate::application::dto::AppCommand::ResumeRun { run_id } => {
-                <i32>::sse_encode(21, serializer);
-                <String>::sse_encode(run_id, serializer);
-            }
-            crate::application::dto::AppCommand::RetryRun { run_id } => {
                 <i32>::sse_encode(22, serializer);
                 <String>::sse_encode(run_id, serializer);
             }
-            crate::application::dto::AppCommand::Approve { binding } => {
+            crate::application::dto::AppCommand::ResumeRun { run_id } => {
                 <i32>::sse_encode(23, serializer);
+                <String>::sse_encode(run_id, serializer);
+            }
+            crate::application::dto::AppCommand::RetryRun { run_id } => {
+                <i32>::sse_encode(24, serializer);
+                <String>::sse_encode(run_id, serializer);
+            }
+            crate::application::dto::AppCommand::Approve { binding } => {
+                <i32>::sse_encode(25, serializer);
                 <crate::application::dto::AgentApprovalBinding>::sse_encode(binding, serializer);
             }
             crate::application::dto::AppCommand::Deny { attempt_id } => {
-                <i32>::sse_encode(24, serializer);
+                <i32>::sse_encode(26, serializer);
                 <String>::sse_encode(attempt_id, serializer);
             }
             crate::application::dto::AppCommand::DecideApprovals {
@@ -4427,7 +4467,7 @@ impl SseEncode for crate::application::dto::AppCommand {
                 approve,
                 deny,
             } => {
-                <i32>::sse_encode(25, serializer);
+                <i32>::sse_encode(27, serializer);
                 <String>::sse_encode(run_id, serializer);
                 <Vec<crate::application::dto::AgentApprovalBinding>>::sse_encode(
                     approve, serializer,
@@ -4435,7 +4475,7 @@ impl SseEncode for crate::application::dto::AppCommand {
                 <Vec<String>>::sse_encode(deny, serializer);
             }
             crate::application::dto::AppCommand::SetServerTrust { server_id, trusted } => {
-                <i32>::sse_encode(26, serializer);
+                <i32>::sse_encode(28, serializer);
                 <String>::sse_encode(server_id, serializer);
                 <bool>::sse_encode(trusted, serializer);
             }
@@ -4443,12 +4483,12 @@ impl SseEncode for crate::application::dto::AppCommand {
                 conversation_id,
                 selection,
             } => {
-                <i32>::sse_encode(27, serializer);
+                <i32>::sse_encode(29, serializer);
                 <String>::sse_encode(conversation_id, serializer);
                 <crate::application::dto::AgentContextSelection>::sse_encode(selection, serializer);
             }
             crate::application::dto::AppCommand::ApplyContextSelection { run_id, selection } => {
-                <i32>::sse_encode(28, serializer);
+                <i32>::sse_encode(30, serializer);
                 <String>::sse_encode(run_id, serializer);
                 <crate::application::dto::AgentContextSelection>::sse_encode(selection, serializer);
             }
@@ -4456,7 +4496,7 @@ impl SseEncode for crate::application::dto::AppCommand {
                 conversation_id,
                 origin,
             } => {
-                <i32>::sse_encode(29, serializer);
+                <i32>::sse_encode(31, serializer);
                 <String>::sse_encode(conversation_id, serializer);
                 <String>::sse_encode(origin, serializer);
             }
