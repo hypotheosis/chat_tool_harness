@@ -785,6 +785,17 @@ fn archive_is_refused_while_a_run_is_running_and_repeats_change_nothing() {
     assert_eq!(events(&repo, owner).len(), before + 2);
 }
 #[test]
+fn archive_is_allowed_while_a_run_waits_for_approval() {
+    let (_dir, repo, _, owner, _store) = fixture();
+    repo.insert_run_for_test(RunId::new(), owner, RunState::WaitingApproval)
+        .unwrap();
+    repo.set_conversation_archived(owner, true).unwrap();
+    assert_eq!(
+        repo.search_conversations("", true, 0, 100).unwrap().len(),
+        1
+    );
+}
+#[test]
 fn archive_of_missing_conversation_is_a_conflict() {
     let (_dir, repo, _, _, _) = fixture();
     for archived in [true, false] {

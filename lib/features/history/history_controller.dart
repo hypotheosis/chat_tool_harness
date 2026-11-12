@@ -97,6 +97,11 @@ class HistoryController extends ChangeNotifier {
   List<Run> runs(String owner) => (session.current?.runs ?? <Run>[])
       .where((r) => r.conversationId == owner)
       .toList();
+
+  /// Whether a run of [owner] is executing now. The backend refuses archiving
+  /// only then; a run waiting for approval has released its slot.
+  bool isRunning(String owner) =>
+      runs(owner).any((r) => r.state == RunState.running);
   bool needsStop(String owner) => runs(owner).any(
     (r) => r.state == RunState.running || r.state == RunState.waitingApproval,
   );

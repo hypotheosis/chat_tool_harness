@@ -395,4 +395,37 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await b.close();
   });
+  testWidgets('archive is offered while a run waits for approval', (
+    tester,
+  ) async {
+    const waitingRow = ConversationSummary(
+      id: 'c',
+      title: 'Waiting',
+      hasUnknownOutcomes: false,
+    );
+    final b = HistoryBackend()
+      ..current = AppSnapshot(
+        runs: [ui.run(runState: RunState.waitingApproval)],
+      )
+      ..pages.add([waitingRow])
+      ..pages.add([waitingRow]);
+    await tester.pumpWidget(MaterialApp(home: HistoryScreen(backend: b)));
+    await tester.pumpAndSettle();
+    // Delete still asks for the run to be stopped first.
+    expect(
+      tester
+          .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.delete))
+          .onPressed,
+      isNull,
+    );
+    expect(find.text('Stop and wait'), findsOneWidget);
+    await tester.tap(find.byTooltip('Archive'));
+    await tester.pumpAndSettle();
+    expect(
+      b.commands.whereType<ArchiveConversation>().single.conversationId,
+      'c',
+    );
+    await tester.pumpWidget(const SizedBox());
+    await b.close();
+  });
 }

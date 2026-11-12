@@ -192,7 +192,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       else
                         IconButton(
                           tooltip: 'Archive',
-                          onPressed: state.loading || state.needsStop(row.id)
+                          onPressed: state.loading || state.isRunning(row.id)
                               ? null
                               : () => state.archive(row.id),
                           icon: const Icon(Icons.archive),
