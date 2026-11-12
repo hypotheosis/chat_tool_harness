@@ -193,6 +193,25 @@ struct Inner {
     host_failed: std::sync::atomic::AtomicBool,
     owner: Cancellation,
     handoff: Arc<std::sync::Mutex<()>>,
+    /// The running run's wait for its current request's first output.
+    wait: std::sync::Mutex<Option<WaitState>>,
+}
+/// How long a running run has waited for its current request's first output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModelWait {
+    /// Since the request was sent.
+    pub waited_ms: u64,
+    /// Since the server last showed life: the request itself or a keepalive.
+    pub silent_ms: u64,
+    /// Keepalive comments received so far for this request.
+    pub keepalives: u32,
+}
+#[derive(Clone, Copy)]
+struct WaitState {
+    run: RunId,
+    sent: Instant,
+    last: Instant,
+    keepalives: u32,
 }
 pub struct Coordinator {
     inner: Arc<Inner>,
@@ -266,6 +285,34 @@ impl Inner {
         result
     }
 }
+impl Inner {
+    fn current_wait(&self) -> Option<WaitState> {
+        *self.wait.lock().unwrap_or_else(|e| e.into_inner())
+    }
+    fn set_wait(&self, wait: Option<WaitState>) {
+        *self.wait.lock().unwrap_or_else(|e| e.into_inner()) = wait;
+    }
+    /// Clears `run`'s wait, leaving another run's alone.
+    fn end_wait(&self, run: RunId) {
+        let mut wait = self.wait.lock().unwrap_or_else(|e| e.into_inner());
+        if wait.is_some_and(|w| w.run == run) {
+            *wait = None;
+        }
+    }
+    fn keepalive(&self, run: RunId) {
+        let now = self.services.clock.now();
+        if let Some(wait) = self
+            .wait
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_mut()
+            .filter(|w| w.run == run)
+        {
+            wait.last = now;
+            wait.keepalives = wait.keepalives.saturating_add(1);
+        }
+    }
+}
 impl Coordinator {
     pub fn open(config: RuntimeConfig, services: RuntimeServices) -> CoreResult<Self> {
         config.repository.recover_interrupted()?;
@@ -280,6 +327,7 @@ impl Coordinator {
                 host_failed: std::sync::atomic::AtomicBool::new(false),
                 owner: Cancellation::new(),
                 handoff: Arc::new(std::sync::Mutex::new(())),
+                wait: std::sync::Mutex::new(None),
             }),
         })
     }
@@ -619,9 +667,22 @@ impl Coordinator {
     }
     pub async fn snapshot(&self) -> CoreResult<AppSnapshot> {
         let repo = self.inner.repository.clone();
-        Ok(AppSnapshot {
-            runs: db(move || state::snapshot(&repo)).await?,
-        })
+        let mut runs = db(move || state::snapshot(&repo)).await?;
+        if let Some(wait) = self.inner.current_wait() {
+            let now = self.inner.services.clock.now();
+            let since = |at: Instant| now.saturating_duration_since(at).as_millis() as u64;
+            if let Some(run) = runs
+                .iter_mut()
+                .find(|r| r.id == wait.run && r.state == RunState::Running)
+            {
+                run.model_wait = Some(ModelWait {
+                    waited_ms: since(wait.sent),
+                    silent_ms: since(wait.last),
+                    keepalives: wait.keepalives,
+                });
+            }
+        }
+        Ok(AppSnapshot { runs })
     }
     pub fn subscribe(&self, after_sequence: u64) -> EventSubscription {
         EventSubscription {
@@ -708,6 +769,10 @@ const HOST_START_TIMEOUT: Duration = Duration::from_secs(30);
 const TEARDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 const PARTIAL_BYTES: usize = 4096;
 const CHECKPOINT_INTERVAL: Duration = Duration::from_millis(250);
+/// The longest a request may wait for its first output. That wait does not
+/// count against the run's time budget; the transport's idle timeout (reset
+/// by keepalives) ends a silent wait much sooner.
+pub const FIRST_OUTPUT_WAIT: Duration = Duration::from_secs(60 * 60);
 
 // Serialize Stop with each local poll, including construction of the transport future.
 // A request already handed to the remote server cannot be rolled back.
@@ -743,28 +808,46 @@ async fn dispatch<T: Send>(
         result=(Handoff{future:Box::pin(future),gate:inner.handoff.clone(),cancel:cancel.clone()})=>result,
     }
 }
+/// The run's active time: banked milliseconds plus the open stretch, if any.
+/// It is suspended while a request waits for its first output.
 struct ActiveTime {
-    base: u64,
-    started: std::sync::Mutex<Option<Instant>>,
+    state: std::sync::Mutex<(u64, Option<Instant>)>,
     clock: Arc<dyn RunClock>,
 }
 impl ActiveTime {
-    fn total(&self) -> u64 {
-        self.base.saturating_add(
-            self.started
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .map(|start| {
-                    self.clock
-                        .now()
-                        .saturating_duration_since(start)
-                        .as_millis() as u64
-                })
-                .unwrap_or(0),
-        )
+    fn new(banked: u64, clock: Arc<dyn RunClock>) -> Self {
+        Self {
+            state: std::sync::Mutex::new((banked, None)),
+            clock,
+        }
     }
+    fn elapsed(&self, start: Instant) -> u64 {
+        self.clock
+            .now()
+            .saturating_duration_since(start)
+            .as_millis() as u64
+    }
+    fn total(&self) -> u64 {
+        let (banked, started) = *self.state.lock().unwrap_or_else(|e| e.into_inner());
+        banked.saturating_add(started.map(|start| self.elapsed(start)).unwrap_or(0))
+    }
+    /// Starts counting, unless already counting.
     fn begin(&self) {
-        *self.started.lock().unwrap_or_else(|e| e.into_inner()) = Some(self.clock.now());
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if state.1.is_none() {
+            state.1 = Some(self.clock.now());
+        }
+    }
+    /// Stops counting, banking the open stretch.
+    fn suspend(&self) {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(start) = state.1.take() {
+            state.0 = state.0.saturating_add(self.elapsed(start));
+        }
+    }
+    /// When `limit_ms` of active time will have been spent, if counting goes on.
+    fn deadline(&self, limit_ms: u64) -> Instant {
+        self.clock.now() + Duration::from_millis(limit_ms.saturating_sub(self.total()))
     }
     async fn save(&self, inner: &Inner, run: RunId) -> CoreResult<()> {
         let total = self.total();
@@ -801,11 +884,14 @@ async fn execute(inner: Arc<Inner>, execution: Arc<Execution>, cancel: Cancellat
     let run = execution.run;
     let initial = inner.persist(move |repo| state::load(&repo, run)).await;
     let conversation = initial.as_ref().ok().map(|d| d.conversation);
-    let active = ActiveTime {
-        base: initial.as_ref().map(|d| d.active_ms).unwrap_or(0),
-        started: std::sync::Mutex::new(None),
-        clock: inner.services.clock.clone(),
-    };
+    let budget = initial
+        .as_ref()
+        .ok()
+        .map(|d| (d.profile.name.clone(), d.profile.limits.active_timeout_ms));
+    let active = ActiveTime::new(
+        initial.as_ref().map(|d| d.active_ms).unwrap_or(0),
+        inner.services.clock.clone(),
+    );
     let mut partial = PartialText::default();
     let mut sessions = HashMap::new();
     let result = match initial {
@@ -831,6 +917,9 @@ async fn execute(inner: Arc<Inner>, execution: Arc<Execution>, cancel: Cancellat
             }
         }
     };
+    // A dropped wait leaves active time suspended; teardown is charged.
+    inner.end_wait(run);
+    active.begin();
     // Drop local I/O futures before cleanup; already-sent remote work may continue.
     let flush = partial.flush(&inner, run).await;
     let close = async {
@@ -871,7 +960,15 @@ async fn execute(inner: Arc<Inner>, execution: Arc<Execution>, cancel: Cancellat
     };
     // Teardown above runs in nested scopes, so this is the run's own last note;
     // a note is only meaningful when the run itself failed.
-    let detail = crate::failure::take().filter(|_| result.is_err());
+    let detail = crate::failure::take()
+        .or_else(|| {
+            // Every other limit notes itself; one without a note is the
+            // run's time budget running out.
+            let (profile, limit_ms) = budget.as_ref()?;
+            (matches!(result, Err(CoreError::Limit)) && active.total() >= *limit_ms)
+                .then(|| run_time_limit(profile, *limit_ms))
+        })
+        .filter(|_| result.is_err());
     let error = result
         .map_err(|code| crate::failure::promote(code, detail.as_ref()))
         .err()
@@ -947,15 +1044,11 @@ async fn work(
         return Err(CoreError::Conflict);
     }
     active.begin();
-    let remaining = initial
-        .profile
-        .limits
-        .active_timeout_ms
-        .saturating_sub(initial.active_ms);
-    if remaining == 0 {
+    let limit_ms = initial.profile.limits.active_timeout_ms;
+    if active.total() >= limit_ms {
         return Err(CoreError::Limit);
     }
-    let deadline = inner.services.clock.now() + Duration::from_millis(remaining);
+    let mut deadline = active.deadline(limit_ms);
     let startup = dispatch(
         inner,
         cancel,
@@ -1030,6 +1123,8 @@ async fn work(
         if cancel.is_cancelled() {
             return Err(CoreError::Cancelled);
         }
+        // Waiting for a first output is not charged, so the deadline moves.
+        deadline = active.deadline(limit_ms);
         if inner.services.clock.now() >= deadline {
             return Err(CoreError::Limit);
         }
@@ -1174,6 +1269,8 @@ async fn work(
         }
         let purpose = data.context.purpose;
         let profile = data.profile.clone();
+        let (inference_count, attempt_count) = (data.inference_count, data.attempt_count);
+        let limited = data.profile.clone();
         let conversation = data.conversation;
         let (snapshot, disclosure, selection, calibration) = inner
             .persist(move |repo| {
@@ -1208,7 +1305,9 @@ async fn work(
                 purpose,
                 disclosure,
                 calibration,
-                deadline,
+                // The request may outlive the run deadline by its wait for a
+                // first output, which `stream` bounds and does not charge.
+                deadline: deadline + FIRST_OUTPUT_WAIT,
             },
         )?;
         let request = match decision {
@@ -1226,9 +1325,19 @@ async fn work(
             .await?;
         inner
             .persist(move |repo| state::inference_started(&repo, run, 0))
-            .await?;
+            .await
+            .inspect_err(|error| {
+                let max = limited.limits.max_inference_requests;
+                if *error == CoreError::Limit && inference_count >= max {
+                    profile_limit(
+                        &limited,
+                        format!("Inference request limit ({max} per run) reached"),
+                    );
+                }
+            })?;
         *partial = PartialText::default();
-        let turn = match stream(inner, run, cancel, request, partial).await {
+        let streamed = stream(inner, run, cancel, request, partial, active, limit_ms).await;
+        let turn = match streamed {
             Err(CoreError::ContextLength) => {
                 let mut usage = usage;
                 usage.reason = Some(context::ContextChoiceReason::ProviderRejected);
@@ -1257,9 +1366,23 @@ async fn work(
             return Ok(RunState::Completed);
         }
         let has_calls = !turn.calls.is_empty();
+        let proposed = turn.calls.len();
         inner
             .persist(move |repo| state::assistant_and_propose(&repo, run, turn.text, turn.calls, 0))
-            .await?;
+            .await
+            .inspect_err(|error| {
+                let max = limited.limits.max_tool_attempts;
+                if *error == CoreError::Limit
+                    && (attempt_count as usize).saturating_add(proposed) > max as usize
+                {
+                    profile_limit(
+                        &limited,
+                        format!(
+                            "Tool call limit ({max} per run) reached: the model asked for {proposed} more after {attempt_count}"
+                        ),
+                    );
+                }
+            })?;
         if !has_calls {
             return Ok(RunState::Completed);
         }
@@ -1289,16 +1412,102 @@ fn validate_batch(
     }
     Ok(())
 }
+/// Notes that the profile's limit named in `reason` stopped the run.
+fn profile_limit(profile: &ProfileSnapshot, reason: String) {
+    crate::failure::note(crate::failure::FailureDetail {
+        target: crate::failure::FailureTarget::Profile {
+            name: profile.name.clone(),
+        },
+        step: crate::failure::FailureStep::RunLimit,
+        url: None,
+        status: None,
+        reason: Some(reason),
+    });
+}
+/// The note for a run whose active-time budget ran out.
+fn run_time_limit(profile: &str, limit_ms: u64) -> crate::failure::FailureDetail {
+    crate::failure::FailureDetail {
+        target: crate::failure::FailureTarget::Profile {
+            name: profile.to_owned(),
+        },
+        step: crate::failure::FailureStep::RunLimit,
+        url: None,
+        status: None,
+        reason: Some(format!(
+            "Run time limit ({}) reached; time waiting for the model's first output is not counted",
+            duration_text(limit_ms)
+        )),
+    }
+}
+/// A short duration such as `15 min`, `14 min 45 s` or `1 h`.
+pub(crate) fn duration_text(ms: u64) -> String {
+    let seconds = ms / 1000;
+    let (h, m, s) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
+    let parts: Vec<String> = [(h, "h"), (m, "min"), (s, "s")]
+        .into_iter()
+        .filter(|(n, _)| *n > 0)
+        .map(|(n, unit)| format!("{n} {unit}"))
+        .collect();
+    if parts.is_empty() {
+        format!("{ms} ms")
+    } else {
+        parts.join(" ")
+    }
+}
+/// Streams one reply. Until its first output the run's active time is
+/// suspended and the wait is shown as [`ModelWait`]; [`FIRST_OUTPUT_WAIT`]
+/// bounds it. From the first output the run's time budget applies again.
 async fn stream(
     inner: &Inner,
     run: RunId,
     cancel: &Cancellation,
     request: InferenceRequest,
     partial: &mut PartialText,
+    active: &ActiveTime,
+    limit_ms: u64,
 ) -> CoreResult<InferenceTurn> {
-    let deadline = request.deadline;
+    let sent = inner.services.clock.now();
+    active.suspend();
+    inner.set_wait(Some(WaitState {
+        run,
+        sent,
+        last: sent,
+        keepalives: 0,
+    }));
+    let result = stream_reply(inner, run, cancel, request, partial, active, limit_ms, sent).await;
+    inner.end_wait(run);
+    active.begin();
+    result
+}
+#[allow(clippy::too_many_arguments)] // The run, its budget and the request's own timing.
+async fn stream_reply(
+    inner: &Inner,
+    run: RunId,
+    cancel: &Cancellation,
+    request: InferenceRequest,
+    partial: &mut PartialText,
+    active: &ActiveTime,
+    limit_ms: u64,
+    sent: Instant,
+) -> CoreResult<InferenceTurn> {
+    inner
+        .persist(move |repo| state::signal(&repo, run, "waiting"))
+        .await?;
+    let endpoint = request.endpoint.name.clone();
+    let first_output_by = sent + FIRST_OUTPUT_WAIT;
+    // The run's deadline, once output has started.
+    let mut deadline: Option<Instant> = None;
+    let started = |deadline: &mut Option<Instant>| -> bool {
+        if deadline.is_some() {
+            return false;
+        }
+        inner.end_wait(run);
+        active.begin();
+        *deadline = Some(active.deadline(limit_ms));
+        true
+    };
     let (sender, mut receiver) = mpsc::channel(crate::inference::EVENT_CHANNEL_CAPACITY);
-    let inference = dispatch(inner, cancel, deadline, async {
+    let inference = dispatch(inner, cancel, request.deadline, async {
         inner
             .services
             .inference
@@ -1313,15 +1522,40 @@ async fn stream(
         if finished.is_some() && !open {
             break;
         }
+        let mut output = false;
         tokio::select! {biased;
             _=cancel.cancelled()=>return Err(CoreError::Cancelled),
-            _=inner.services.clock.sleep_until(deadline)=>return Err(CoreError::Limit),
+            _=inner.services.clock.sleep_until(deadline.unwrap_or(first_output_by))=>{
+                if deadline.is_none() {
+                    crate::failure::note(crate::failure::FailureDetail {
+                        target: crate::failure::FailureTarget::Inference { name: endpoint },
+                        step: crate::failure::FailureStep::ChatRequest,
+                        url: None,
+                        status: None,
+                        reason: Some(format!(
+                            "no output from the model within {} of sending the request",
+                            duration_text(FIRST_OUTPUT_WAIT.as_millis() as u64)
+                        )),
+                    });
+                }
+                return Err(CoreError::Limit);
+            },
             result=&mut inference,if finished.is_none()=>{finished=Some(result);receiver.close();},
             event=receiver.recv(),if open=>match event {
-                Some(InferenceEvent::Text(text))=>{partial.push(text)?;if partial.pending.len()>=PARTIAL_BYTES {partial.flush(inner,run).await?;flush_at=inner.services.clock.now()+CHECKPOINT_INTERVAL;}},
+                Some(InferenceEvent::Text(text))=>{output=started(&mut deadline);partial.push(text)?;if partial.pending.len()>=PARTIAL_BYTES {partial.flush(inner,run).await?;flush_at=inner.services.clock.now()+CHECKPOINT_INTERVAL;}},
+                Some(InferenceEvent::Output)=>output=started(&mut deadline),
+                Some(InferenceEvent::Alive)=>if deadline.is_none() {
+                    inner.keepalive(run);
+                    inner.persist(move |repo| state::signal(&repo, run, "alive")).await?;
+                },
                 Some(InferenceEvent::WarningChatOnly)=>{},None=>open=false,
             },
             _=inner.services.clock.sleep_until(flush_at)=>{partial.flush(inner,run).await?;flush_at=inner.services.clock.now()+CHECKPOINT_INTERVAL;},
+        }
+        if output {
+            inner
+                .persist(move |repo| state::signal(&repo, run, "output"))
+                .await?;
         }
     }
     partial.flush(inner, run).await?;

@@ -531,6 +531,13 @@ Run _fromRun(g.AgentRun v) => Run(
   attempts: v.attempts.map((v) => _fromAttempt(v)).toList(),
   context: _fromRunContext(v.context),
   inputMessageId: v.inputMessageId,
+  modelWait: v.modelWait == null
+      ? null
+      : ModelWait(
+          waitedMs: v.modelWait!.waitedMs.toInt(),
+          silentMs: v.modelWait!.silentMs.toInt(),
+          keepalives: v.modelWait!.keepalives,
+        ),
 );
 
 Conversation _fromConversation(g.AgentConversation v) => Conversation(

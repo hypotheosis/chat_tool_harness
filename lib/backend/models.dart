@@ -346,6 +346,26 @@ class Attempt {
   final ApprovalBinding? binding;
 }
 
+/// A running run's wait for the model's first output, as of the snapshot.
+/// The wait does not count against the run's time limit.
+class ModelWait {
+  const ModelWait({
+    required this.waitedMs,
+    required this.silentMs,
+    this.keepalives = 0,
+  });
+
+  /// Since the request was sent.
+  final int waitedMs;
+
+  /// Since the server last showed life: the request itself or a keepalive.
+  final int silentMs;
+
+  /// Keepalive comments received so far; they mean the server is still
+  /// processing the prompt.
+  final int keepalives;
+}
+
 class Run {
   const Run({
     required this.id,
@@ -362,6 +382,7 @@ class Run {
     required this.attempts,
     required this.context,
     this.inputMessageId,
+    this.modelWait,
   });
   final String id;
   final String conversationId;
@@ -379,6 +400,9 @@ class Run {
 
   /// The user message that started a turn run; null for summary runs.
   final String? inputMessageId;
+
+  /// Set while the run waits for its current request's first output.
+  final ModelWait? modelWait;
 }
 
 class Conversation {

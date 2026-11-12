@@ -386,11 +386,7 @@ async fn summary_context_budget_and_cancel_preserve_sources_and_partial_text() {
         .await
         .unwrap();
     let request = f.request().await;
-    request
-        .events
-        .send(InferenceEvent::Text("unfinished summary".into()))
-        .await
-        .unwrap();
+    request.output("unfinished summary").await;
     f.clock.advance(Duration::from_secs(3));
     for _ in 0..10000 {
         if f.data(run).await.partial_text == "unfinished summary" {
@@ -991,6 +987,7 @@ async fn summary_obeys_run_budgets_authentication_and_no_tool_dispatch() {
         .await
         .unwrap();
     let request = f.request().await;
+    request.output("summary").await;
     f.clock.advance(Duration::from_secs(900));
     assert_eq!(f.settled(run).await.state, RunState::Failed);
     drop(request);
@@ -1280,11 +1277,7 @@ async fn resumed_inference_replaces_previous_partial_only_at_admission() {
     let mut f = Fixture::new();
     let run = f.start().await;
     let first = f.request().await;
-    first
-        .events
-        .send(InferenceEvent::Text("old".into()))
-        .await
-        .unwrap();
+    first.output("old").await;
     f.clock.advance(Duration::from_secs(3));
     first.finish(Err(CoreError::UnavailableTransport));
     let data = f.settled(run).await;
@@ -1308,11 +1301,7 @@ async fn resumed_inference_replaces_previous_partial_only_at_admission() {
     let admitted = f.data(run).await;
     assert_eq!(admitted.inference_count, 2);
     assert_eq!(admitted.active_ms, 3000);
-    second
-        .events
-        .send(InferenceEvent::Text("new".into()))
-        .await
-        .unwrap();
+    second.output("new").await;
     f.clock.advance(Duration::from_secs(5));
     second.finish(Err(CoreError::UnavailableTransport));
     let data = f.settled(run).await;
@@ -2480,6 +2469,7 @@ async fn injected_clock_drives_deadline_and_resume_keeps_spent_budget() {
     let mut f = Fixture::new();
     let run = f.start().await;
     let request = f.request().await;
+    request.output("a").await;
     f.clock.advance(Duration::from_secs(400));
     request.finish(Err(CoreError::UnavailableTransport));
     let data = f.settled(run).await;
@@ -2487,6 +2477,7 @@ async fn injected_clock_drives_deadline_and_resume_keeps_spent_budget() {
     assert_eq!(data.active_ms, 400_000);
     f.coordinator.resume(run).await.unwrap();
     let request = f.request().await;
+    request.output("b").await;
     f.clock.advance(Duration::from_secs(501));
     let data = f.settled(run).await;
     drop(request);
@@ -2565,6 +2556,18 @@ struct Request {
     reply: oneshot::Sender<Reply>,
 }
 impl Request {
+    /// Sends `text` and waits until the run has taken it, so that time
+    /// advanced afterwards is generation time rather than an uncharged wait
+    /// for the first output.
+    async fn output(&self, text: &str) {
+        self.events
+            .send(InferenceEvent::Text(text.into()))
+            .await
+            .unwrap();
+        while self.events.capacity() != crate::inference::EVENT_CHANNEL_CAPACITY {
+            tokio::task::yield_now().await;
+        }
+    }
     fn finish(self, result: CoreResult<InferenceTurn>) {
         drop(self.events);
         self.reply.send((result, None)).unwrap();
@@ -3173,6 +3176,21 @@ impl Fixture {
     }
     /// Edits the endpoint's context window in settings; the next turn, summary
     /// or resume refreshes the conversation snapshot from it.
+    /// Replaces the profile's run limits; the next turn runs with them.
+    fn set_limits(&self, limits: RunLimits) {
+        let snapshot = self.repo.conversation(self.conversation).unwrap().profile;
+        self.repo
+            .save_profile(Profile {
+                mode: snapshot.mode,
+                id: snapshot.profile_id,
+                name: snapshot.name,
+                endpoint_id: snapshot.endpoint.id,
+                server_ids: snapshot.servers.iter().map(|s| s.id).collect(),
+                instructions: snapshot.instructions,
+                limits,
+            })
+            .unwrap();
+    }
     fn set_context_tokens(&self, tokens: u32) {
         let mut endpoint = self
             .repo
@@ -3387,6 +3405,7 @@ async fn failed_request_and_cancel_charge_active_time_but_wait_does_not() {
     let mut f = Fixture::new();
     let run = f.start().await;
     let request = f.request().await;
+    request.output("partial").await;
     f.clock.advance(Duration::from_secs(12));
     request.finish(Err(CoreError::UnavailableTransport));
     let data = f.settled(run).await;
@@ -3925,4 +3944,204 @@ async fn archived_conversation_refuses_resume_retry_and_summary_until_restored()
     let retry = f.coordinator.retry(failed).await.unwrap();
     f.request().await.finish(Ok(turn(vec![])));
     assert_eq!(f.settled(retry).await.state, RunState::Completed);
+}
+
+/// The stored failure's code and the reason of its run-limit detail.
+fn limit_failure(data: &state::RunData) -> (CoreError, crate::failure::FailureDetail) {
+    let failure = data.failure.clone().expect("stored failure");
+    (failure.code, failure.detail.expect("failure detail"))
+}
+
+#[tokio::test]
+async fn waiting_for_the_first_output_is_shown_and_not_charged() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let request = f.request().await;
+    let wait = f.data(run).await.model_wait.expect("waiting");
+    assert_eq!((wait.waited_ms, wait.silent_ms, wait.keepalives), (0, 0, 0));
+    // The device case from issue #14: 884.6 s to the first token against the
+    // default 15 min budget. Keepalives arrive every 30 s meanwhile.
+    for _ in 0..29 {
+        f.clock.advance(Duration::from_secs(30));
+        request.events.send(InferenceEvent::Alive).await.unwrap();
+        while request.events.capacity() != crate::inference::EVENT_CHANNEL_CAPACITY {
+            tokio::task::yield_now().await;
+        }
+    }
+    f.clock.advance(Duration::from_millis(14_620));
+    let waiting = f.data(run).await;
+    assert_eq!(waiting.state, RunState::Running);
+    assert_eq!(
+        waiting.model_wait,
+        Some(ModelWait {
+            waited_ms: 884_620,
+            silent_ms: 14_620,
+            keepalives: 29,
+        })
+    );
+    assert_eq!(waiting.active_ms, 0);
+    request.output("answer").await;
+    assert_eq!(f.data(run).await.model_wait, None);
+    // Generation is charged; the reply finishes inside the budget.
+    f.clock.advance(Duration::from_secs(60));
+    request.finish(Ok(turn(vec![])));
+    let done = f.settled(run).await;
+    assert_eq!(done.state, RunState::Completed);
+    assert_eq!(done.active_ms, 60_000);
+    assert_eq!(done.model_wait, None);
+    let events = f.coordinator.subscribe(0).poll().await.unwrap();
+    let count = |suffix: &str| {
+        events
+            .iter()
+            .filter(|(_, _, p)| p == &format!("run:{}:{suffix}", run.0))
+            .count()
+    };
+    assert_eq!(
+        (count("waiting"), count("alive"), count("output")),
+        (1, 29, 1)
+    );
+}
+
+#[tokio::test]
+async fn non_text_output_ends_the_wait() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let request = f.request().await;
+    f.clock.advance(Duration::from_secs(600));
+    request.events.send(InferenceEvent::Output).await.unwrap();
+    while request.events.capacity() != crate::inference::EVENT_CHANNEL_CAPACITY {
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(f.data(run).await.model_wait, None);
+    // Keepalives after output started change nothing.
+    request.events.send(InferenceEvent::Alive).await.unwrap();
+    f.clock.advance(Duration::from_secs(5));
+    request.finish(Ok(turn(vec![f.tool_call("id-1")])));
+    let data = f.settled(run).await;
+    assert_eq!(data.state, RunState::WaitingApproval);
+    assert_eq!(data.active_ms, 5000);
+}
+
+#[tokio::test]
+async fn run_time_limit_counts_generation_and_names_the_limit() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let request = f.request().await;
+    f.clock.advance(Duration::from_secs(1200));
+    request.output("slow start").await;
+    // The deadline moved by the uncharged 20 min wait.
+    f.clock.advance(Duration::from_secs(899));
+    tokio::task::yield_now().await;
+    assert_eq!(f.data(run).await.state, RunState::Running);
+    f.clock.advance(Duration::from_secs(1));
+    let data = f.settled(run).await;
+    drop(request);
+    assert_eq!(data.state, RunState::Failed);
+    assert_eq!(data.active_ms, 900_000);
+    let (code, detail) = limit_failure(&data);
+    assert_eq!(code, CoreError::Limit);
+    assert_eq!(
+        detail.target,
+        crate::failure::FailureTarget::Profile {
+            name: "profile".into()
+        }
+    );
+    assert_eq!(detail.step, crate::failure::FailureStep::RunLimit);
+    assert_eq!(
+        detail.reason.as_deref(),
+        Some("Run time limit (15 min) reached; time waiting for the model's first output is not counted")
+    );
+}
+
+#[tokio::test]
+async fn first_output_wait_is_bounded_and_named() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let request = f.request().await;
+    f.clock.advance(FIRST_OUTPUT_WAIT - Duration::from_secs(1));
+    tokio::task::yield_now().await;
+    assert_eq!(f.data(run).await.state, RunState::Running);
+    f.clock.advance(Duration::from_secs(1));
+    let data = f.settled(run).await;
+    drop(request);
+    assert_eq!(data.state, RunState::Failed);
+    assert_eq!(data.active_ms, 0);
+    let (code, detail) = limit_failure(&data);
+    assert_eq!(code, CoreError::Limit);
+    assert_eq!(
+        detail.target,
+        crate::failure::FailureTarget::Inference {
+            name: "model".into()
+        }
+    );
+    assert_eq!(
+        detail.reason.as_deref(),
+        Some("no output from the model within 1 h of sending the request")
+    );
+}
+
+#[tokio::test]
+async fn inference_request_limit_names_the_limit() {
+    let mut f = Fixture::new();
+    f.set_limits(RunLimits {
+        max_inference_requests: 1,
+        ..RunLimits::default()
+    });
+    let run = f.start().await;
+    let binding = f.waiting(run).await;
+    f.approve(run, binding).await;
+    f.calls
+        .recv()
+        .await
+        .unwrap()
+        .reply
+        .send(Ok(outcome(false, 2)))
+        .unwrap();
+    let data = f.settled(run).await;
+    assert_eq!(data.state, RunState::Failed);
+    assert_eq!(data.inference_count, 1);
+    let (code, detail) = limit_failure(&data);
+    assert_eq!(code, CoreError::Limit);
+    assert_eq!(detail.step, crate::failure::FailureStep::RunLimit);
+    assert_eq!(
+        detail.reason.as_deref(),
+        Some("Inference request limit (1 per run) reached")
+    );
+}
+
+#[tokio::test]
+async fn tool_attempt_limit_names_the_limit() {
+    let mut f = Fixture::new();
+    f.set_limits(RunLimits {
+        max_tool_attempts: 1,
+        ..RunLimits::default()
+    });
+    let run = f.start().await;
+    f.request()
+        .await
+        .finish(Ok(turn(vec![f.tool_call("a"), f.tool_call("b")])));
+    let data = f.settled(run).await;
+    assert_eq!(data.state, RunState::Failed);
+    assert_eq!(data.attempt_count, 0);
+    let (code, detail) = limit_failure(&data);
+    assert_eq!(code, CoreError::Limit);
+    assert_eq!(detail.step, crate::failure::FailureStep::RunLimit);
+    assert_eq!(
+        detail.reason.as_deref(),
+        Some("Tool call limit (1 per run) reached: the model asked for 2 more after 0")
+    );
+}
+
+#[test]
+fn durations_read_as_short_text() {
+    for (ms, text) in [
+        (900_000, "15 min"),
+        (885_000, "14 min 45 s"),
+        (3_600_000, "1 h"),
+        (5_430_000, "1 h 30 min 30 s"),
+        (45_000, "45 s"),
+        (500, "500 ms"),
+    ] {
+        assert_eq!(duration_text(ms), text);
+    }
 }

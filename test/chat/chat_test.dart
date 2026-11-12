@@ -683,6 +683,52 @@ void main() {
     await t.pump(const Duration(milliseconds: 500));
     expect(b.commands.whereType<CancelRun>().single.runId, 'r');
   });
+  testWidgets('a run waiting for its first output shows the wait ticking', (
+    t,
+  ) async {
+    final b = UiBackend()
+      ..runs = [
+        turnRun(
+          state: RunState.running,
+          modelWait: const ModelWait(
+            waitedMs: 884000,
+            silentMs: 14000,
+            keepalives: 29,
+          ),
+        ),
+      ];
+    // The spinner never settles, so pump fixed frames instead.
+    await t.pumpWidget(
+      MaterialApp(
+        home: ChatScreen(backend: b, conversationId: 'c'),
+      ),
+    );
+    await t.pump();
+    expect(find.text('Working…'), findsNothing);
+    expect(find.text('Waiting for the model… 14:44'), findsOneWidget);
+    expect(
+      find.text('The model is still processing the prompt.'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('stop-r')), findsOneWidget);
+    await t.pump(const Duration(seconds: 1));
+    expect(find.text('Waiting for the model… 14:45'), findsOneWidget);
+    // Past 45 s without a keepalive, silence is what the row reports.
+    await t.pump(const Duration(seconds: 30));
+    expect(find.text('Waiting for the model… 15:15'), findsOneWidget);
+    expect(find.text('Nothing received for 45 s.'), findsOneWidget);
+    expect(
+      find.text('The model is still processing the prompt.'),
+      findsNothing,
+    );
+    // Output started: the next snapshot has no wait.
+    b.runs = [turnRun(state: RunState.running)];
+    b.emit(AppEvent(sequence: b.current.sequence + 1, conversationId: 'c'));
+    await t.pump();
+    await t.pump();
+    expect(find.text('Working…'), findsOneWidget);
+    expect(find.textContaining('Waiting for the model'), findsNothing);
+  });
   testWidgets('disclosure card only for unacknowledged origin', (t) async {
     final b = UiBackend()
       ..runs = []

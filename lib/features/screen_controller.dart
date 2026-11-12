@@ -39,6 +39,7 @@ String failureStepLabel(String step) => switch (step) {
   'callTool' => 'the tool call',
   'resolveCredential' => 'credential lookup',
   'refreshProfile' => 'profile refresh',
+  'runLimit' => 'the run',
   _ => 'the request',
 };
 
@@ -103,6 +104,15 @@ String failureMessage(Object error, {bool approval = false}) {
   }
   final detail = failure.detail;
   if (detail == null) return _codeText(failure.code);
+  // A run limit's reason already names the limit and its value.
+  final limitReason = detail.step == 'runLimit' ? detail.reason : null;
+  if (limitReason != null) {
+    var text = limitReason.trim();
+    while (text.endsWith('.')) {
+      text = text.substring(0, text.length - 1);
+    }
+    return "$text. Raise it in the profile's limits if the run needs more.";
+  }
   final status = detail.status;
   final what = status == null
       ? 'failed during ${failureStepLabel(detail.step)}'

@@ -330,6 +330,7 @@ impl From<crate::failure::FailureDetail> for AgentFailureDetail {
             FailureStep::ResolveCredential => "resolveCredential",
             FailureStep::RefreshProfile => "refreshProfile",
             FailureStep::Request => "request",
+            FailureStep::RunLimit => "runLimit",
         };
         Self {
             target_kind: target_kind.into(),
@@ -427,6 +428,7 @@ mod tests {
             (FailureStep::Request, "request"),
             (FailureStep::DiscoverModels, "discoverModels"),
             (FailureStep::Initialize, "initialize"),
+            (FailureStep::RunLimit, "runLimit"),
         ] {
             assert_eq!(inference(step).step, name);
         }

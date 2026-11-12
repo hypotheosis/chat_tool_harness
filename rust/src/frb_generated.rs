@@ -995,6 +995,20 @@ impl SseDecode for crate::application::dto::AgentMessage {
     }
 }
 
+impl SseDecode for crate::application::dto::AgentModelWait {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_waitedMs = <u64>::sse_decode(deserializer);
+        let mut var_silentMs = <u64>::sse_decode(deserializer);
+        let mut var_keepalives = <u32>::sse_decode(deserializer);
+        return crate::application::dto::AgentModelWait {
+            waited_ms: var_waitedMs,
+            silent_ms: var_silentMs,
+            keepalives: var_keepalives,
+        };
+    }
+}
+
 impl SseDecode for crate::application::dto::AgentPageReference {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1089,6 +1103,8 @@ impl SseDecode for crate::application::dto::AgentRun {
             <Vec<crate::application::dto::AgentAttempt>>::sse_decode(deserializer);
         let mut var_context = <crate::application::dto::AgentRunContext>::sse_decode(deserializer);
         let mut var_inputMessageId = <Option<String>>::sse_decode(deserializer);
+        let mut var_modelWait =
+            <Option<crate::application::dto::AgentModelWait>>::sse_decode(deserializer);
         return crate::application::dto::AgentRun {
             id: var_id,
             conversation_id: var_conversationId,
@@ -1104,6 +1120,7 @@ impl SseDecode for crate::application::dto::AgentRun {
             attempts: var_attempts,
             context: var_context,
             input_message_id: var_inputMessageId,
+            model_wait: var_modelWait,
         };
     }
 }
@@ -2031,6 +2048,19 @@ impl SseDecode for Option<crate::application::dto::AgentFailureDetail> {
     }
 }
 
+impl SseDecode for Option<crate::application::dto::AgentModelWait> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::application::dto::AgentModelWait>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::application::dto::AgentProviderUsage> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2860,6 +2890,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentMessage>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentModelWait {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.waited_ms.into_into_dart().into_dart(),
+            self.silent_ms.into_into_dart().into_dart(),
+            self.keepalives.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::application::dto::AgentModelWait
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::application::dto::AgentModelWait>
+    for crate::application::dto::AgentModelWait
+{
+    fn into_into_dart(self) -> crate::application::dto::AgentModelWait {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentPageReference {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -2973,6 +3025,7 @@ impl flutter_rust_bridge::IntoDart for crate::application::dto::AgentRun {
             self.attempts.into_into_dart().into_dart(),
             self.context.into_into_dart().into_dart(),
             self.input_message_id.into_into_dart().into_dart(),
+            self.model_wait.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -4140,6 +4193,15 @@ impl SseEncode for crate::application::dto::AgentMessage {
     }
 }
 
+impl SseEncode for crate::application::dto::AgentModelWait {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u64>::sse_encode(self.waited_ms, serializer);
+        <u64>::sse_encode(self.silent_ms, serializer);
+        <u32>::sse_encode(self.keepalives, serializer);
+    }
+}
+
 impl SseEncode for crate::application::dto::AgentPageReference {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -4204,6 +4266,7 @@ impl SseEncode for crate::application::dto::AgentRun {
         <Vec<crate::application::dto::AgentAttempt>>::sse_encode(self.attempts, serializer);
         <crate::application::dto::AgentRunContext>::sse_encode(self.context, serializer);
         <Option<String>>::sse_encode(self.input_message_id, serializer);
+        <Option<crate::application::dto::AgentModelWait>>::sse_encode(self.model_wait, serializer);
     }
 }
 
@@ -4968,6 +5031,16 @@ impl SseEncode for Option<crate::application::dto::AgentFailureDetail> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::application::dto::AgentFailureDetail>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::application::dto::AgentModelWait> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::application::dto::AgentModelWait>::sse_encode(value, serializer);
         }
     }
 }

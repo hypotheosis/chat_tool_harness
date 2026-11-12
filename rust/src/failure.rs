@@ -50,6 +50,8 @@ pub enum FailureStep {
     ResolveCredential,
     RefreshProfile,
     Request,
+    /// One of the profile's run limits stopped the run; the reason names it.
+    RunLimit,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

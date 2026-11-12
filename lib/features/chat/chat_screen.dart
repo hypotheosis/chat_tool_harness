@@ -10,6 +10,7 @@ import '../settings/endpoint_screen.dart';
 import '../settings/server_screen.dart';
 import 'approval_card.dart';
 import 'chat_controller.dart';
+import 'model_wait.dart';
 import 'run_card.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -348,13 +349,17 @@ class _ChatScreenState extends State<ChatScreen> {
                   const Icon(Icons.pending_actions, size: 16),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    run.state == RunState.running
-                        ? 'Working…'
-                        : hasUnresolvedAttempt(run)
-                        ? "Waiting — a tool call's outcome is unknown"
-                        : 'Waiting for your approval',
-                  ),
+                  child: switch (run.modelWait) {
+                    final wait? when run.state == RunState.running =>
+                      ModelWaitStatus(wait, key: Key('model-wait-${run.id}')),
+                    _ => Text(
+                      run.state == RunState.running
+                          ? 'Working…'
+                          : hasUnresolvedAttempt(run)
+                          ? "Waiting — a tool call's outcome is unknown"
+                          : 'Waiting for your approval',
+                    ),
+                  },
                 ),
                 // The approval card decides pending calls and resumes; Resume
                 // is only for a run whose calls are all decided already.

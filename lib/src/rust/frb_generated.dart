@@ -885,6 +885,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AgentModelWait dco_decode_agent_model_wait(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return AgentModelWait(
+      waitedMs: dco_decode_u_64(arr[0]),
+      silentMs: dco_decode_u_64(arr[1]),
+      keepalives: dco_decode_u_32(arr[2]),
+    );
+  }
+
+  @protected
   AgentPageReference dco_decode_agent_page_reference(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -948,8 +961,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AgentRun dco_decode_agent_run(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 14)
-      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
+    if (arr.length != 15)
+      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
     return AgentRun(
       id: dco_decode_String(arr[0]),
       conversationId: dco_decode_String(arr[1]),
@@ -965,6 +978,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       attempts: dco_decode_list_agent_attempt(arr[11]),
       context: dco_decode_agent_run_context(arr[12]),
       inputMessageId: dco_decode_opt_String(arr[13]),
+      modelWait: dco_decode_opt_box_autoadd_agent_model_wait(arr[14]),
     );
   }
 
@@ -1309,6 +1323,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AgentFailureDetail dco_decode_box_autoadd_agent_failure_detail(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_agent_failure_detail(raw);
+  }
+
+  @protected
+  AgentModelWait dco_decode_box_autoadd_agent_model_wait(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_agent_model_wait(raw);
   }
 
   @protected
@@ -1664,6 +1684,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return raw == null
         ? null
         : dco_decode_box_autoadd_agent_failure_detail(raw);
+  }
+
+  @protected
+  AgentModelWait? dco_decode_opt_box_autoadd_agent_model_wait(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_agent_model_wait(raw);
   }
 
   @protected
@@ -2317,6 +2343,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AgentModelWait sse_decode_agent_model_wait(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_waitedMs = sse_decode_u_64(deserializer);
+    var var_silentMs = sse_decode_u_64(deserializer);
+    var var_keepalives = sse_decode_u_32(deserializer);
+    return AgentModelWait(
+      waitedMs: var_waitedMs,
+      silentMs: var_silentMs,
+      keepalives: var_keepalives,
+    );
+  }
+
+  @protected
   AgentPageReference sse_decode_agent_page_reference(
     SseDeserializer deserializer,
   ) {
@@ -2409,6 +2448,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_attempts = sse_decode_list_agent_attempt(deserializer);
     var var_context = sse_decode_agent_run_context(deserializer);
     var var_inputMessageId = sse_decode_opt_String(deserializer);
+    var var_modelWait = sse_decode_opt_box_autoadd_agent_model_wait(
+      deserializer,
+    );
     return AgentRun(
       id: var_id,
       conversationId: var_conversationId,
@@ -2424,6 +2466,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       attempts: var_attempts,
       context: var_context,
       inputMessageId: var_inputMessageId,
+      modelWait: var_modelWait,
     );
   }
 
@@ -2845,6 +2888,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_agent_failure_detail(deserializer));
+  }
+
+  @protected
+  AgentModelWait sse_decode_box_autoadd_agent_model_wait(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_agent_model_wait(deserializer));
   }
 
   @protected
@@ -3391,6 +3442,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_agent_failure_detail(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  AgentModelWait? sse_decode_opt_box_autoadd_agent_model_wait(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_agent_model_wait(deserializer));
     } else {
       return null;
     }
@@ -4019,6 +4083,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_agent_model_wait(
+    AgentModelWait self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.waitedMs, serializer);
+    sse_encode_u_64(self.silentMs, serializer);
+    sse_encode_u_32(self.keepalives, serializer);
+  }
+
+  @protected
   void sse_encode_agent_page_reference(
     AgentPageReference self,
     SseSerializer serializer,
@@ -4087,6 +4162,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_agent_attempt(self.attempts, serializer);
     sse_encode_agent_run_context(self.context, serializer);
     sse_encode_opt_String(self.inputMessageId, serializer);
+    sse_encode_opt_box_autoadd_agent_model_wait(self.modelWait, serializer);
   }
 
   @protected
@@ -4467,6 +4543,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_agent_failure_detail(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_agent_model_wait(
+    AgentModelWait self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_agent_model_wait(self, serializer);
   }
 
   @protected
@@ -5001,6 +5086,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_agent_failure_detail(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_agent_model_wait(
+    AgentModelWait? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_agent_model_wait(self, serializer);
     }
   }
 
