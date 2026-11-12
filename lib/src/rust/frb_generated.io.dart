@@ -130,6 +130,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AgentMessage dco_decode_agent_message(dynamic raw);
 
   @protected
+  AgentModelWait dco_decode_agent_model_wait(dynamic raw);
+
+  @protected
   AgentPageReference dco_decode_agent_page_reference(dynamic raw);
 
   @protected
@@ -212,6 +215,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AgentFailureDetail dco_decode_box_autoadd_agent_failure_detail(dynamic raw);
+
+  @protected
+  AgentModelWait dco_decode_box_autoadd_agent_model_wait(dynamic raw);
 
   @protected
   AgentProfile dco_decode_box_autoadd_agent_profile(dynamic raw);
@@ -383,6 +389,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AgentFailureDetail? dco_decode_opt_box_autoadd_agent_failure_detail(
     dynamic raw,
   );
+
+  @protected
+  AgentModelWait? dco_decode_opt_box_autoadd_agent_model_wait(dynamic raw);
 
   @protected
   AgentProviderUsage? dco_decode_opt_box_autoadd_agent_provider_usage(
@@ -578,6 +587,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AgentMessage sse_decode_agent_message(SseDeserializer deserializer);
 
   @protected
+  AgentModelWait sse_decode_agent_model_wait(SseDeserializer deserializer);
+
+  @protected
   AgentPageReference sse_decode_agent_page_reference(
     SseDeserializer deserializer,
   );
@@ -680,6 +692,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AgentFailureDetail sse_decode_box_autoadd_agent_failure_detail(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentModelWait sse_decode_box_autoadd_agent_model_wait(
     SseDeserializer deserializer,
   );
 
@@ -897,6 +914,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AgentFailureDetail? sse_decode_opt_box_autoadd_agent_failure_detail(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AgentModelWait? sse_decode_opt_box_autoadd_agent_model_wait(
     SseDeserializer deserializer,
   );
 
@@ -1135,6 +1157,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_agent_message(AgentMessage self, SseSerializer serializer);
 
   @protected
+  void sse_encode_agent_model_wait(
+    AgentModelWait self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_agent_page_reference(
     AgentPageReference self,
     SseSerializer serializer,
@@ -1260,6 +1288,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_agent_failure_detail(
     AgentFailureDetail self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_agent_model_wait(
+    AgentModelWait self,
     SseSerializer serializer,
   );
 
@@ -1533,6 +1567,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_agent_failure_detail(
     AgentFailureDetail? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_agent_model_wait(
+    AgentModelWait? self,
     SseSerializer serializer,
   );
 

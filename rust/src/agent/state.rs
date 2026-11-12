@@ -111,6 +111,9 @@ pub struct RunData {
     pub context: super::context::RunContext,
     /// The user message that started a turn run; none for summary runs.
     pub input_message_id: Option<String>,
+    /// Set while the run waits for its current request's first output; the
+    /// coordinator fills it in from memory, so a loaded run has none.
+    pub model_wait: Option<super::ModelWait>,
 }
 fn sql_error(_: rusqlite::Error) -> CoreError {
     CoreError::Storage
@@ -299,7 +302,7 @@ pub fn load(repo: &Repository, run: RunId) -> CoreResult<RunData> {
             Ok(PendingAttempt { id:AttemptId(uuid(id)?),state:attempt_state(&status)?,call:parse::<StoredCall>(&call)?.call(),binding:binding.map(|v|parse(&v)).transpose()? })
         }).collect::<CoreResult<Vec<_>>>()?;
         let context:String=conn.query_row("SELECT context_json FROM runs WHERE id=?1",[run.0.to_string()],|r|r.get(0)).map_err(sql_error)?;
-        Ok(RunData { context:parse(&context)?, id:run, conversation, profile:parse(&profile)?, state:state(&status)?, inference_count:u32::try_from(inference_count).map_err(|_|CoreError::Storage)?,attempt_count:u32::try_from(attempt_count).map_err(|_|CoreError::Storage)?,active_ms:u64::try_from(active_ms).map_err(|_|CoreError::Storage)?,messages,attempts,partial_text,failure:failure.map(StoredFailure::parse),input_message_id })
+        Ok(RunData { context:parse(&context)?, id:run, conversation, profile:parse(&profile)?, state:state(&status)?, inference_count:u32::try_from(inference_count).map_err(|_|CoreError::Storage)?,attempt_count:u32::try_from(attempt_count).map_err(|_|CoreError::Storage)?,active_ms:u64::try_from(active_ms).map_err(|_|CoreError::Storage)?,messages,attempts,partial_text,failure:failure.map(StoredFailure::parse),input_message_id,model_wait:None })
     })
 }
 /// Moves a resumable run from `from` to Running and, in the same transaction,
@@ -791,6 +794,26 @@ pub fn inference_started(repo: &Repository, run: RunId, active_ms: u64) -> CoreR
         if status!="Running" {return Err(CoreError::Cancelled);}
         if count>=i64::from(snapshot.limits.max_inference_requests) || u64::try_from(spent).map_err(|_|CoreError::Storage)?.saturating_add(active_ms)>=snapshot.limits.active_timeout_ms {return Err(CoreError::Limit);}
         tx.execute("UPDATE runs SET inference_count=inference_count+1,active_ms=active_ms+?1,partial_text='' WHERE id=?2",params![i64::try_from(active_ms).map_err(|_|CoreError::Limit)?,run.0.to_string()]).map_err(sql_error)?;
+        tx.commit().map_err(sql_error)?;
+        Ok(())
+    })
+}
+/// Records `run:<id>:<what>` so views refresh, without changing the run.
+pub fn signal(repo: &Repository, run: RunId, what: &'static str) -> CoreResult<()> {
+    repo.with_connection(move |conn| {
+        let tx = conn.transaction().map_err(sql_error)?;
+        let conversation: String = tx
+            .query_row(
+                "SELECT conversation_id FROM runs WHERE id=?1",
+                [run.0.to_string()],
+                |r| r.get(0),
+            )
+            .map_err(sql_error)?;
+        event(
+            &tx,
+            ConversationId(uuid(conversation)?),
+            &format!("run:{}:{what}", run.0),
+        )?;
         tx.commit().map_err(sql_error)?;
         Ok(())
     })

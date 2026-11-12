@@ -104,6 +104,7 @@ Run turnRun({
   ProfileSnapshot profile = profileSnapshot,
   List<Attempt> attempts = const [],
   String? inputMessageId = 'm',
+  ModelWait? modelWait,
 }) => Run(
   id: id,
   conversationId: 'c',
@@ -118,6 +119,7 @@ Run turnRun({
   failureDetail: detail,
   attempts: attempts,
   inputMessageId: inputMessageId,
+  modelWait: modelWait,
   context: RunContext(
     purpose: ContextPurpose.turn,
     usage: reason == null

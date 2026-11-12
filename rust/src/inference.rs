@@ -212,6 +212,13 @@ pub struct InferenceTurn {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InferenceEvent {
     Text(String),
+    /// The reply's first output that is not text, such as a tool call's
+    /// start; sent once, and only before any text.
+    Output,
+    /// The server is still there but has sent no output yet: an SSE comment
+    /// such as llama-server's keepalive during prompt processing. Dropped
+    /// when the channel is full, since a busy channel already shows life.
+    Alive,
     WarningChatOnly,
 }
 /// Mandatory diagnostic for endpoint capability UI; never infer support from event delivery.
@@ -327,7 +334,9 @@ impl<P: CredentialProvider> InferenceClient<P> {
         let result = self
             .decode(&mut response, &mut decoder, &request, &events, &cancel)
             .await;
-        if let (Err(CoreError::Protocol), Some(reason)) = (&result, decoder.problem()) {
+        if let (Err(CoreError::Protocol | CoreError::Limit), Some(reason)) =
+            (&result, decoder.problem())
+        {
             crate::failure::note(crate::failure::FailureDetail {
                 target: crate::failure::FailureTarget::Inference {
                     name: request.endpoint.name.clone(),
@@ -352,6 +361,7 @@ impl<P: CredentialProvider> InferenceClient<P> {
         events: &EventSender,
         cancel: &Cancellation,
     ) -> CoreResult<InferenceTurn> {
+        let mut output = false;
         loop {
             let chunk = next_chunk(
                 response,
@@ -359,11 +369,32 @@ impl<P: CredentialProvider> InferenceClient<P> {
                 cancel,
                 MAX_RESPONSE_BYTES - decoder.total,
             )
-            .await?;
+            .await
+            .map_err(|error| {
+                if error == CoreError::Limit {
+                    decoder.problem = Some(response_limit_reason());
+                }
+                error
+            })?;
             let Some(chunk) = chunk else {
                 break;
             };
-            for text in decoder.push(&chunk)? {
+            let texts = decoder.push(&chunk)?;
+            let liveness = decoder.take_liveness();
+            output |= !texts.is_empty();
+            if liveness.output && !output {
+                output = true;
+                tokio::select! {
+                    _ = cancel.cancelled() => return Err(CoreError::Cancelled),
+                    result = tokio::time::timeout_at(request.deadline, events.send(InferenceEvent::Output)) => {
+                        result.map_err(|_| CoreError::Cancelled)?.map_err(|_| CoreError::Cancelled)?;
+                    }
+                }
+            }
+            if liveness.keepalives > 0 {
+                let _ = events.try_send(InferenceEvent::Alive);
+            }
+            for text in texts {
                 tokio::select! {
                     _ = cancel.cancelled() => return Err(CoreError::Cancelled),
                     result = tokio::time::timeout_at(request.deadline, events.send(InferenceEvent::Text(text))) => {
@@ -427,6 +458,39 @@ fn bad(reason: &'static str) -> Bad {
         reason: Some(reason.into()),
     }
 }
+/// A reply that went over one of the stream's size caps, naming the cap.
+fn over(what: &str, bytes: usize) -> Bad {
+    Bad {
+        error: CoreError::Limit,
+        reason: Some(format!(
+            "the reply exceeded the {what} limit ({})",
+            size_text(bytes)
+        )),
+    }
+}
+fn size_text(bytes: usize) -> String {
+    if bytes >= 1024 * 1024 && bytes.is_multiple_of(1024 * 1024) {
+        format!("{} MiB", bytes / (1024 * 1024))
+    } else if bytes >= 1024 && bytes.is_multiple_of(1024) {
+        format!("{} KiB", bytes / 1024)
+    } else {
+        format!("{bytes} bytes")
+    }
+}
+fn response_limit_reason() -> String {
+    over("response size", MAX_RESPONSE_BYTES)
+        .reason
+        .unwrap_or_default()
+}
+/// What a pushed chunk showed of the server besides text, since the last
+/// [`StreamDecoder::take_liveness`].
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Liveness {
+    /// SSE comment lines, such as keepalives sent during prompt processing.
+    pub keepalives: u32,
+    /// Whether any output (text or a tool-call fragment) arrived.
+    pub output: bool,
+}
 /// The reason for an `error` frame inside a streamed reply: the router's
 /// sanitized message, else a fixed phrase.
 fn stream_error_reason(data: &[u8]) -> String {
@@ -451,6 +515,7 @@ pub struct StreamDecoder {
     finish_reason: Option<String>,
     done: bool,
     problem: Option<String>,
+    liveness: Liveness,
 }
 impl StreamDecoder {
     pub fn new(tools: &[AdvertisedTool]) -> CoreResult<Self> {
@@ -476,7 +541,13 @@ impl StreamDecoder {
             finish_reason: None,
             done: false,
             problem: None,
+            liveness: Liveness::default(),
         })
+    }
+    /// What arrived besides text since the last call: keepalive comments,
+    /// which are never part of the reply, and whether output has started.
+    pub fn take_liveness(&mut self) -> Liveness {
+        std::mem::take(&mut self.liveness)
     }
     pub fn push(&mut self, bytes: &[u8]) -> CoreResult<Vec<String>> {
         self.push_inner(bytes).map_err(|bad| self.reject(bad))
@@ -498,7 +569,7 @@ impl StreamDecoder {
             .total
             .checked_add(bytes.len())
             .filter(|n| *n <= MAX_RESPONSE_BYTES)
-            .ok_or(Bad::from(CoreError::Limit))?;
+            .ok_or_else(|| over("response size", MAX_RESPONSE_BYTES))?;
         let mut out = Vec::new();
         for byte in bytes {
             if self.done {
@@ -555,10 +626,15 @@ impl StreamDecoder {
                                     .as_str()
                                     .ok_or_else(|| bad("reply content is not text"))?;
                                 if self.text.len().saturating_add(text.len()) > MAX_TEXT_BYTES {
-                                    return Err(CoreError::Limit.into());
+                                    return Err(over("reply text", MAX_TEXT_BYTES));
                                 }
-                                self.text.push_str(text);
-                                out.push(text.to_owned());
+                                // An empty fragment, such as the `"content":""` in an
+                                // assistant-role preamble, is neither text nor output.
+                                if !text.is_empty() {
+                                    self.liveness.output = true;
+                                    self.text.push_str(text);
+                                    out.push(text.to_owned());
+                                }
                             }
                             if let Some(calls) = delta.get("tool_calls") {
                                 for call in calls
@@ -570,8 +646,14 @@ impl StreamDecoder {
                                         .and_then(Value::as_u64)
                                         .ok_or_else(|| bad("tool call lacks an index"))?;
                                     if index >= MAX_TOOLS as u64 {
-                                        return Err(CoreError::Limit.into());
+                                        return Err(Bad {
+                                            error: CoreError::Limit,
+                                            reason: Some(format!(
+                                                "the reply has more tool calls than the limit ({MAX_TOOLS})"
+                                            )),
+                                        });
                                     }
+                                    self.liveness.output = true;
                                     let pending = self.pending.entry(index).or_default();
                                     // Some routers repeat id, type and name in every
                                     // chunk of a call; the same value again is harmless.
@@ -622,7 +704,10 @@ impl StreamDecoder {
                                             if pending.args.len().saturating_add(args.len())
                                                 > MAX_TOOL_JSON_BYTES
                                             {
-                                                return Err(CoreError::Limit.into());
+                                                return Err(over(
+                                                    "tool call arguments",
+                                                    MAX_TOOL_JSON_BYTES,
+                                                ));
                                             }
                                             pending.args.push_str(args);
                                         }
@@ -649,18 +734,17 @@ impl StreamDecoder {
                         event.push(b'\n');
                     }
                     if event.len().saturating_add(data.len()) > MAX_FRAME_BYTES {
-                        return Err(CoreError::Limit.into());
+                        return Err(over("event size", MAX_FRAME_BYTES));
                     }
                     event.extend_from_slice(data);
-                } else if !(line.starts_with(b":")
-                    || line.starts_with(b"event:")
-                    || line.starts_with(b"id:"))
-                {
+                } else if line.starts_with(b":") {
+                    self.liveness.keepalives = self.liveness.keepalives.saturating_add(1);
+                } else if !(line.starts_with(b"event:") || line.starts_with(b"id:")) {
                     return Err(bad("reply is not a server-sent event stream"));
                 }
             } else {
                 if self.frame.len() >= MAX_FRAME_BYTES {
-                    return Err(CoreError::Limit.into());
+                    return Err(over("line length", MAX_FRAME_BYTES));
                 }
                 self.frame.push(*byte);
             }
@@ -1161,6 +1245,135 @@ mod tests {
         );
         assert_eq!(turn.calls.len(), 1);
         assert_eq!(turn.calls[0].provider_call_id, "id1");
+        server.await.unwrap();
+    }
+    #[test]
+    fn keepalive_comments_are_liveness_not_text() {
+        let mut decoder = StreamDecoder::new(&[]).unwrap();
+        // llama-server sends `:` comments every 30 s while it reads the prompt.
+        let texts = decoder.push(b": keepalive\n\n: keepalive\n\n").unwrap();
+        assert!(texts.is_empty());
+        assert_eq!(
+            decoder.take_liveness(),
+            Liveness {
+                keepalives: 2,
+                output: false
+            }
+        );
+        assert_eq!(decoder.take_liveness(), Liveness::default());
+        let texts = decoder
+            .push(b"data: {\"choices\":[{\"delta\":{\"content\":\"hi\"},\"finish_reason\":\"stop\"}]}\n\n: ping\n\ndata: [DONE]\n\n")
+            .unwrap();
+        assert_eq!(texts, ["hi"]);
+        assert_eq!(
+            decoder.take_liveness(),
+            Liveness {
+                keepalives: 1,
+                output: true
+            }
+        );
+        assert_eq!(decoder.finish().unwrap().text, "hi");
+    }
+    #[test]
+    fn empty_content_preamble_is_neither_text_nor_output() {
+        let mut decoder = StreamDecoder::new(&[]).unwrap();
+        let texts = decoder
+            .push(b"data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\n")
+            .unwrap();
+        assert!(texts.is_empty());
+        assert_eq!(decoder.take_liveness(), Liveness::default());
+    }
+    #[test]
+    fn role_only_chunk_is_not_output_but_a_tool_call_is() {
+        let tool = advertised("read");
+        let alias = tool_alias(&tool.key);
+        let mut decoder = StreamDecoder::new(std::slice::from_ref(&tool)).unwrap();
+        decoder
+            .push(b"data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}\n\n")
+            .unwrap();
+        assert!(!decoder.take_liveness().output);
+        let frame = format!(
+            "data: {}\n\n",
+            json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"id1","type":"function","function":{"name":alias,"arguments":""}}]},"finish_reason":null}]})
+        );
+        assert!(decoder.push(frame.as_bytes()).unwrap().is_empty());
+        assert!(decoder.take_liveness().output);
+    }
+    #[test]
+    fn stream_size_caps_name_themselves() {
+        let mut decoder = StreamDecoder::new(&[]).unwrap();
+        let long = vec![b'x'; MAX_FRAME_BYTES + 1];
+        assert_eq!(decoder.push(&long), Err(CoreError::Limit));
+        assert_eq!(
+            decoder.problem(),
+            Some("the reply exceeded the line length limit (256 KiB)")
+        );
+        let mut decoder = StreamDecoder::new(&[]).unwrap();
+        let chunk = "x".repeat(200 * 1024);
+        let frame = format!(
+            "data: {}\n\n",
+            json!({"choices":[{"delta":{"content":chunk},"finish_reason":null}]})
+        );
+        let mut result = Ok(vec![]);
+        for _ in 0..6 {
+            result = decoder.push(frame.as_bytes());
+            if result.is_err() {
+                break;
+            }
+        }
+        assert_eq!(result, Err(CoreError::Limit));
+        assert_eq!(
+            decoder.problem(),
+            Some("the reply exceeded the reply text limit (1 MiB)")
+        );
+    }
+    #[tokio::test]
+    async fn inference_loopback_reports_keepalives_and_non_text_output() {
+        use crate::model::core::CredentialRef;
+        use crate::net::SecretValue;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let tool = advertised("read");
+        let alias = tool_alias(&tool.key);
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut bytes = vec![0; 4096];
+            let _ = socket.read(&mut bytes).await.unwrap();
+            let body = format!(
+                "data: {{\"choices\":[{{\"delta\":{{\"role\":\"assistant\",\"content\":\"\"}},\"finish_reason\":null}}]}}\n\n: keepalive\n\ndata: {}\n\ndata: [DONE]\n\n",
+                json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"id1","type":"function","function":{"name":alias,"arguments":"{}"}}]},"finish_reason":"tool_calls"}]})
+            );
+            socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n{:x}\r\n{body}\r\n0\r\n\r\n",body.len()).as_bytes()).await.unwrap();
+        });
+        struct NoKey;
+        impl CredentialProvider for NoKey {
+            fn resolve(
+                &self,
+                _: CredentialRef,
+            ) -> std::pin::Pin<
+                Box<dyn std::future::Future<Output = CoreResult<SecretValue>> + Send + '_>,
+            > {
+                Box::pin(async { panic!("not needed") })
+            }
+        }
+        let mut r = request(vec![tool]);
+        r.endpoint.base_url = format!("http://{addr}/v1");
+        r.endpoint.allow_http = true;
+        let (events, mut receiver) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
+        let turn = InferenceClient::new(NoKey)
+            .unwrap()
+            .stream_turn(r, events, Cancellation::new())
+            .await
+            .unwrap();
+        let mut seen = vec![];
+        while let Ok(event) = receiver.try_recv() {
+            seen.push(event);
+        }
+        assert_eq!(seen, [InferenceEvent::Output, InferenceEvent::Alive]);
+        assert_eq!(turn.text, "");
+        assert_eq!(turn.calls.len(), 1);
         server.await.unwrap();
     }
     #[test]

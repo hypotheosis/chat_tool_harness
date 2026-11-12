@@ -697,6 +697,39 @@ class AgentMessage {
           sourceEnvelope == other.sourceEnvelope;
 }
 
+/// A running run's wait for the model's first output, as of the snapshot.
+/// The wait does not count against the run's time limit.
+class AgentModelWait {
+  /// Since the request was sent.
+  final BigInt waitedMs;
+
+  /// Since the server last showed life: the request itself or a keepalive.
+  final BigInt silentMs;
+
+  /// Keepalive comments received so far, which mean the server is still
+  /// processing the prompt.
+  final int keepalives;
+
+  const AgentModelWait({
+    required this.waitedMs,
+    required this.silentMs,
+    required this.keepalives,
+  });
+
+  @override
+  int get hashCode =>
+      waitedMs.hashCode ^ silentMs.hashCode ^ keepalives.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AgentModelWait &&
+          runtimeType == other.runtimeType &&
+          waitedMs == other.waitedMs &&
+          silentMs == other.silentMs &&
+          keepalives == other.keepalives;
+}
+
 class AgentPageReference {
   final String attachmentId;
   final int physicalPage;
@@ -853,6 +886,9 @@ class AgentRun {
   /// The id of the user message that started a turn; none for summaries.
   final String? inputMessageId;
 
+  /// Set while the run waits for its current request's first output.
+  final AgentModelWait? modelWait;
+
   const AgentRun({
     required this.id,
     required this.conversationId,
@@ -868,6 +904,7 @@ class AgentRun {
     required this.attempts,
     required this.context,
     this.inputMessageId,
+    this.modelWait,
   });
 
   @override
@@ -885,7 +922,8 @@ class AgentRun {
       failureDetail.hashCode ^
       attempts.hashCode ^
       context.hashCode ^
-      inputMessageId.hashCode;
+      inputMessageId.hashCode ^
+      modelWait.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -905,7 +943,8 @@ class AgentRun {
           failureDetail == other.failureDetail &&
           attempts == other.attempts &&
           context == other.context &&
-          inputMessageId == other.inputMessageId;
+          inputMessageId == other.inputMessageId &&
+          modelWait == other.modelWait;
 }
 
 class AgentRunContext {

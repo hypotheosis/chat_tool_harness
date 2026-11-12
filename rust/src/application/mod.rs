@@ -588,6 +588,11 @@ impl Application {
                     .collect(),
                 context: v.context.into(),
                 input_message_id: v.input_message_id,
+                model_wait: v.model_wait.map(|w| AgentModelWait {
+                    waited_ms: w.waited_ms,
+                    silent_ms: w.silent_ms,
+                    keepalives: w.keepalives,
+                }),
             })
             .collect();
         let store = self.artifacts.clone();

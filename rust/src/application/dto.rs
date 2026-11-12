@@ -162,6 +162,20 @@ pub struct AgentRun {
     pub context: AgentRunContext,
     /// The id of the user message that started a turn; none for summaries.
     pub input_message_id: Option<String>,
+    /// Set while the run waits for its current request's first output.
+    pub model_wait: Option<AgentModelWait>,
+}
+/// A running run's wait for the model's first output, as of the snapshot.
+/// The wait does not count against the run's time limit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AgentModelWait {
+    /// Since the request was sent.
+    pub waited_ms: u64,
+    /// Since the server last showed life: the request itself or a keepalive.
+    pub silent_ms: u64,
+    /// Keepalive comments received so far, which mean the server is still
+    /// processing the prompt.
+    pub keepalives: u32,
 }
 #[derive(Debug, Clone)]
 pub struct AgentConversation {

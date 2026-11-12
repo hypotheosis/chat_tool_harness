@@ -14,6 +14,41 @@ void main() {
     );
   });
 
+  test('a run limit reads as its reason and how to raise it', () {
+    const failure = BackendFailure(
+      FailureCode.limit,
+      detail: FailureDetail(
+        targetKind: 'profile',
+        targetName: 'Default',
+        step: 'runLimit',
+        reason:
+            "Run time limit (15 min) reached; time waiting for the model's first output is not counted",
+      ),
+    );
+    expect(
+      failureMessage(failure),
+      "Run time limit (15 min) reached; time waiting for the model's first "
+      "output is not counted. Raise it in the profile's limits if the run "
+      'needs more.',
+    );
+  });
+  test('a stream size cap names the endpoint and the cap', () {
+    const failure = BackendFailure(
+      FailureCode.limit,
+      detail: FailureDetail(
+        targetKind: 'inference',
+        targetName: 'local',
+        step: 'chatRequest',
+        reason: 'the reply exceeded the reply text limit (1 MiB)',
+      ),
+    );
+    expect(
+      failureMessage(failure),
+      'Inference endpoint "local": failed during the chat request: the reply '
+      'exceeded the reply text limit (1 MiB). A configured safety limit was '
+      'reached.',
+    );
+  });
   test('detail names the target, status, step and reason', () {
     const failure = BackendFailure(
       FailureCode.authentication,
