@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../backend/backend.dart';
 import '../../backend/models.dart';
 import '../chat/chat_screen.dart';
+import '../conversation_delete.dart';
 import '../files/file_controller.dart';
 import 'history_controller.dart';
 
@@ -61,26 +62,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> delete(ConversationSummary row) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete conversation permanently?'),
-        content: Text(
-          '${row.hasUnknownOutcomes ? 'Unknown tool outcomes remain. ' : ''}Delete messages and owned files only. Shared settings remain. Remote effects are not rolled back. Stop active work and wait before deletion.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Confirm delete'),
-          ),
-        ],
-      ),
+    final confirmed = await confirmDeleteConversation(
+      context,
+      unknownOutcomes: row.hasUnknownOutcomes,
     );
-    if (mounted && confirmed == true) {
+    if (mounted && confirmed) {
       await state.delete(row.id, confirmedUnknown: row.hasUnknownOutcomes);
     }
   }
