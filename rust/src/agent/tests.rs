@@ -4003,6 +4003,25 @@ async fn waiting_for_the_first_output_is_shown_and_not_charged() {
 }
 
 #[tokio::test]
+async fn empty_text_does_not_end_the_wait() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let request = f.request().await;
+    // An assistant-role preamble with `"content":""` before prompt processing.
+    request.output("").await;
+    f.clock.advance(Duration::from_secs(1200));
+    let waiting = f.data(run).await;
+    assert_eq!(waiting.model_wait.map(|w| w.waited_ms), Some(1_200_000));
+    assert_eq!(waiting.active_ms, 0);
+    request.output("answer").await;
+    f.clock.advance(Duration::from_secs(30));
+    request.finish(Ok(turn(vec![])));
+    let done = f.settled(run).await;
+    assert_eq!(done.state, RunState::Completed);
+    assert_eq!(done.active_ms, 30_000);
+}
+
+#[tokio::test]
 async fn non_text_output_ends_the_wait() {
     let mut f = Fixture::new();
     let run = f.start().await;

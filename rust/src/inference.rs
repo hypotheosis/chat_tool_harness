@@ -628,9 +628,13 @@ impl StreamDecoder {
                                 if self.text.len().saturating_add(text.len()) > MAX_TEXT_BYTES {
                                     return Err(over("reply text", MAX_TEXT_BYTES));
                                 }
-                                self.liveness.output |= !text.is_empty();
-                                self.text.push_str(text);
-                                out.push(text.to_owned());
+                                // An empty fragment, such as the `"content":""` in an
+                                // assistant-role preamble, is neither text nor output.
+                                if !text.is_empty() {
+                                    self.liveness.output = true;
+                                    self.text.push_str(text);
+                                    out.push(text.to_owned());
+                                }
                             }
                             if let Some(calls) = delta.get("tool_calls") {
                                 for call in calls
@@ -1271,6 +1275,15 @@ mod tests {
         assert_eq!(decoder.finish().unwrap().text, "hi");
     }
     #[test]
+    fn empty_content_preamble_is_neither_text_nor_output() {
+        let mut decoder = StreamDecoder::new(&[]).unwrap();
+        let texts = decoder
+            .push(b"data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\n")
+            .unwrap();
+        assert!(texts.is_empty());
+        assert_eq!(decoder.take_liveness(), Liveness::default());
+    }
+    #[test]
     fn role_only_chunk_is_not_output_but_a_tool_call_is() {
         let tool = advertised("read");
         let alias = tool_alias(&tool.key);
@@ -1329,7 +1342,7 @@ mod tests {
             let mut bytes = vec![0; 4096];
             let _ = socket.read(&mut bytes).await.unwrap();
             let body = format!(
-                ": keepalive\n\ndata: {}\n\ndata: [DONE]\n\n",
+                "data: {{\"choices\":[{{\"delta\":{{\"role\":\"assistant\",\"content\":\"\"}},\"finish_reason\":null}}]}}\n\n: keepalive\n\ndata: {}\n\ndata: [DONE]\n\n",
                 json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"id1","type":"function","function":{"name":alias,"arguments":"{}"}}]},"finish_reason":"tool_calls"}]})
             );
             socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n{:x}\r\n{body}\r\n0\r\n\r\n",body.len()).as_bytes()).await.unwrap();

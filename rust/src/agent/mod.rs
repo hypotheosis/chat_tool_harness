@@ -1542,6 +1542,7 @@ async fn stream_reply(
             },
             result=&mut inference,if finished.is_none()=>{finished=Some(result);receiver.close();},
             event=receiver.recv(),if open=>match event {
+                Some(InferenceEvent::Text(text)) if text.is_empty()=>{},
                 Some(InferenceEvent::Text(text))=>{output=started(&mut deadline);partial.push(text)?;if partial.pending.len()>=PARTIAL_BYTES {partial.flush(inner,run).await?;flush_at=inner.services.clock.now()+CHECKPOINT_INTERVAL;}},
                 Some(InferenceEvent::Output)=>output=started(&mut deadline),
                 Some(InferenceEvent::Alive)=>if deadline.is_none() {
