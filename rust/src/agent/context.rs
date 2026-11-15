@@ -1,5 +1,5 @@
 use crate::error::{CoreError, CoreResult};
-use crate::inference::{AdvertisedTool, ChatMessage, ChatRole, InferenceRequest};
+use crate::inference::{AdvertisedTool, ChatMessage, ChatRole, InferenceRequest, ToolChoice};
 use crate::model::core::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -280,6 +280,7 @@ pub(crate) fn assemble_with_usage(
         messages: vec![],
         tools: vec![],
         deadline: request.deadline,
+        tool_choice: ToolChoice::Auto,
     };
     inference.validate()?;
     if request.purpose == ContextPurpose::Turn {

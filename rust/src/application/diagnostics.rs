@@ -86,7 +86,7 @@ impl Operation {
             Diagnostic::Probe(id) => {
                 let repo = self.repo.clone();
                 let endpoint = blocking(move || saved_endpoint(&repo, &id)).await?;
-                let request = crate::inference::InferenceRequest { endpoint, messages: vec![crate::inference::ChatMessage::user("Diagnostic: call the provided empty function. No real action will execute.")], tools: vec![], deadline: self.deadline };
+                let request = crate::inference::InferenceRequest { endpoint, messages: vec![crate::inference::ChatMessage::user("Diagnostic: call the provided empty function. No real action will execute.")], tools: vec![], deadline: self.deadline, tool_choice: crate::inference::ToolChoice::Auto };
                 let (tx, mut rx) = tokio::sync::mpsc::channel(32);
                 let client = crate::inference::InferenceClient::new(self.credentials.clone())?;
                 let probe = client.probe_tools(request, tx, self.cancel.clone());

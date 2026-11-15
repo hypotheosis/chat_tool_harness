@@ -3,7 +3,9 @@ mod state;
 pub(crate) use state::{already_decided, decide, origin_acknowledged, run_state, Decided};
 
 use crate::error::{CoreError, CoreResult};
-use crate::inference::{InferenceClient, InferenceEvent, InferenceRequest, InferenceTurn};
+use crate::inference::{
+    InferenceClient, InferenceEvent, InferenceRequest, InferenceTurn, ToolChoice,
+};
 use crate::mcp::{McpClient, McpError, McpSession, ToolOutcome};
 use crate::model::core::*;
 use crate::net::{Cancellation, CredentialProvider};
@@ -1336,6 +1338,7 @@ async fn work(
                 }
             })?;
         *partial = PartialText::default();
+        let retry = request.clone();
         let streamed = stream(inner, run, cancel, request, partial, active, limit_ms).await;
         let turn = match streamed {
             Err(CoreError::ContextLength) => {
@@ -1347,6 +1350,14 @@ async fn work(
                 return Ok(RunState::Paused);
             }
             other => other?,
+        };
+        let turn = if purpose == context::ContextPurpose::Turn
+            && announces_tool_call(&turn, !retry.tools.is_empty())
+        {
+            retry_with_required_tool(inner, run, cancel, retry, partial, active, limit_ms, turn)
+                .await?
+        } else {
+            turn
         };
         let mut usage = usage;
         usage.provider = turn.usage.as_ref().map(|u| context::ProviderUsage {
@@ -1388,6 +1399,100 @@ async fn work(
         }
     }
 }
+/// The longest reply still treated as a bare announcement of a next step.
+const MAX_ANNOUNCEMENT_BYTES: usize = 400;
+
+/// Whether [turn] ended by announcing a next step instead of taking it: a
+/// short text reply with no tool calls, while tools were offered, whose first
+/// or last line starts like "Let me…" or "I'll…" or which ends with ":".
+/// Some models (Qwen3.6 without thinking) end the turn there; the caller asks
+/// again with a tool call required.
+fn announces_tool_call(turn: &InferenceTurn, tools_offered: bool) -> bool {
+    const OPENERS: [&str; 12] = [
+        "let me ",
+        "i'll ",
+        "i will ",
+        "i'm going to ",
+        "i am going to ",
+        "let's ",
+        "now i'll ",
+        "now let me ",
+        "first, i'll ",
+        "first, let me ",
+        "next, i'll ",
+        "next, let me ",
+    ];
+    let text = turn.text.trim();
+    if !tools_offered
+        || !turn.calls.is_empty()
+        || turn.finish_reason != "stop"
+        || text.is_empty()
+        || text.len() > MAX_ANNOUNCEMENT_BYTES
+        // A question waits for the user; "let me know" hands back to them.
+        || text.contains('?')
+    {
+        return false;
+    }
+    // Typographic apostrophes ("I’ll") match the plain ones.
+    let lower = text.to_lowercase().replace('\u{2019}', "'");
+    if lower.contains("let me know") {
+        return false;
+    }
+    let first = lower.lines().next().unwrap_or_default();
+    let last = lower.lines().last().unwrap_or_default().trim_start();
+    lower.ends_with(':')
+        || OPENERS
+            .iter()
+            .any(|o| first.starts_with(o) || last.starts_with(o))
+}
+
+/// Asks once more with a tool call required, after [stalled] announced a step
+/// without taking it. The retry counts against the run's request limit. When
+/// it can't be admitted, the provider can't serve it, or it still calls
+/// nothing, the stalled reply stands, as it would have without the retry.
+#[allow(clippy::too_many_arguments)]
+async fn retry_with_required_tool(
+    inner: &Inner,
+    run: RunId,
+    cancel: &Cancellation,
+    mut request: InferenceRequest,
+    partial: &mut PartialText,
+    active: &ActiveTime,
+    limit_ms: u64,
+    stalled: InferenceTurn,
+) -> CoreResult<InferenceTurn> {
+    match inner
+        .persist(move |repo| state::inference_started(&repo, run, 0))
+        .await
+    {
+        Ok(()) => {}
+        Err(CoreError::Limit) => return Ok(stalled),
+        Err(error) => return Err(error),
+    }
+    request.tool_choice = ToolChoice::Required;
+    *partial = PartialText::default();
+    match stream(inner, run, cancel, request, partial, active, limit_ms).await {
+        Ok(forced) if !forced.calls.is_empty() => Ok(forced),
+        Ok(_) => Ok(stalled),
+        // The provider couldn't serve the forced request (one that rejects
+        // `tool_choice: "required"`, say): keep the reply it already gave.
+        Err(
+            CoreError::Protocol
+            | CoreError::InvalidInput
+            | CoreError::ToolUnsupported
+            | CoreError::UnavailableTransport
+            | CoreError::RateLimited
+            | CoreError::ContextLength,
+        ) => {
+            // The retry's failure detail must not attach to a later failure.
+            let _ = crate::failure::take();
+            Ok(stalled)
+        }
+        // Stop, pause, run limits and storage failures end the run as usual.
+        Err(error) => Err(error),
+    }
+}
+
 fn validate_batch(
     turn: &InferenceTurn,
     definitions: &HashMap<ToolKey, ToolDefinition>,
