@@ -701,7 +701,7 @@ fn server_key(key: &core::ToolKey) -> String {
 fn observed_definition(repo: &Repository, key: core::ToolKey) -> CoreResult<core::ToolDefinition> {
     repo.with_connection(move |conn| {
         use rusqlite::OptionalExtension;
-        conn.query_row("SELECT schema_json,schema_digest,destination_digest FROM observed_tool_definitions WHERE profile_id=?1 AND server_key=?2 AND tool_name=?3",rusqlite::params![key.profile_id.0.to_string(),server_key(&key),key.name],|r|Ok(core::ToolDefinition{key:key.clone(),schema_json:r.get(0)?,schema_digest:r.get(1)?,destination_digest:r.get(2)?})).optional().map_err(|_|CoreError::Storage)?.ok_or(CoreError::Conflict)
+        conn.query_row("SELECT schema_json,schema_digest,destination_digest FROM observed_tool_definitions WHERE profile_id=?1 AND server_key=?2 AND tool_name=?3",rusqlite::params![key.profile_id.0.to_string(),server_key(&key),key.name],|r|Ok(core::ToolDefinition{key:key.clone(),schema_json:r.get(0)?,schema_digest:r.get(1)?,destination_digest:r.get(2)?,description:String::new()})).optional().map_err(|_|CoreError::Storage)?.ok_or(CoreError::Conflict)
     })
 }
 type ConfigSnapshot = (

@@ -377,7 +377,11 @@ pub fn definitions(repo: &Repository, profile: ProfileId) -> CoreResult<Vec<Tool
             name: "create_artifact".into(),
         },
         r#"{"type":"object","properties":{"name":{"type":"string","maxLength":128},"content":{"type":"string"}},"required":["name","content"],"additionalProperties":false}"#,
-    )?])
+    )?
+    .with_description(
+        "Save text as a new Markdown or plain-text file the user can open from this \
+         conversation. `name` is the file's display name; `content` is its text.",
+    )])
 }
 
 #[cfg(test)]

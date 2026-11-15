@@ -13,7 +13,18 @@ pub const MAX_TEXT_BYTES: usize = 1024 * 1024;
 pub const MAX_TOOLS: usize = 64;
 pub const EVENT_CHANNEL_CAPACITY: usize = 32;
 
-fn tool_alias(key: &ToolKey) -> String {
+/// The longest function name OpenAI-compatible servers accept.
+const MAX_TOOL_NAME_BYTES: usize = 64;
+/// Whether `name` is a valid function name: `^[A-Za-z0-9_-]{1,64}$`.
+fn is_function_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= MAX_TOOL_NAME_BYTES
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+}
+/// The first `bytes` bytes of a digest of the whole key, as lowercase hex.
+fn key_hex(key: &ToolKey, bytes: usize) -> String {
     let server = match key.server {
         crate::model::core::ToolServer::LocalFiles => "local".to_owned(),
         crate::model::core::ToolServer::Mcp(id) => format!("mcp:{}", id.0),
@@ -24,15 +35,90 @@ fn tool_alias(key: &ToolKey) -> String {
     digest.update(server.as_bytes());
     digest.update([0]);
     digest.update(key.name.as_bytes());
-    let bytes = digest.finalize();
-    let mut alias = String::with_capacity(37);
-    alias.push_str("tool_");
+    let digest = digest.finalize();
+    let mut hex = String::with_capacity(bytes * 2);
     const HEX: &[u8; 16] = b"0123456789abcdef";
-    for byte in &bytes[..16] {
-        alias.push(HEX[(byte >> 4) as usize] as char);
-        alias.push(HEX[(byte & 0x0f) as usize] as char);
+    for byte in digest.iter().take(bytes) {
+        hex.push(HEX[(byte >> 4) as usize] as char);
+        hex.push(HEX[(byte & 0x0f) as usize] as char);
     }
-    alias
+    hex
+}
+/// The name a tool call in history gets when its tool is not advertised in
+/// this request. The `tool_` prefix and 32 hex digits keep it clear of the
+/// readable names advertised tools get.
+fn tool_alias(key: &ToolKey) -> String {
+    format!("tool_{}", key_hex(key, 16))
+}
+/// A suffixed name for a tool whose own name is ambiguous or not a valid
+/// function name: its name with invalid bytes replaced by `_`, cut to fit,
+/// then `_` and 12 hex digits of the key's digest.
+fn suffixed_name(key: &ToolKey) -> String {
+    const SUFFIX_BYTES: usize = 1 + 12;
+    let mut prefix: String = key
+        .name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .take(MAX_TOOL_NAME_BYTES - SUFFIX_BYTES)
+        .collect();
+    while prefix.ends_with('_') {
+        prefix.pop();
+    }
+    if prefix.is_empty() {
+        prefix.push_str("tool");
+    }
+    format!("{prefix}_{}", key_hex(key, 6))
+}
+
+/// The function names one request gives its advertised tools, and back.
+///
+/// A tool keeps its own name when that is a valid function name no other
+/// advertised tool shares, so the model sees `search` rather than a digest;
+/// otherwise it gets [suffixed_name]. Names depend only on the set of
+/// advertised tools, not their order. The payload and [StreamDecoder] both
+/// build from the same tools, so a reply can only name an advertised key.
+struct ToolNames {
+    by_key: HashMap<ToolKey, String>,
+    by_name: HashMap<String, ToolKey>,
+}
+impl ToolNames {
+    fn new(tools: &[AdvertisedTool]) -> CoreResult<Self> {
+        let mut uses: HashMap<&str, usize> = HashMap::new();
+        for tool in tools {
+            *uses.entry(tool.key.name.as_str()).or_default() += 1;
+        }
+        let mut by_key = HashMap::with_capacity(tools.len());
+        let mut by_name = HashMap::with_capacity(tools.len());
+        for tool in tools {
+            let key = &tool.key;
+            let name = if is_function_name(&key.name) && uses.get(key.name.as_str()) == Some(&1) {
+                key.name.clone()
+            } else {
+                suffixed_name(key)
+            };
+            // A repeated key, or a suffixed name equal to another tool's own.
+            if by_key.insert(key.clone(), name.clone()).is_some()
+                || by_name.insert(name, key.clone()).is_some()
+            {
+                return Err(CoreError::InvalidInput);
+            }
+        }
+        Ok(Self { by_key, by_name })
+    }
+    /// The name to write for `key`: its advertised name, or the history-only
+    /// [tool_alias] when this request does not advertise it.
+    fn name(&self, key: &ToolKey) -> String {
+        self.by_key
+            .get(key)
+            .cloned()
+            .unwrap_or_else(|| tool_alias(key))
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -154,10 +240,9 @@ impl InferenceRequest {
                 }
             }
         }
-        let mut advertised = HashSet::new();
+        ToolNames::new(&self.tools)?;
         for t in &self.tools {
-            if !advertised.insert(tool_alias(&t.key))
-                || t.key.name.is_empty()
+            if t.key.name.is_empty()
                 || t.description.len() > 4096
                 || t.schema_json.len() > MAX_TOOL_JSON_BYTES
                 || !serde_json::from_str::<Value>(&t.schema_json).is_ok_and(|v| v.is_object())
@@ -168,6 +253,7 @@ impl InferenceRequest {
         Ok(())
     }
     pub(crate) fn payload(&self) -> CoreResult<Vec<u8>> {
+        let names = ToolNames::new(&self.tools)?;
         let messages: Vec<_> = self
             .messages
             .iter()
@@ -180,7 +266,7 @@ impl InferenceRequest {
                     value["tool_calls"] = json!(m.tool_calls.iter().map(|call| json!({
                     "id":call.provider_call_id,
                     "type":"function",
-                    "function":{"name":tool_alias(&call.key),"arguments":call.arguments_json}
+                    "function":{"name":names.name(&call.key),"arguments":call.arguments_json}
                 })).collect::<Vec<_>>());
                 }
                 value
@@ -188,7 +274,7 @@ impl InferenceRequest {
             .collect();
         let tools: Vec<_> = self.tools.iter().map(|t| {
             let schema: Value = serde_json::from_str(&t.schema_json).map_err(|_| CoreError::InvalidInput)?;
-            Ok(json!({"type":"function","function":{"name":tool_alias(&t.key),"description":t.description,"parameters":schema}}))
+            Ok(json!({"type":"function","function":{"name":names.name(&t.key),"description":t.description,"parameters":schema}}))
         }).collect::<CoreResult<_>>()?;
         let mut body = json!({"model":self.endpoint.model,"messages":messages,"stream":true,"stream_options":{"include_usage":true},"temperature":self.endpoint.temperature,"max_tokens":self.endpoint.max_output_tokens});
         if !tools.is_empty() {
@@ -522,13 +608,7 @@ impl StreamDecoder {
         if tools.len() > MAX_TOOLS {
             return Err(CoreError::Limit);
         }
-        let aliases: HashMap<_, _> = tools
-            .iter()
-            .map(|t| (tool_alias(&t.key), t.key.clone()))
-            .collect();
-        if aliases.len() != tools.len() {
-            return Err(CoreError::InvalidInput);
-        }
+        let aliases = ToolNames::new(tools)?.by_name;
         Ok(Self {
             aliases,
             frame: Vec::new(),
@@ -826,7 +906,7 @@ mod tests {
             assert!(!error.to_string().contains("private payload"));
         }
     }
-    use crate::model::core::{EndpointId, ProfileId, ToolServer};
+    use crate::model::core::{EndpointId, ProfileId, ServerId, ToolServer};
     fn endpoint() -> EndpointConfig {
         EndpointConfig {
             id: EndpointId::new(),
@@ -891,7 +971,7 @@ mod tests {
     #[test]
     fn inference_done_requires_blank_line_even_after_complete_calls() {
         let tool = advertised("read");
-        let call = json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"id","type":"function","function":{"name":tool_alias(&tool.key),"arguments":"{}"}}]},"finish_reason":"tool_calls"}]});
+        let call = json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"id","type":"function","function":{"name":name_in(std::slice::from_ref(&tool), &tool.key),"arguments":"{}"}}]},"finish_reason":"tool_calls"}]});
         let complete_call = format!("data: {call}\n\n");
         for tail in [
             "data: [DONE]\n",
@@ -951,11 +1031,11 @@ mod tests {
         let mut d = StreamDecoder::new(std::slice::from_ref(&tool)).unwrap();
         let incomplete = format!(
             "data: {}\n\n",
-            json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":tool_alias(&tool.key),"arguments":"{\"path\":"}}]},"finish_reason":null}]})
+            json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":name_in(std::slice::from_ref(&tool), &tool.key),"arguments":"{\"path\":"}}]},"finish_reason":null}]})
         );
         d.push(incomplete.as_bytes()).unwrap();
         assert!(d.finish().is_err());
-        let complete = format!("data: {}\n\ndata: {{\"choices\":[{{\"delta\":{{}},\"finish_reason\":\"tool_calls\"}}]}}\n\ndata: [DONE]\n\n", json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":tool_alias(&tool.key),"arguments":r#"{"path":"x"}"#}}]},"finish_reason":null}]}));
+        let complete = format!("data: {}\n\ndata: {{\"choices\":[{{\"delta\":{{}},\"finish_reason\":\"tool_calls\"}}]}}\n\ndata: [DONE]\n\n", json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":name_in(std::slice::from_ref(&tool), &tool.key),"arguments":r#"{"path":"x"}"#}}]},"finish_reason":null}]}));
         let mut d = StreamDecoder::new(&[tool]).unwrap();
         d.push(complete.as_bytes()).unwrap();
         let turn = d.finish().unwrap();
@@ -967,7 +1047,7 @@ mod tests {
         let a = advertised("same");
         let b = advertised("same");
         let mut d = StreamDecoder::new(&[a.clone(), b.clone()]).unwrap();
-        let response = format!("data: {}\n\ndata: {{\"choices\":[{{\"delta\":{{}},\"finish_reason\":\"tool_calls\"}}]}}\n\ndata: [DONE]\n\n", json!({"choices":[{"delta":{"tool_calls":[{"index":1,"id":"B","type":"function","function":{"name":tool_alias(&b.key),"arguments":"{}"}},{"index":0,"id":"A","type":"function","function":{"name":tool_alias(&a.key),"arguments":"{}"}}]},"finish_reason":null}]}));
+        let response = format!("data: {}\n\ndata: {{\"choices\":[{{\"delta\":{{}},\"finish_reason\":\"tool_calls\"}}]}}\n\ndata: [DONE]\n\n", json!({"choices":[{"delta":{"tool_calls":[{"index":1,"id":"B","type":"function","function":{"name":name_in(&[a.clone(), b.clone()], &b.key),"arguments":"{}"}},{"index":0,"id":"A","type":"function","function":{"name":name_in(&[a.clone(), b.clone()], &a.key),"arguments":"{}"}}]},"finish_reason":null}]}));
         d.push(response.as_bytes()).unwrap();
         let turn = d.finish().unwrap();
         assert_eq!(
@@ -1207,7 +1287,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let tool = advertised("read");
-        let alias = tool_alias(&tool.key);
+        let alias = name_in(std::slice::from_ref(&tool), &tool.key);
         let server = tokio::spawn(async move {
             let (mut socket, _) = listener.accept().await.unwrap();
             let mut bytes = vec![0; 4096];
@@ -1286,7 +1366,7 @@ mod tests {
     #[test]
     fn role_only_chunk_is_not_output_but_a_tool_call_is() {
         let tool = advertised("read");
-        let alias = tool_alias(&tool.key);
+        let alias = name_in(std::slice::from_ref(&tool), &tool.key);
         let mut decoder = StreamDecoder::new(std::slice::from_ref(&tool)).unwrap();
         decoder
             .push(b"data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}\n\n")
@@ -1336,7 +1416,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let tool = advertised("read");
-        let alias = tool_alias(&tool.key);
+        let alias = name_in(std::slice::from_ref(&tool), &tool.key);
         let server = tokio::spawn(async move {
             let (mut socket, _) = listener.accept().await.unwrap();
             let mut bytes = vec![0; 4096];
@@ -1377,7 +1457,7 @@ mod tests {
         server.await.unwrap();
     }
     #[test]
-    fn inference_alias_fits_provider_name_limit_and_charset() {
+    fn history_alias_fits_provider_name_limit_and_charset() {
         let tool = advertised("read/\u{1f980}");
         let alias = tool_alias(&tool.key);
         assert_eq!(alias.len(), 37);
@@ -1386,9 +1466,12 @@ mod tests {
             .bytes()
             .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()));
         assert_eq!(alias, tool_alias(&tool.key));
+        // Advertised, the same tool gets a readable name instead.
         let value: Value =
             serde_json::from_slice(&request(vec![tool.clone()]).payload().unwrap()).unwrap();
-        assert_eq!(value["tools"][0]["function"]["name"], alias);
+        let advertised = value["tools"][0]["function"]["name"].as_str().unwrap();
+        assert_ne!(advertised, alias);
+        assert!(advertised.starts_with("read_") && is_function_name(advertised));
     }
     #[test]
     fn inference_duplicate_advertised_key_is_rejected_before_routing() {
@@ -1401,7 +1484,7 @@ mod tests {
         ));
     }
     #[test]
-    fn inference_tool_alias_stable_across_reorder_and_removal() {
+    fn inference_tool_names_stable_across_reorder() {
         let a = advertised("same");
         let b = advertised("same");
         let first = request(vec![a.clone(), b.clone()]).payload().unwrap();
@@ -1425,7 +1508,8 @@ mod tests {
         let solo: Value = serde_json::from_slice(&removed).unwrap();
         assert_eq!(swapped["tools"][1]["function"]["name"], a_alias);
         assert_eq!(swapped["tools"][0]["function"]["name"], b_alias);
-        assert_eq!(solo["tools"][0]["function"]["name"], b_alias);
+        // With its twin gone, the survivor's own name is no longer ambiguous.
+        assert_eq!(solo["tools"][0]["function"]["name"], "same");
     }
     #[test]
     fn inference_duplicate_argument_keys_never_return_calls() {
@@ -1596,7 +1680,7 @@ mod tests {
     #[test]
     fn repeated_identical_call_fields_are_accepted_and_changes_rejected() {
         let tool = advertised("read");
-        let name = tool_alias(&tool.key);
+        let name = name_in(std::slice::from_ref(&tool), &tool.key);
         let chunk = |args: &str, id: &str, name: &str| json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":id,"type":"function","function":{"name":name,"arguments":args}}]}}]});
         let finish = json!({"choices":[{"delta":{},"finish_reason":"tool_calls"}]});
         let (result, _) = decoded(
@@ -1632,7 +1716,7 @@ mod tests {
         let tool = advertised("read");
         let (result, _) = decoded(
             &[
-                json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","type":"function","function":{"name":tool_alias(&tool.key),"arguments":"{}"}}]},"finish_reason":"stop"}]}),
+                json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","type":"function","function":{"name":name_in(std::slice::from_ref(&tool), &tool.key),"arguments":"{}"}}]},"finish_reason":"stop"}]}),
             ],
             std::slice::from_ref(&tool),
         );
@@ -1657,7 +1741,10 @@ mod tests {
             Some("model called an unknown tool \"made_up\"")
         );
         let (_, problem) = decoded(
-            &[call(&tool_alias(&tool.key), "{not json")],
+            &[call(
+                &name_in(std::slice::from_ref(&tool), &tool.key),
+                "{not json",
+            )],
             std::slice::from_ref(&tool),
         );
         assert_eq!(
@@ -1717,5 +1804,134 @@ mod tests {
         assert_eq!(detail.step, crate::failure::FailureStep::ChatRequest);
         assert_eq!(detail.status, Some(500));
         server.await.unwrap();
+    }
+
+    /// The name `key` gets in a request advertising `tools`.
+    fn name_in(tools: &[AdvertisedTool], key: &ToolKey) -> String {
+        ToolNames::new(tools).unwrap().name(key)
+    }
+    fn on_server(name: &str, server: ServerId, profile: ProfileId) -> AdvertisedTool {
+        AdvertisedTool {
+            key: ToolKey {
+                profile_id: profile,
+                server: ToolServer::Mcp(server),
+                name: name.into(),
+            },
+            description: format!("Does {name}"),
+            schema_json: r#"{"type":"object"}"#.into(),
+        }
+    }
+    fn advertised_names(payload: &[u8]) -> Vec<String> {
+        let value: Value = serde_json::from_slice(payload).unwrap();
+        value["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["function"]["name"].as_str().unwrap().to_owned())
+            .collect()
+    }
+    fn call_named(name: &str) -> Value {
+        json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","type":"function","function":{"name":name,"arguments":"{}"}}]},"finish_reason":"tool_calls"}]})
+    }
+    #[test]
+    fn unique_valid_tool_name_is_advertised_verbatim_and_decodes_to_its_key() {
+        let profile = ProfileId::new();
+        let search = on_server("search", ServerId::new(), profile);
+        let get = on_server("get_concept", ServerId::new(), profile);
+        let tools = vec![search.clone(), get.clone()];
+        let payload = request(tools.clone()).payload().unwrap();
+        assert_eq!(advertised_names(&payload), ["search", "get_concept"]);
+        let value: Value = serde_json::from_slice(&payload).unwrap();
+        assert_eq!(value["tools"][0]["function"]["description"], "Does search");
+        let (result, _) = decoded(&[call_named("get_concept")], &tools);
+        assert_eq!(result.unwrap().calls[0].key, get.key);
+    }
+    #[test]
+    fn same_name_on_two_servers_gets_distinct_order_independent_names() {
+        let profile = ProfileId::new();
+        let a = on_server("search", ServerId::new(), profile);
+        let b = on_server("search", ServerId::new(), profile);
+        let other = on_server("read", ServerId::new(), profile);
+        let first = advertised_names(
+            &request(vec![a.clone(), b.clone(), other.clone()])
+                .payload()
+                .unwrap(),
+        );
+        let swapped = advertised_names(
+            &request(vec![other.clone(), b.clone(), a.clone()])
+                .payload()
+                .unwrap(),
+        );
+        assert_ne!(first[0], first[1]);
+        assert!(first[0].starts_with("search_") && first[1].starts_with("search_"));
+        assert_eq!(first[2], "read");
+        assert_eq!(
+            swapped,
+            [first[2].clone(), first[1].clone(), first[0].clone()]
+        );
+        for name in &first {
+            assert!(is_function_name(name), "{name}");
+        }
+        let tools = [a.clone(), b.clone(), other];
+        let (result, _) = decoded(&[call_named(&first[1])], &tools);
+        assert_eq!(result.unwrap().calls[0].key, b.key);
+        // The bare name is ambiguous, so it is not a tool at all.
+        let (result, problem) = decoded(&[call_named("search")], &tools);
+        assert_eq!(result.err(), Some(CoreError::Protocol));
+        assert_eq!(
+            problem.as_deref(),
+            Some("model called an unknown tool \"search\"")
+        );
+    }
+    #[test]
+    fn invalid_or_long_tool_names_get_a_valid_suffixed_name() {
+        let profile = ProfileId::new();
+        let odd = on_server("read/\u{1f980}.file", ServerId::new(), profile);
+        let long = on_server(&"x".repeat(80), ServerId::new(), profile);
+        let exact = on_server(&"y".repeat(64), ServerId::new(), profile);
+        let names = advertised_names(
+            &request(vec![odd.clone(), long.clone(), exact.clone()])
+                .payload()
+                .unwrap(),
+        );
+        assert!(names[0].starts_with("read_"), "{}", names[0]);
+        assert!(names[1].starts_with("xxxx"), "{}", names[1]);
+        assert_eq!(names[2], "y".repeat(64));
+        for name in &names {
+            assert!(is_function_name(name), "{name}");
+        }
+        let tools = [odd.clone(), long, exact];
+        let (result, _) = decoded(&[call_named(&names[0])], &tools);
+        assert_eq!(result.unwrap().calls[0].key, odd.key);
+    }
+    #[test]
+    fn unadvertised_history_call_cannot_take_an_advertised_name() {
+        let profile = ProfileId::new();
+        let live = on_server("search", ServerId::new(), profile);
+        let gone = on_server("search", ServerId::new(), profile);
+        let mut r = request(vec![live.clone()]);
+        r.messages.push(ChatMessage {
+            role: ChatRole::Assistant,
+            content: String::new(),
+            tool_calls: vec![ToolCall {
+                key: gone.key.clone(),
+                provider_call_id: "old".into(),
+                arguments_json: "{}".into(),
+            }],
+            tool_call_id: None,
+        });
+        r.messages.push(ChatMessage {
+            role: ChatRole::Tool,
+            content: "{}".into(),
+            tool_calls: vec![],
+            tool_call_id: Some("old".into()),
+        });
+        let value: Value = serde_json::from_slice(&r.payload().unwrap()).unwrap();
+        assert_eq!(value["tools"][0]["function"]["name"], "search");
+        let historical = value["messages"][1]["tool_calls"][0]["function"]["name"]
+            .as_str()
+            .unwrap();
+        assert_ne!(historical, "search");
+        assert!(is_function_name(historical));
     }
 }

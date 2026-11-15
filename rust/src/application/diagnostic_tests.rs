@@ -273,7 +273,7 @@ impl Wire {
     }
 }
 fn tools() -> Value {
-    json!({"tools":[{"name":"write","inputSchema":{"type":"object","properties":{"marker":{"type":"string"}},"required":["marker"],"additionalProperties":false}}, {"name":"other","inputSchema":{"type":"object"}}]})
+    json!({"tools":[{"name":"write","description":"Write a marker.","inputSchema":{"type":"object","properties":{"marker":{"type":"string"}},"required":["marker"],"additionalProperties":false}}, {"name":"other","inputSchema":{"type":"object"}}]})
 }
 struct AppFixture {
     app: Arc<Application>,
@@ -415,6 +415,22 @@ async fn r3_active_agent_excludes_diagnostics_without_revoking_observations() {
         .as_str()
         .unwrap()
         .to_owned();
+    // The model sees each tool under its own name with its server's description.
+    let advertised: Vec<(String, String)> = inference.body["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| {
+            let f = &t["function"];
+            (
+                f["name"].as_str().unwrap().to_owned(),
+                f["description"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(alias, "write");
+    assert!(advertised.contains(&("write".into(), "Write a marker.".into())));
+    assert!(advertised.contains(&("other".into(), "other".into())));
     f.reject_while_held(&mut wire, f.discover()).await;
     f.reject_while_held(
         &mut wire,

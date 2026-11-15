@@ -287,7 +287,12 @@ pub(crate) fn assemble_with_usage(
             .iter()
             .map(|t| AdvertisedTool {
                 key: t.key.clone(),
-                description: t.key.name.clone(),
+                // A tool its server left undescribed is described by its name.
+                description: if t.description.is_empty() {
+                    t.key.name.clone()
+                } else {
+                    t.description.clone()
+                },
                 schema_json: t.schema_json.clone(),
             })
             .collect();
