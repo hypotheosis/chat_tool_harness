@@ -80,6 +80,36 @@ class MovedOriginBackend extends UiBackend {
   }
 }
 
+/// Replaces conversation `c`'s messages with [count] long user messages.
+void setMessages(UiBackend b, int count) => b.current = AppSnapshot(
+  sequence: b.current.sequence + 1,
+  endpoints: b.current.endpoints,
+  servers: b.current.servers,
+  profiles: b.current.profiles,
+  conversations: [
+    Conversation(
+      id: 'c',
+      profile: profileSnapshot,
+      messages: [
+        for (var i = 0; i < count; i++)
+          Message(
+            id: 'm$i',
+            role: 'user',
+            content: 'message $i ${'word ' * 40}',
+            calls: const [],
+          ),
+      ],
+      summaries: const [],
+      originAcknowledged: true,
+    ),
+  ],
+  runs: const [],
+  rules: b.current.rules,
+);
+
+ScrollPosition transcriptPosition(WidgetTester t) =>
+    t.state<ScrollableState>(find.byType(Scrollable).first).position;
+
 void main() {
   final actionCases = <String, (FailureCode, FailureDetail?, String, Type)>{
     'authentication on a server': (
@@ -531,6 +561,9 @@ void main() {
         turnRun(id: 'new', code: FailureCode.rateLimited),
       ];
     await pumpChat(t, b);
+    // The transcript opens at its end; these cards are at the top.
+    transcriptPosition(t).jumpTo(0);
+    await t.pump();
     expect(find.byKey(const Key('resume-paused')), findsOneWidget);
     expect(find.byKey(const Key('stop-unknown')), findsOneWidget);
     await t.tap(find.byKey(const Key('resume-paused')));
@@ -571,6 +604,9 @@ void main() {
           ],
         );
       await pumpChat(t, b);
+      // The transcript opens at its end; the oldest card is at the top.
+      transcriptPosition(t).jumpTo(0);
+      await t.pump();
       final rate = failureMessage(
         const BackendFailure(FailureCode.rateLimited),
       );
@@ -1151,5 +1187,37 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('the transcript follows new messages unless scrolled up', (
+    t,
+  ) async {
+    final b = UiBackend();
+    setMessages(b, 30);
+    await pumpChat(t, b);
+    var p = transcriptPosition(t);
+    // Opens at the end of a long conversation.
+    expect(p.maxScrollExtent, greaterThan(0));
+    expect(p.pixels, p.maxScrollExtent);
+
+    // A new message arrives: still at the end.
+    setMessages(b, 31);
+    b.emit(AppEvent(sequence: b.current.sequence, conversationId: 'c'));
+    await t.pumpAndSettle();
+    p = transcriptPosition(t);
+    expect(find.textContaining('message 30 '), findsOneWidget);
+    expect(p.pixels, p.maxScrollExtent);
+
+    // Scrolled up to read: a new message doesn't move the view.
+    await t.drag(find.textContaining('message 30 '), const Offset(0, 400));
+    await t.pumpAndSettle();
+    final reading = transcriptPosition(t).pixels;
+    expect(reading, lessThan(transcriptPosition(t).maxScrollExtent - 48));
+    setMessages(b, 32);
+    b.emit(AppEvent(sequence: b.current.sequence, conversationId: 'c'));
+    await t.pumpAndSettle();
+    p = transcriptPosition(t);
+    expect(p.pixels, reading);
+    expect(p.pixels, lessThan(p.maxScrollExtent));
   });
 }
