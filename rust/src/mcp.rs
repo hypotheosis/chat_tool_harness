@@ -8,7 +8,7 @@ use crate::permissions;
 use crate::storage::Repository;
 use reqwest::{header, Method, Response};
 use serde_json::{json, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
@@ -358,6 +358,8 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
                 let mut diagnostics = Vec::new();
                 let mut valid = Vec::new();
                 let mut names = HashSet::new();
+                // A description is optional; one that is not text is ignored.
+                let mut descriptions = HashMap::new();
                 for tool in raw {
                     let name = tool
                         .get("name")
@@ -375,6 +377,9 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
                             reason: rejection.reason().into(),
                         });
                         continue;
+                    }
+                    if let Some(description) = tool.get("description").and_then(Value::as_str) {
+                        descriptions.insert(name.to_owned(), description.to_owned());
                     }
                     valid.push((
                         ToolKey {
@@ -416,6 +421,15 @@ impl<P: CredentialProvider + 'static> McpSession<P> {
                     self.invalidate().await?;
                     return Err(McpError::Conflict);
                 }
+                let tools: Vec<ToolDefinition> = tools
+                    .into_iter()
+                    .map(|definition| {
+                        let description = descriptions
+                            .remove(&definition.key.name)
+                            .unwrap_or_default();
+                        definition.with_description(&description)
+                    })
+                    .collect();
                 self.definitions = tools.clone();
                 self.stale = false;
                 self.trusted_generation = Some(discovery_generation);
@@ -2782,6 +2796,55 @@ mod tests {
             .unwrap();
         assert_eq!(result.tools.len(), 1);
         assert_eq!(result.diagnostics[0].name, "unsupported");
+        task.await.unwrap();
+    }
+    #[tokio::test]
+    async fn discovery_keeps_each_tools_description_trimmed_and_capped() {
+        let long = "é".repeat(crate::permissions::MAX_TOOL_DESCRIPTION_BYTES);
+        let tools = serde_json::json!({"tools":[
+            {"name":"search","description":"  Search the catalog.\n","inputSchema":{"type":"object"}},
+            {"name":"bare","inputSchema":{"type":"object"}},
+            {"name":"odd","description":7,"inputSchema":{"type":"object"}},
+            {"name":"long","description":long,"inputSchema":{"type":"object"}},
+        ]});
+        let (server, task) = fixture(vec![
+            (200, "Content-Type: application/json\r\n", init()),
+            (202, "", String::new()),
+            (
+                200,
+                "Content-Type: application/json\r\n",
+                reply(2, &tools.to_string()),
+            ),
+        ])
+        .await;
+        let mut session = McpClient::new(NoKey)
+            .unwrap()
+            .connect(
+                ProfileId(server.id.0),
+                server.clone(),
+                fixture_repository(&server),
+                deadline(),
+                Cancellation::new(),
+            )
+            .await
+            .unwrap();
+        let result = session
+            .list_tools(deadline(), Cancellation::new())
+            .await
+            .unwrap();
+        let described: HashMap<_, _> = result
+            .tools
+            .iter()
+            .map(|t| (t.key.name.as_str(), t.description.as_str()))
+            .collect();
+        assert_eq!(described["search"], "Search the catalog.");
+        assert_eq!(described["bare"], "");
+        assert_eq!(described["odd"], "");
+        // Two-byte characters: cut to the cap on a character boundary.
+        assert_eq!(
+            described["long"],
+            "é".repeat(crate::permissions::MAX_TOOL_DESCRIPTION_BYTES / 2)
+        );
         task.await.unwrap();
     }
     #[tokio::test]

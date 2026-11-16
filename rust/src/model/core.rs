@@ -45,6 +45,9 @@ pub struct ToolDefinition {
     pub(crate) schema_json: String,
     pub(crate) schema_digest: String,
     pub(crate) destination_digest: String,
+    /// What the tool does, as its server describes it, for the model. Kept in
+    /// memory only and outside every digest: it never affects approval.
+    pub(crate) description: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolCall {

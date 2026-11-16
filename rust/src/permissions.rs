@@ -234,7 +234,20 @@ fn destination(repo: &Repository, key: &ToolKey) -> CoreResult<String> {
         destination_on_connection(conn, &key)
     })
 }
+/// The most description text a tool advertises to the model.
+pub const MAX_TOOL_DESCRIPTION_BYTES: usize = 2048;
 impl ToolDefinition {
+    /// The same definition described as `description`, trimmed and cut to
+    /// [MAX_TOOL_DESCRIPTION_BYTES] on a character boundary.
+    pub(crate) fn with_description(mut self, description: &str) -> Self {
+        let description = description.trim();
+        let mut end = description.len().min(MAX_TOOL_DESCRIPTION_BYTES);
+        while !description.is_char_boundary(end) {
+            end -= 1;
+        }
+        self.description = description[..end].trim_end().to_owned();
+        self
+    }
     pub fn from_discovery(repo: &Repository, key: ToolKey, schema_json: &str) -> CoreResult<Self> {
         if key.name.is_empty() {
             return Err(CoreError::InvalidInput);
@@ -250,6 +263,7 @@ impl ToolDefinition {
             schema_json: canonical.clone(),
             schema_digest: schema_digest.clone(),
             destination_digest: destination_digest.clone(),
+            description: String::new(),
         };
         repo.with_connection(move |conn| {
             let transaction = conn.transaction().map_err(|_| CoreError::Storage)?;
@@ -331,7 +345,7 @@ pub fn replace_mcp_discovery_if_current(
             allowed.push(key.name.clone());
             let (profile_key, server_key, name) = key_parts(&key);
             tx.execute("INSERT INTO observed_tool_definitions(profile_id,server_key,tool_name,schema_json,schema_digest,destination_digest,definition_digest) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(profile_id,server_key,tool_name) DO UPDATE SET schema_json=excluded.schema_json,schema_digest=excluded.schema_digest,destination_digest=excluded.destination_digest,definition_digest=excluded.definition_digest", params![profile_key,server_key,name,schema_json,schema_digest,destination_digest,definition_digest]).map_err(|_| CoreError::Storage)?;
-            definitions.push(ToolDefinition { key, schema_json, schema_digest, destination_digest });
+            definitions.push(ToolDefinition { key, schema_json, schema_digest, destination_digest, description: String::new() });
         }
         // Remove absent names only after all incoming observations have been accepted.
         let mut stmt = tx.prepare("SELECT tool_name FROM observed_tool_definitions WHERE profile_id=?1 AND server_key=?2").map_err(|_| CoreError::Storage)?;
@@ -1519,6 +1533,7 @@ mod tests {
             schema_json: r#"{"type":"object"}"#.into(),
             schema_digest: value_digest(&schema).unwrap(),
             destination_digest: observed.destination_digest.clone(),
+            description: String::new(),
         };
         f.next_attempt();
         let mut calls = 0;

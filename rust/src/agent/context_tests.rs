@@ -69,6 +69,7 @@ fn schemas_and_output_reserve_count_toward_budget() {
         schema_json: format!("{{\"description\":\"{}\"}}", "x".repeat(3000)),
         schema_digest: "schema".into(),
         destination_digest: "local".into(),
+        description: String::new(),
     };
     let (_, bare) = assemble_with_usage(&s, &[], &request()).unwrap();
     let (_, with_tool) = assemble_with_usage(&s, std::slice::from_ref(&tool), &request()).unwrap();
