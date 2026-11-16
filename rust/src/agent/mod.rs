@@ -1470,6 +1470,9 @@ async fn retry_with_required_tool(
         Err(error) => return Err(error),
     }
     request.tool_choice = ToolChoice::Required;
+    // The clone carries the first request's deadline. The retry waits for its
+    // own first output, uncharged, so it gets a fresh one.
+    request.deadline = active.deadline(limit_ms) + FIRST_OUTPUT_WAIT;
     *partial = PartialText::default();
     match stream(inner, run, cancel, request, partial, active, limit_ms).await {
         Ok(forced) if !forced.calls.is_empty() => Ok(forced),

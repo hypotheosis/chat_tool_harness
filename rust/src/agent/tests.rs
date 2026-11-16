@@ -4245,6 +4245,21 @@ async fn an_announced_step_is_retried_with_a_tool_call_required() {
 }
 
 #[tokio::test]
+async fn the_retry_gets_its_own_wait_for_a_first_output() {
+    let mut f = Fixture::new();
+    f.start().await;
+    let first = f.request().await;
+    let first_deadline = first.request.deadline;
+    // A long, uncharged wait before the announcement arrives.
+    f.clock.advance(Duration::from_secs(55 * 60));
+    first.finish(Ok(text_turn("Let me read the main concept first.")));
+    let retry = f.request().await;
+    assert_eq!(retry.request.tool_choice, ToolChoice::Required);
+    assert!(retry.request.deadline > first_deadline);
+    assert!(retry.request.deadline >= f.clock.now() + FIRST_OUTPUT_WAIT);
+}
+
+#[tokio::test]
 async fn a_retry_that_still_calls_nothing_keeps_the_first_reply() {
     let mut f = Fixture::new();
     let run = f.start().await;
