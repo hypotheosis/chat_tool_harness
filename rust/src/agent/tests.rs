@@ -4164,3 +4164,144 @@ fn durations_read_as_short_text() {
         assert_eq!(duration_text(ms), text);
     }
 }
+
+fn text_turn(text: &str) -> InferenceTurn {
+    let mut t = turn(vec![]);
+    t.text = text.into();
+    t
+}
+
+#[test]
+fn announcement_detection_matches_observed_stalls_and_spares_real_endings() {
+    for stalled in [
+        "Let me get the main concept about Arrowood first, and then I can provide you with a comprehensive overview.",
+        "Let me search for \"milestone\"",
+        "I'll search the catalog.",
+        "Now I\u{2019}ll read the main index.",
+        "Found three matches.\n\nLet me read the first one.",
+        "Reading the main index next:",
+    ] {
+        assert!(super::announces_tool_call(&text_turn(stalled), true), "{stalled}");
+    }
+    for ending in [
+        "Arrowood is a wooded parcel the family bought.",
+        "Let me know if you want more detail.",
+        "I'll need the changeset name. Which one should I use?",
+        "",
+    ] {
+        assert!(
+            !super::announces_tool_call(&text_turn(ending), true),
+            "{ending}"
+        );
+    }
+    // No tools offered, a reply that already calls one, a cut-off reply, or
+    // a long answer that happens to start with "Let me" is not a stall.
+    assert!(!super::announces_tool_call(
+        &text_turn("Let me check."),
+        false
+    ));
+    let mut calls = text_turn("Let me check.");
+    calls.calls = vec![ToolCall {
+        key: ToolKey {
+            profile_id: ProfileId(uuid::Uuid::nil()),
+            server: ToolServer::LocalFiles,
+            name: "read".into(),
+        },
+        provider_call_id: "c".into(),
+        arguments_json: "{}".into(),
+    }];
+    assert!(!super::announces_tool_call(&calls, true));
+    let mut cut = text_turn("Let me check.");
+    cut.finish_reason = "length".into();
+    assert!(!super::announces_tool_call(&cut, true));
+    let long = format!("Let me explain. {}", "Detail. ".repeat(60));
+    assert!(!super::announces_tool_call(&text_turn(&long), true));
+}
+
+#[tokio::test]
+async fn an_announced_step_is_retried_with_a_tool_call_required() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    let first = f.request().await;
+    assert_eq!(first.request.tool_choice, ToolChoice::Auto);
+    first.finish(Ok(text_turn("Let me read the main concept first.")));
+    let retry = f.request().await;
+    assert_eq!(retry.request.tool_choice, ToolChoice::Required);
+    // Same conversation: the announcement isn't added to what is sent.
+    assert!(retry
+        .request
+        .messages
+        .iter()
+        .all(|m| m.content != "Let me read the main concept first."));
+    retry.finish(Ok(turn(vec![f.tool_call("read")])));
+    let data = f.settled(run).await;
+    assert_eq!(data.state, RunState::WaitingApproval);
+    assert_eq!(data.attempts.len(), 1);
+    assert_eq!(data.inference_count, 2);
+    assert!(data
+        .messages
+        .iter()
+        .all(|m| m.content != "Let me read the main concept first."));
+}
+
+#[tokio::test]
+async fn the_retry_gets_its_own_wait_for_a_first_output() {
+    let mut f = Fixture::new();
+    f.start().await;
+    let first = f.request().await;
+    let first_deadline = first.request.deadline;
+    // A long, uncharged wait before the announcement arrives.
+    f.clock.advance(Duration::from_secs(55 * 60));
+    first.finish(Ok(text_turn("Let me read the main concept first.")));
+    let retry = f.request().await;
+    assert_eq!(retry.request.tool_choice, ToolChoice::Required);
+    assert!(retry.request.deadline > first_deadline);
+    assert!(retry.request.deadline >= f.clock.now() + FIRST_OUTPUT_WAIT);
+}
+
+#[tokio::test]
+async fn a_retry_that_still_calls_nothing_keeps_the_first_reply() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    f.request()
+        .await
+        .finish(Ok(text_turn("Let me read the main concept first.")));
+    f.request().await.finish(Ok(text_turn("Something else.")));
+    let data = f.settled(run).await;
+    assert_eq!(data.state, RunState::Completed);
+    assert_eq!(
+        data.messages.last().unwrap().content,
+        "Let me read the main concept first."
+    );
+    assert!(f.requests.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn a_provider_error_on_the_retry_keeps_the_first_reply() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    f.request()
+        .await
+        .finish(Ok(text_turn("Let me read the main concept first.")));
+    f.request().await.finish(Err(CoreError::Protocol));
+    let data = f.settled(run).await;
+    assert_eq!(data.state, RunState::Completed);
+    assert_eq!(
+        data.messages.last().unwrap().content,
+        "Let me read the main concept first."
+    );
+    assert!(data.failure.is_none());
+}
+
+#[tokio::test]
+async fn a_final_answer_is_not_retried() {
+    let mut f = Fixture::new();
+    let run = f.start().await;
+    f.request()
+        .await
+        .finish(Ok(text_turn("Arrowood is a parcel.")));
+    let data = f.settled(run).await;
+    assert_eq!(data.state, RunState::Completed);
+    assert_eq!(data.inference_count, 1);
+    assert!(f.requests.try_recv().is_err());
+}

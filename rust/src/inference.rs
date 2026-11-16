@@ -177,12 +177,21 @@ pub struct AdvertisedTool {
     pub description: String,
     pub schema_json: String,
 }
+/// Whether the model may answer in text (`Auto`) or must call one of the
+/// advertised tools (`Required`, sent as `tool_choice: "required"`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ToolChoice {
+    #[default]
+    Auto,
+    Required,
+}
 #[derive(Debug, Clone)]
 pub struct InferenceRequest {
     pub endpoint: EndpointConfig,
     pub messages: Vec<ChatMessage>,
     pub tools: Vec<AdvertisedTool>,
     pub deadline: Instant,
+    pub tool_choice: ToolChoice,
 }
 impl InferenceRequest {
     pub fn validate(&self) -> CoreResult<()> {
@@ -279,6 +288,9 @@ impl InferenceRequest {
         let mut body = json!({"model":self.endpoint.model,"messages":messages,"stream":true,"stream_options":{"include_usage":true},"temperature":self.endpoint.temperature,"max_tokens":self.endpoint.max_output_tokens});
         if !tools.is_empty() {
             body["tools"] = json!(tools);
+            if self.tool_choice == ToolChoice::Required {
+                body["tool_choice"] = json!("required");
+            }
         }
         serde_json::to_vec(&body).map_err(|_| CoreError::InvalidInput)
     }
@@ -937,6 +949,7 @@ mod tests {
             messages: vec![ChatMessage::user("hello")],
             tools,
             deadline: Instant::now() + std::time::Duration::from_secs(300),
+            tool_choice: ToolChoice::Auto,
         }
     }
     #[test]
@@ -1832,6 +1845,21 @@ mod tests {
     }
     fn call_named(name: &str) -> Value {
         json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","type":"function","function":{"name":name,"arguments":"{}"}}]},"finish_reason":"tool_calls"}]})
+    }
+    #[test]
+    fn required_tool_choice_is_sent_only_when_asked_and_tools_exist() {
+        let body = |r: InferenceRequest| -> Value {
+            serde_json::from_slice(&r.payload().unwrap()).unwrap()
+        };
+        let auto = request(vec![advertised("search")]);
+        assert!(body(auto.clone()).get("tool_choice").is_none());
+        let mut required = auto;
+        required.tool_choice = ToolChoice::Required;
+        assert_eq!(body(required)["tool_choice"], "required");
+        // With nothing to call, "required" would be unsatisfiable.
+        let mut none = request(vec![]);
+        none.tool_choice = ToolChoice::Required;
+        assert!(body(none).get("tool_choice").is_none());
     }
     #[test]
     fn unique_valid_tool_name_is_advertised_verbatim_and_decodes_to_its_key() {
