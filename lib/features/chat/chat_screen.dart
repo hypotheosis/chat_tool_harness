@@ -31,6 +31,13 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   late final state = ChatController(widget.backend, widget.conversationId);
   final message = TextEditingController();
+  final transcriptScroll = ScrollController();
+
+  /// Whether the transcript follows its end as it grows: true until the user
+  /// scrolls more than [followSlack] away from the bottom, and again once they
+  /// scroll back down or send a message.
+  bool following = true;
+  static const followSlack = 48.0;
 
   /// Runs whose card the user has acted on (returned from the settings it
   /// opened, or applied a context selection), which now offer Resume, or
@@ -39,13 +46,26 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    transcriptScroll.addListener(() {
+      final p = transcriptScroll.position;
+      following = p.pixels >= p.maxScrollExtent - followSlack;
+    });
     state.connect();
+  }
+
+  /// Moves the transcript to its end when it is following: new messages,
+  /// streamed text and a shrinking viewport (keyboard) stay in view.
+  void followEnd() {
+    if (!following || !transcriptScroll.hasClients) return;
+    final p = transcriptScroll.position;
+    if (p.pixels != p.maxScrollExtent) p.jumpTo(p.maxScrollExtent);
   }
 
   @override
   void dispose() {
     state.dispose();
     message.dispose();
+    transcriptScroll.dispose();
     super.dispose();
   }
 
@@ -605,6 +625,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> sendMessage() async {
     final text = message.text;
+    following = true;
     await state.send(text);
     if (mounted && state.error == null) message.clear();
   }
@@ -839,20 +860,32 @@ class _ChatScreenState extends State<ChatScreen> {
             // with the keyboard open): drop the header and let the bottom
             // area use all the room, so the composer stays on screen.
             final compact = room.maxHeight < compactHeight;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) followEnd();
+            });
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (c != null && !compact) header(c),
                 Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    children: [
-                      if (c == null && !state.loading)
-                        const Text(
-                          'Conversation unavailable. Return home or refresh.',
-                        ),
-                      if (c != null) ...transcript(c, issues),
-                    ],
+                  // Lazily laid-out children change the extent after a
+                  // jump; follow those corrections too.
+                  child: NotificationListener<ScrollMetricsNotification>(
+                    onNotification: (_) {
+                      followEnd();
+                      return false;
+                    },
+                    child: ListView(
+                      controller: transcriptScroll,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      children: [
+                        if (c == null && !state.loading)
+                          const Text(
+                            'Conversation unavailable. Return home or refresh.',
+                          ),
+                        if (c != null) ...transcript(c, issues),
+                      ],
+                    ),
                   ),
                 ),
                 if (c != null)
